@@ -14,4 +14,16 @@ pub enum Error {
 
     #[error("unsupported character: {0}")]
     UnsupportedCharacter(char),
+
+    #[error("invalid function: {0}")]
+    InvalidFunction(String),
+
+    #[error("invalid argument count: expected {expected}, got {got}")]
+    InvalidArgumentCount { expected: usize, got: usize },
+
+    #[error("invalid argument type: expected {expected}, got {got}")]
+    InvalidArgumentType { expected: String, got: String },
+
+    #[error("internal: {0}")]
+    Internal(String),
 }

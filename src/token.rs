@@ -1,7 +1,7 @@
 use crate::Error;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Token {
+pub(crate) enum Token {
     /// An identifier (variable name, field name, etc.).
     Ident(String),
     /// A string literal (single quotes or double quotes).
@@ -208,7 +208,7 @@ mod tests {
             Token::I64(18),
         ]);
 
-        let input = r#"name = "John" AND age IN [18, 19, 20, 22]"#;
+        let input = r#"name = "John" AND age IN [18, 19, 20, 21]"#;
         let tokens = parse_token(input).unwrap();
         assert_eq!(tokens, vec![
             Token::Ident("name".to_string()),
@@ -223,8 +223,19 @@ mod tests {
             Token::Comma,
             Token::I64(20),
             Token::Comma,
-            Token::I64(22),
+            Token::I64(21),
             Token::RBracket,
+        ]);
+
+        let input = r#"matches(name, "^J.*n$")"#;
+        let tokens = parse_token(input).unwrap();
+        assert_eq!(tokens, vec![
+            Token::Ident("matches".to_string()),
+            Token::LParen,
+            Token::Ident("name".to_string()),
+            Token::Comma,
+            Token::Str("^J.*n$".to_string()),
+            Token::RParen,
         ]);
     }
 }
