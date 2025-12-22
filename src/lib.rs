@@ -77,9 +77,11 @@ pub enum Expr {
     Le(Box<Expr>, Box<Expr>),
     Eq(Box<Expr>, Box<Expr>),
     Ne(Box<Expr>, Box<Expr>),
+    In(Box<Expr>, Box<Expr>),
 
     And(Vec<Expr>),
     Or(Vec<Expr>),
+    Not(Box<Expr>),
 }
 
 impl Expr {
@@ -167,6 +169,19 @@ impl Expr {
                 let right_value = Box::pin(right.eval(ctx)).await?;
                 Ok(ExprValue::Bool(left_value != right_value))
             }
+            Self::In(left, right) => {
+                let left_value = Box::pin(left.eval(ctx)).await?;
+                let right_value = Box::pin(right.eval(ctx)).await?;
+                match right_value {
+                    ExprValue::Array(array) => {
+                        Ok(ExprValue::Bool(array.contains(&left_value)))
+                    }
+                    _ => Err(Error::TypeMismatch(
+                        format!("{:?}", right_value),
+                        format!("{:?}", left_value),
+                    )),
+                }
+            }
 
             Self::And(exprs) => {
                 let mut result = true;
@@ -200,6 +215,16 @@ impl Expr {
                 }
                 Ok(ExprValue::Bool(result))
             }
+            Self::Not(expr) => {
+                let value = Box::pin(expr.eval(ctx)).await?;
+                match value {
+                    ExprValue::Bool(b) => Ok(ExprValue::Bool(!b)),
+                    _ => Err(Error::TypeMismatch(
+                        format!("{:?}", value),
+                        format!("bool"),
+                    )),
+                }
+            }
         }
     }
 }
@@ -210,6 +235,9 @@ pub enum ExprValue {
     Int(i64),
     Float(f64),
     Bool(bool),
+    Null,
+
+    Array(Vec<ExprValue>),
 }
 
 impl PartialOrd for ExprValue {
@@ -254,8 +282,14 @@ impl Into<ExprValue> for bool {
     }
 }
 
+impl<T: Into<ExprValue>> Into<ExprValue> for Vec<T> {
+    fn into(self) -> ExprValue {
+        ExprValue::Array(self.into_iter().map(|item| item.into()).collect())
+    }
+}
+
 fn parse_expr(input: &str) -> Result<Expr, Error> {
-    let tokens = token::parse_token(input);
+    let tokens = token::parse_token(input)?;
     let mut parser = Parser::new(tokens);
     Ok(parser.parse_expr()?)
 }
@@ -305,6 +339,13 @@ impl Parser {
     }
 
     fn parse_comparison(&mut self) -> Result<Expr, Error> {
+        // Handle NOT operator (unary)
+        if self.peek() == Some(&Token::Not) {
+            self.advance(); // consume NOT
+            let expr = self.parse_comparison()?;
+            return Ok(Expr::Not(Box::new(expr)));
+        }
+
         let left = self.parse_value_or_field()?;
 
         Ok(match self.peek() {
@@ -338,27 +379,35 @@ impl Parser {
                 let right = self.parse_value_or_field()?;
                 Expr::Ne(Box::new(left), Box::new(right))
             }
+            Some(&Token::In) => {
+                self.advance();
+                let right = self.parse_value_or_field()?;
+                Expr::In(Box::new(left), Box::new(right))
+            }
             _ => left,
         })
     }
 
     fn parse_value_or_field(&mut self) -> Result<Expr, Error> {
+        // Handle array literal [ ... ]
+        if self.peek() == Some(&Token::LBracket) {
+            return self.parse_array();
+        }
+
         let token = self.peek().cloned();
         if let Some(token) = token {
             self.advance();
             Ok(match token {
                 Token::Str(s) => Expr::value(s),
-                Token::Text(text) => {
-                    // Try to parse as number, otherwise treat as field.
-                    if let Ok(int_val) = text.parse::<i64>() {
-                        Expr::value(int_val)
-                    } else if let Ok(float_val) = text.parse::<f64>() {
-                        Expr::value(float_val)
-                    } else if let Ok(bool_val) = text.parse::<bool>() {
-                        Expr::value(bool_val)
-                    } else {
-                        Expr::field(text)
-                    }
+                Token::I64(i) => Expr::value(i),
+                Token::F64(f) => Expr::value(f),
+                Token::Bool(b) => Expr::value(b),
+                Token::Null => {
+                    Expr::value(ExprValue::Null)
+                }
+                Token::Ident(name) => {
+                    // Identifiers are treated as field names.
+                    Expr::field(name)
                 }
                 _ => {
                     // Unexpected token.
@@ -370,6 +419,63 @@ impl Parser {
             // No more tokens.
             let err_msg = "no more tokens".to_string();
             return Err(Error::Parse(err_msg));
+        }
+    }
+
+    fn parse_array(&mut self) -> Result<Expr, Error> {
+        // Consume [
+        if self.peek() != Some(&Token::LBracket) {
+            return Err(Error::Parse("expected [".to_string()));
+        }
+        self.advance();
+
+        let mut values = Vec::new();
+
+        // Handle empty array []
+        if self.peek() == Some(&Token::RBracket) {
+            self.advance();
+            return Ok(Expr::value(ExprValue::Array(vec![])));
+        }
+
+        // Parse first element
+        values.push(self.parse_array_element()?);
+
+        // Parse remaining elements separated by commas
+        while self.peek() == Some(&Token::Comma) {
+            self.advance(); // consume comma
+            values.push(self.parse_array_element()?);
+        }
+
+        // Consume ]
+        if self.peek() != Some(&Token::RBracket) {
+            return Err(Error::Parse("expected ]".to_string()));
+        }
+        self.advance();
+
+        Ok(Expr::value(ExprValue::Array(values)))
+    }
+
+    fn parse_array_element(&mut self) -> Result<ExprValue, Error> {
+        let token = self.peek().cloned();
+        if let Some(token) = token {
+            self.advance();
+            Ok(match token {
+                Token::Str(s) => ExprValue::Str(s),
+                Token::I64(i) => ExprValue::Int(i),
+                Token::F64(f) => ExprValue::Float(f),
+                Token::Bool(b) => ExprValue::Bool(b),
+                Token::Null => ExprValue::Null,
+                Token::Ident(name) => {
+                    // In array context, identifiers are treated as strings
+                    ExprValue::Str(name)
+                }
+                _ => {
+                    let err_msg = format!("unexpected token in array: {:?}", token);
+                    return Err(Error::Parse(err_msg));
+                }
+            })
+        } else {
+            Err(Error::Parse("unexpected end of input in array".to_string()))
         }
     }
 
@@ -409,6 +515,29 @@ mod tests {
         let ctx = SimpleContext::new(HashMap::from([
             ("name".to_string(), "John".into()),
             ("age".to_string(), 18.into()),
+        ]));
+        let result = expr.eval(&ctx).await.unwrap();
+        assert_eq!(result, false.into());
+
+        let input = r#"name = "John" AND age IN [18, 19, 20, 22] AND 1 > 0"#;
+        let expr = parse_expr(input).unwrap();
+        let expected = Expr::And(vec![
+            Expr::Eq(Expr::field_boxed("name"), Expr::value_boxed("John")),
+            Expr::In(Expr::field_boxed("age"), Expr::value_boxed(vec![18, 19, 20, 22])),
+            Expr::Gt(Expr::value_boxed(1), Expr::value_boxed(0)),
+        ]);
+        assert_eq!(expr, expected);
+
+        let ctx = SimpleContext::new(HashMap::from([
+            ("name".to_string(), "John".into()),
+            ("age".to_string(), 19.into()),
+        ]));
+        let result = expr.eval(&ctx).await.unwrap();
+        assert_eq!(result, true.into());
+
+        let ctx = SimpleContext::new(HashMap::from([
+            ("name".to_string(), "John".into()),
+            ("age".to_string(), 23.into()),
         ]));
         let result = expr.eval(&ctx).await.unwrap();
         assert_eq!(result, false.into());

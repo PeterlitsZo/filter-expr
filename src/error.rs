@@ -11,4 +11,7 @@ pub enum Error {
 
     #[error("type mismatch: expected same type for comparison, got {0:?} and {1:?}")]
     TypeMismatch(String, String),
+
+    #[error("unsupported character: {0}")]
+    UnsupportedCharacter(char),
 }

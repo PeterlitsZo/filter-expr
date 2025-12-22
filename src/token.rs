@@ -1,14 +1,19 @@
+use crate::Error;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
-    /// A free-form set of characters without whitespace (WS) or . (DOT) within
-    /// it. The text may represent a variable, string, number, boolean, or
-    /// alternative literal value and must be handled in a manner consistent
-    /// with the service's intention.
-    Text(String),
-    /// A quoted string which may or may not contain a special wildcard `*`
-    /// character at the beginning or end of the string to indicate a prefix or
-    /// suffix-based search within a restriction.
+    /// An identifier (variable name, field name, etc.).
+    Ident(String),
+    /// A string literal (single quotes or double quotes).
     Str(String),
+    /// A float literal.
+    F64(f64),
+    /// A integer literal.
+    I64(i64),
+    /// A boolean literal.
+    Bool(bool),
+    /// A null literal.
+    Null,
 
     /// The equal operator (`=`).
     Eq,
@@ -22,14 +27,31 @@ pub enum Token {
     Le,
     /// The not equal to operator (`!=`).
     Ne,
+    /// The in operator (`IN`).
+    In,
 
-    /// The and operator (`AND`).
+    /// The left parenthesis (`(`).
+    LParen,
+    /// The right parenthesis (`)`).
+    RParen,
+    /// The square bracket (`[`).
+    LBracket,
+    /// The square bracket (`]`).
+    RBracket,
+    /// The comma (`,`).
+    Comma,
+    /// The colon (`:`).
+    Colon,
+
+    /// The and operator (`&&` or `AND`).
     And,
-    /// The or operator (`OR`).
+    /// The or operator (`||` or `OR`).
     Or,
+    /// The not operator (`!` or `NOT`).
+    Not,
 }
 
-pub(crate) fn parse_token(input: &str) -> Vec<Token> {
+pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
     let mut tokens = Vec::new();
     let mut chars = input.chars().peekable();
     
@@ -40,12 +62,25 @@ pub(crate) fn parse_token(input: &str) -> Vec<Token> {
                 chars.next();
             }
 
-            // String literal (single quotes).
+            // String literal.
             '\'' => {
                 chars.next(); // consume opening quote
                 let mut s = String::new();
                 while let Some(&c) = chars.peek() {
                     if c == '\'' {
+                        chars.next(); // consume closing quote
+                        break;
+                    }
+                    s.push(c);
+                    chars.next();
+                }
+                tokens.push(Token::Str(s));
+            }
+            '"' => {
+                chars.next(); // consume opening quote
+                let mut s = String::new();
+                while let Some(&c) = chars.peek() {
+                    if c == '"' {
                         chars.next(); // consume closing quote
                         break;
                     }
@@ -84,42 +119,75 @@ pub(crate) fn parse_token(input: &str) -> Vec<Token> {
                     chars.next();
                     tokens.push(Token::Ne);
                 } else {
-                    // Treat ! as part of text if not followed by =
-                    let mut text = String::from('!');
-                    while let Some(&c) = chars.peek() {
-                        if c.is_whitespace() || c == '.' || c == '=' || c == '>' || c == '<' || c == '!' {
-                            break;
-                        }
-                        text.push(c);
-                        chars.next();
-                    }
-                    tokens.push(Token::Text(text));
+                    tokens.push(Token::Not);
                 }
             }
 
+            // Brackets and punctuation.
+            '[' => {
+                chars.next();
+                tokens.push(Token::LBracket);
+            }
+            ']' => {
+                chars.next();
+                tokens.push(Token::RBracket);
+            }
+            '(' => {
+                chars.next();
+                tokens.push(Token::LParen);
+            }
+            ')' => {
+                chars.next();
+                tokens.push(Token::RParen);
+            }
+            ',' => {
+                chars.next();
+                tokens.push(Token::Comma);
+            }
+            ':' => {
+                chars.next();
+                tokens.push(Token::Colon);
+            }
+
             // Text (variable names, numbers, etc.)
-            _ => {
+            c if c.is_alphanumeric() || c == '_' => {
                 let mut text = String::new();
                 while let Some(&c) = chars.peek() {
-                    if c.is_whitespace() || c == '.' || c == '=' || c == '>' || c == '<' || c == '!' || c == '\'' {
+                    if !(c.is_alphanumeric() || c == '_') {
                         break;
                     }
                     text.push(c);
                     chars.next();
                 }
                 
-                // Check if it's a keyword
-                let text_upper = text.to_uppercase();
-                match text_upper.as_str() {
-                    "AND" => tokens.push(Token::And),
-                    "OR" => tokens.push(Token::Or),
-                    _ => tokens.push(Token::Text(text)),
+                // Try to parse as number first
+                if let Ok(int_val) = text.parse::<i64>() {
+                    tokens.push(Token::I64(int_val));
+                } else if let Ok(float_val) = text.parse::<f64>() {
+                    tokens.push(Token::F64(float_val));
+                } else {
+                    // Check if it's a keyword or literal
+                    let text_upper = text.to_uppercase();
+                    match text_upper.as_str() {
+                        "AND" => tokens.push(Token::And),
+                        "OR" => tokens.push(Token::Or),
+                        "IN" => tokens.push(Token::In),
+                        "TRUE" => tokens.push(Token::Bool(true)),
+                        "FALSE" => tokens.push(Token::Bool(false)),
+                        "NULL" => tokens.push(Token::Null),
+                        _ => tokens.push(Token::Ident(text)),
+                    }
                 }
+            }
+
+            // Unsupported characters.
+            ch => {
+                return Err(Error::UnsupportedCharacter(ch));
             }
         }
     }
     
-    tokens
+    Ok(tokens)
 }
 
 #[cfg(test)]
@@ -129,14 +197,34 @@ mod tests {
     #[test]
     fn test_parse_token() {
         let input = "name = 'John' AND age > 18";
-        let tokens = parse_token(input);
+        let tokens = parse_token(input).unwrap();
         assert_eq!(tokens, vec![
-            Token::Text("name".to_string()),
+            Token::Ident("name".to_string()),
             Token::Eq,
             Token::Str("John".to_string()),
-            Token::And, Token::Text("age".to_string()),
+            Token::And,
+            Token::Ident("age".to_string()),
             Token::Gt,
-            Token::Text("18".to_string())
+            Token::I64(18),
+        ]);
+
+        let input = r#"name = "John" AND age IN [18, 19, 20, 22]"#;
+        let tokens = parse_token(input).unwrap();
+        assert_eq!(tokens, vec![
+            Token::Ident("name".to_string()),
+            Token::Eq,
+            Token::Str("John".to_string()),
+            Token::And, Token::Ident("age".to_string()),
+            Token::In,
+            Token::LBracket,
+            Token::I64(18),
+            Token::Comma,
+            Token::I64(19),
+            Token::Comma,
+            Token::I64(20),
+            Token::Comma,
+            Token::I64(22),
+            Token::RBracket,
         ]);
     }
 }
