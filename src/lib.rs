@@ -8,7 +8,7 @@ mod token;
 
 pub use ctx::{SimpleContext, Context};
 pub use error::Error;
-pub use expr::ExprValue;
+pub use expr::{ExprValue, BoxedExprFn, ExprFn};
 
 use crate::expr::Expr;
 
