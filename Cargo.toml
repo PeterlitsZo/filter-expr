@@ -1,5 +1,7 @@
 [package]
 name = "filter-expr"
+description = "A library for parsing the filter expression."
+license = "MIT"
 version = "0.1.0"
 edition = "2024"
 
