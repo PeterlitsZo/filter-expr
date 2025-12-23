@@ -41,8 +41,11 @@ macro_rules! simple_context {
 #[async_trait::async_trait]
 pub trait Context: Send + Sync {
     async fn get_var(&self, name: &str) -> Result<ExprValue, Error>;
-    async fn get_fn(&self, name: &str) -> Result<Option<&BoxedExprFn>, Error> {
-        Err(Error::NoSuchFunction(name.to_string()))
+
+    async fn get_fn(&self, name: &str) -> Option<&BoxedExprFn> {
+        let _name = name;
+
+        None
     }
 }
 
@@ -77,7 +80,7 @@ impl Context for SimpleContext {
             .ok_or(Error::NoSuchVar(name.to_string()))
     }
 
-    async fn get_fn(&self, name: &str) -> Result<Option<&BoxedExprFn>, Error> {
-        Ok(self.fns.get(name))
+    async fn get_fn(&self, name: &str) -> Option<&BoxedExprFn> {
+        self.fns.get(name)
     }
 }

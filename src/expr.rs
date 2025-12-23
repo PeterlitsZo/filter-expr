@@ -178,7 +178,7 @@ impl Expr {
 
         // Get the function to call.
         let func_name = func;
-        let func = ctx.get_fn(func).await?;
+        let func = ctx.get_fn(func).await;
 
         // Call the function or call the builtin function.
         if let Some(func) = func {
