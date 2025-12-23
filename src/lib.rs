@@ -6,13 +6,10 @@ mod expr;
 mod parser;
 mod token;
 
-pub use ctx::SimpleContext;
+pub use ctx::{SimpleContext, Context};
 pub use error::Error;
 
-use crate::{
-    ctx::Context,
-    expr::{Expr, ExprValue},
-};
+use crate::expr::{Expr, ExprValue};
 
 /// The filter expression.
 pub struct FilterExpr {
