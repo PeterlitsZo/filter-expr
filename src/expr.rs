@@ -1,7 +1,7 @@
 use crate::{Error, ctx::Context};
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Expr {
+pub enum Expr {
     Field(String),
     Value(ExprValue),
 

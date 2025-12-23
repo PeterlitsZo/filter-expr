@@ -8,14 +8,11 @@ mod token;
 
 pub use ctx::{SimpleContext, Context};
 pub use error::Error;
-pub use expr::{ExprValue, BoxedExprFn, ExprFn};
-
-use crate::expr::Expr;
+pub use expr::{Expr, ExprValue, BoxedExprFn, ExprFn};
 
 /// The filter expression.
 pub struct FilterExpr {
     /// The expression of the filter. Possibly empty.
-    #[allow(unused)]
     expr: Option<Expr>,
 }
 
@@ -23,6 +20,14 @@ impl FilterExpr {
     pub fn parse(expr: &str) -> Result<Self, Error> {
         let expr = parse_expr(expr)?;
         Ok(Self { expr: Some(expr) })
+    }
+
+    pub fn new(expr: Option<Expr>) -> Self {
+        Self { expr }
+    }
+
+    pub fn expr(&self) -> Option<&Expr> {
+        self.expr.as_ref()
     }
 
     pub async fn eval(&self, ctx: &dyn Context) -> Result<bool, Error> {
