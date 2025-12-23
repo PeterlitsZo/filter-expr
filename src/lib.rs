@@ -189,5 +189,21 @@ mod tests {
         };
         let result = filter_expr.eval(&ctx).await.unwrap();
         assert_eq!(result, true);
+
+        // Parse the filter-expr:
+        //
+        //     open > 1.5 AND age > 17.5 AND age < 18.5 AND is_peter = true
+        // =====================================================================
+
+        let input = r#"open > 1.5 AND age > 17.5 AND age < 18.5 AND is_peter = true"#;
+        let filter_expr = FilterExpr::parse(input).unwrap();
+
+        let ctx = simple_context! {
+            "open": 1.6,
+            "age": 18,
+            "is_peter": true,
+        };
+        let result = filter_expr.eval(&ctx).await.unwrap();
+        assert_eq!(result, true);
     }
 }

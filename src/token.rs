@@ -149,7 +149,24 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
                 tokens.push(Token::Colon);
             }
 
-            // Text (variable names, numbers, etc.)
+            // Float or Int.
+            c if c.is_digit(10) || c == '.' => {
+                let mut text = String::new();
+                while let Some(&c) = chars.peek() {
+                    if !(c.is_digit(10) || c == '.') {
+                        break;
+                    }
+                    text.push(c);
+                    chars.next();
+                }
+                if text.contains('.') {
+                    tokens.push(Token::F64(text.parse::<f64>().unwrap()));
+                } else {
+                    tokens.push(Token::I64(text.parse::<i64>().unwrap()));
+                }
+            }
+
+            // Ident.
             c if c.is_alphanumeric() || c == '_' => {
                 let mut text = String::new();
                 while let Some(&c) = chars.peek() {
@@ -160,24 +177,15 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
                     chars.next();
                 }
                 
-                // Try to parse as number first
-                if let Ok(int_val) = text.parse::<i64>() {
-                    tokens.push(Token::I64(int_val));
-                } else if let Ok(float_val) = text.parse::<f64>() {
-                    tokens.push(Token::F64(float_val));
-                } else {
-                    // Check if it's a keyword or literal
-                    let text_upper = text.to_uppercase();
-                    match text_upper.as_str() {
-                        "AND" => tokens.push(Token::And),
-                        "OR" => tokens.push(Token::Or),
-                        "IN" => tokens.push(Token::In),
-                        "TRUE" => tokens.push(Token::Bool(true)),
-                        "FALSE" => tokens.push(Token::Bool(false)),
-                        "NULL" => tokens.push(Token::Null),
-                        "null" => tokens.push(Token::Null),
-                        _ => tokens.push(Token::Ident(text)),
-                    }
+                // Check if it's a keyword or literal
+                match text.as_str() {
+                    "AND" => tokens.push(Token::And),
+                    "OR" => tokens.push(Token::Or),
+                    "IN" => tokens.push(Token::In),
+                    "true" => tokens.push(Token::Bool(true)),
+                    "false" => tokens.push(Token::Bool(false)),
+                    "null" => tokens.push(Token::Null),
+                    _ => tokens.push(Token::Ident(text)),
                 }
             }
 
@@ -245,6 +253,22 @@ mod tests {
             Token::Ident("name".to_string()),
             Token::Ne,
             Token::Null,
+        ]);
+
+        let input = r#"open = 1.5 AND age = 18 AND is_peter = true"#;
+        let tokens = parse_token(input).unwrap();
+        assert_eq!(tokens, vec![
+            Token::Ident("open".to_string()),
+            Token::Eq,
+            Token::F64(1.5),
+            Token::And,
+            Token::Ident("age".to_string()),
+            Token::Eq,
+            Token::I64(18),
+            Token::And,
+            Token::Ident("is_peter".to_string()),
+            Token::Eq,
+            Token::Bool(true),
         ]);
     }
 }
