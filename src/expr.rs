@@ -250,7 +250,14 @@ impl PartialOrd for ExprValue {
             (ExprValue::Int(a), ExprValue::Int(b)) => a.partial_cmp(b),
             (ExprValue::Float(a), ExprValue::Float(b)) => a.partial_cmp(b),
             (ExprValue::Bool(a), ExprValue::Bool(b)) => a.partial_cmp(b),
-            _ => None, // Different types cannot be compared
+            (ExprValue::Null, ExprValue::Null) => Some(std::cmp::Ordering::Equal),
+
+            (ExprValue::Array(a), ExprValue::Array(b)) => a.partial_cmp(b),
+
+            (ExprValue::Null, _) => Some(std::cmp::Ordering::Greater),
+            (_, ExprValue::Null) => Some(std::cmp::Ordering::Less),
+
+            _ => None, // Different types cannot be compared...
         }
     }
 }
