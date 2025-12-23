@@ -169,5 +169,25 @@ mod tests {
         ctx.add_fn("custom_add".to_string(), Box::new(CustomAddFn));
         let result = filter_expr.eval(&ctx).await.unwrap();
         assert_eq!(result, false);
+
+        // Parse the filter-expr:
+        //
+        //     name != null
+        // =====================================================================
+
+        let input = r#"name != null"#;
+        let filter_expr = FilterExpr::parse(input).unwrap();
+
+        let ctx = simple_context! {
+            "name": ExprValue::Null,
+        };
+        let result = filter_expr.eval(&ctx).await.unwrap();
+        assert_eq!(result, false);
+
+        let ctx = simple_context! {
+            "name": "John",
+        };
+        let result = filter_expr.eval(&ctx).await.unwrap();
+        assert_eq!(result, true);
     }
 }

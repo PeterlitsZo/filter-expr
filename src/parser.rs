@@ -277,9 +277,24 @@ mod tests {
         let tokens = parse_token(input).unwrap();
         let mut parser = Parser::new(tokens);
         let expr = parser.parse_expr().unwrap();
-        assert_eq!(expr, Expr::FuncCall("matches".to_string(), vec![
-            Expr::field("name"),
-            Expr::value("^J.*n$"),
-        ]));
+        assert_eq!(
+            expr,
+            Expr::FuncCall(
+                "matches".to_string(),
+                vec![Expr::field("name"), Expr::value("^J.*n$"),]
+            )
+        );
+
+        let input = r#"name != null"#;
+        let tokens = parse_token(input).unwrap();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse_expr().unwrap();
+        assert_eq!(
+            expr,
+            Expr::Ne(
+                Expr::field_boxed("name"),
+                Expr::value_boxed(ExprValue::Null)
+            )
+        );
     }
 }

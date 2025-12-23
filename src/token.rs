@@ -175,6 +175,7 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
                         "TRUE" => tokens.push(Token::Bool(true)),
                         "FALSE" => tokens.push(Token::Bool(false)),
                         "NULL" => tokens.push(Token::Null),
+                        "null" => tokens.push(Token::Null),
                         _ => tokens.push(Token::Ident(text)),
                     }
                 }
@@ -236,6 +237,14 @@ mod tests {
             Token::Comma,
             Token::Str("^J.*n$".to_string()),
             Token::RParen,
+        ]);
+
+        let input = r#"name != null"#;
+        let tokens = parse_token(input).unwrap();
+        assert_eq!(tokens, vec![
+            Token::Ident("name".to_string()),
+            Token::Ne,
+            Token::Null,
         ]);
     }
 }
