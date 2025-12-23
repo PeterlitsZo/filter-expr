@@ -252,6 +252,9 @@ impl PartialOrd for ExprValue {
             (ExprValue::Bool(a), ExprValue::Bool(b)) => a.partial_cmp(b),
             (ExprValue::Null, ExprValue::Null) => Some(std::cmp::Ordering::Equal),
 
+            (ExprValue::Float(a), ExprValue::Int(b)) => a.partial_cmp(&(*b as f64)),
+            (ExprValue::Int(a), ExprValue::Float(b)) => (*a as f64).partial_cmp(b),
+
             (ExprValue::Array(a), ExprValue::Array(b)) => a.partial_cmp(b),
 
             (ExprValue::Null, _) => Some(std::cmp::Ordering::Greater),
@@ -308,3 +311,57 @@ pub trait ExprFn: Send + Sync {
 }
 
 pub type BoxedExprFn = Box<dyn ExprFn>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_expr_value_ordering() {
+        // Test string ordering.
+        assert!(ExprValue::Str("a".to_string()) < ExprValue::Str("b".to_string()));
+        assert!(ExprValue::Str("a".to_string()) <= ExprValue::Str("a".to_string()));
+        assert!(ExprValue::Str("b".to_string()) > ExprValue::Str("a".to_string()));
+
+        // Test integer ordering.
+        assert!(ExprValue::Int(1) < ExprValue::Int(2));
+        assert!(ExprValue::Int(1) <= ExprValue::Int(1));
+        assert!(ExprValue::Int(2) > ExprValue::Int(1));
+
+        // Test float ordering.
+        assert!(ExprValue::Float(1.0) < ExprValue::Float(2.0));
+        assert!(ExprValue::Float(1.0) <= ExprValue::Float(1.0));
+        assert!(ExprValue::Float(2.0) > ExprValue::Float(1.0));
+
+        // Test boolean ordering.
+        assert!(ExprValue::Bool(false) < ExprValue::Bool(true));
+        assert!(ExprValue::Bool(false) <= ExprValue::Bool(false));
+        assert!(ExprValue::Bool(true) > ExprValue::Bool(false));
+
+        // Test Int and Float comparison.
+        assert!(ExprValue::Int(1) < ExprValue::Float(2.0));
+        assert!(ExprValue::Int(2) > ExprValue::Float(1.0));
+        assert!(ExprValue::Float(1.0) < ExprValue::Int(2));
+        assert!(ExprValue::Float(2.0) > ExprValue::Int(1));
+
+        // Test Null ordering.
+        assert!(ExprValue::Null == ExprValue::Null);
+        assert!(ExprValue::Null > ExprValue::Str("a".to_string()));
+        assert!(ExprValue::Str("a".to_string()) < ExprValue::Null);
+        assert!(ExprValue::Null > ExprValue::Int(1));
+        assert!(ExprValue::Int(1) < ExprValue::Null);
+
+        // Test array ordering.
+        let arr1 = ExprValue::Array(vec![ExprValue::Int(1), ExprValue::Int(2)]);
+        let arr2 = ExprValue::Array(vec![ExprValue::Int(1), ExprValue::Int(3)]);
+        assert!(arr1 < arr2);
+        assert!(arr1 <= arr1);
+        assert!(arr2 > arr1);
+
+        // Test incompatible types (should return None).
+        assert!(ExprValue::Str("a".to_string()).partial_cmp(&ExprValue::Int(1)).is_none());
+        assert!(ExprValue::Int(1).partial_cmp(&ExprValue::Bool(true)).is_none());
+        assert!(ExprValue::Str("a".to_string()).partial_cmp(&ExprValue::Bool(false)).is_none());
+        assert!(ExprValue::Array(vec![]).partial_cmp(&ExprValue::Int(1)).is_none());
+    }
+}
