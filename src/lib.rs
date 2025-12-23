@@ -6,10 +6,13 @@ mod expr;
 mod parser;
 mod token;
 
-pub use error::Error;
 pub use ctx::SimpleContext;
+pub use error::Error;
 
-use crate::{ctx::Context, expr::{Expr, ExprValue}};
+use crate::{
+    ctx::Context,
+    expr::{Expr, ExprValue},
+};
 
 /// The filter expression.
 pub struct FilterExpr {
@@ -45,6 +48,8 @@ fn parse_expr(input: &str) -> Result<Expr, Error> {
 
 #[cfg(test)]
 mod tests {
+    use crate::expr::{ExprFn, ExprFnContext};
+
     use super::*;
 
     #[tokio::test]
@@ -69,7 +74,7 @@ mod tests {
             "age": 18,
         };
         let result = filter_expr.eval(&ctx).await.unwrap();
-        assert_eq!(result, false.into());
+        assert_eq!(result, false);
 
         // Parse the filter-expr:
         //
@@ -77,26 +82,20 @@ mod tests {
         // =====================================================================
 
         let input = r#"name = "John" AND age IN [18, 19, 20, 22] AND 1 > 0"#;
-        let expr = parse_expr(input).unwrap();
-        let expected = Expr::And(vec![
-            Expr::Eq(Expr::field_boxed("name"), Expr::value_boxed("John")),
-            Expr::In(Expr::field_boxed("age"), Expr::value_boxed(vec![18, 19, 20, 22])),
-            Expr::Gt(Expr::value_boxed(1), Expr::value_boxed(0)),
-        ]);
-        assert_eq!(expr, expected);
+        let filter_expr = FilterExpr::parse(input).unwrap();
 
         let ctx = simple_context! {
             "name": "John",
             "age": 19,
         };
-        let result = expr.eval(&ctx).await.unwrap();
+        let result = filter_expr.eval(&ctx).await.unwrap();
         assert_eq!(result, true.into());
 
         let ctx = simple_context! {
             "name": "John",
             "age": 23,
         };
-        let result = expr.eval(&ctx).await.unwrap();
+        let result = filter_expr.eval(&ctx).await.unwrap();
         assert_eq!(result, false.into());
 
         // Parse the filter-expr:
@@ -105,23 +104,72 @@ mod tests {
         // =====================================================================
 
         let input = r#"matches(name, "^J.*n$")"#;
-        let expr = parse_expr(input).unwrap();
-        let expected = Expr::FuncCall("matches".to_string(), vec![
-            Expr::field("name"),
-            Expr::value("^J.*n$"),
-        ]);
-        assert_eq!(expr, expected);
+        let filter_expr = FilterExpr::parse(input).unwrap();
 
         let ctx = simple_context! {
             "name": "John",
         };
-        let result = expr.eval(&ctx).await.unwrap();
-        assert_eq!(result, true.into());
+        let result = filter_expr.eval(&ctx).await.unwrap();
+        assert_eq!(result, true);
 
         let ctx = simple_context! {
             "name": "Jane",
         };
-        let result = expr.eval(&ctx).await.unwrap();
-        assert_eq!(result, false.into());
+        let result = filter_expr.eval(&ctx).await.unwrap();
+        assert_eq!(result, false);
+
+        // Parse the filter-expr:
+        //
+        //     custom_add(1, 2) = 3
+        // =====================================================================
+
+        let input = r#"custom_add(1, 2) = a"#;
+        let filter_expr = FilterExpr::parse(input).unwrap();
+
+        struct CustomAddFn;
+        #[async_trait::async_trait]
+        impl ExprFn for CustomAddFn {
+            async fn call(&self, ctx: ExprFnContext) -> Result<ExprValue, Error> {
+                if ctx.args.len() != 2 {
+                    return Err(Error::InvalidArgumentCount {
+                        expected: 2,
+                        got: ctx.args.len(),
+                    });
+                }
+                let a = match ctx.args[0] {
+                    ExprValue::Int(a) => a,
+                    _ => {
+                        return Err(Error::InvalidArgumentType {
+                            expected: "integer".to_string(),
+                            got: format!("{:?}", ctx.args[0]),
+                        });
+                    }
+                };
+                let b = match ctx.args[1] {
+                    ExprValue::Int(b) => b,
+                    _ => {
+                        return Err(Error::InvalidArgumentType {
+                            expected: "integer".to_string(),
+                            got: format!("{:?}", ctx.args[1]),
+                        });
+                    }
+                };
+                Ok((a + b).into())
+            }
+        }
+
+        let mut ctx = simple_context! {
+            "a": 3,
+        };
+        ctx.add_fn("custom_add".to_string(), Box::new(CustomAddFn));
+        let result = filter_expr.eval(&ctx).await.unwrap();
+        assert_eq!(result, true);
+
+        let mut ctx = simple_context! {
+            "a": 4,
+        };
+        ctx.add_fn("custom_add".to_string(), Box::new(CustomAddFn));
+        let result = filter_expr.eval(&ctx).await.unwrap();
+        assert_eq!(result, false);
     }
 }

@@ -25,6 +25,7 @@ impl Expr {
         Self::Field(field.into())
     }
 
+    #[cfg(test)]
     pub(crate) fn field_boxed<T: Into<String>>(field: T) -> Box<Self> {
         Box::new(Self::field(field))
     }
@@ -33,6 +34,7 @@ impl Expr {
         Self::Value(value.into())
     }
 
+    #[cfg(test)]
     pub(crate) fn value_boxed<T: Into<ExprValue>>(value: T) -> Box<Self> {
         Box::new(Self::value(value))
     }
@@ -45,53 +47,7 @@ impl Expr {
             }
             Self::Value(value) => Ok(value.clone()),
 
-            Self::FuncCall(func, args) => {
-                let mut args_values = vec![];
-                for arg in args {
-                    let value = Box::pin(arg.eval(ctx)).await?;
-                    args_values.push(value);
-                }
-
-                match func.as_str() {
-                    "matches" => {
-                        if args_values.len() != 2 {
-                            return Err(Error::InvalidArgumentCount {
-                                expected: 2,
-                                got: args_values.len(),
-                            });
-                        }
-                        let text = match &args_values[0] {
-                            ExprValue::Str(s) => s,
-                            _ => {
-                                return Err(Error::InvalidArgumentType {
-                                    expected: "string".to_string(),
-                                    got: format!("{:?}", args_values[0]),
-                                });
-                            }
-                        };
-                        let pattern = match &args_values[1] {
-                            ExprValue::Str(s) => s,
-                            _ => {
-                                return Err(Error::InvalidArgumentType {
-                                    expected: "string".to_string(),
-                                    got: format!("{:?}", args_values[1]),
-                                });
-                            }
-                        };
-                        let pattern = regex::Regex::new(&pattern);
-                        let pattern = match pattern {
-                            Ok(pattern) => pattern,
-                            Err(e) => {
-                                return Err(Error::Internal(format!("failed to compile regex: {}", e)));
-                            }
-                        };
-
-                        let matches = pattern.is_match(&text);
-                        Ok(ExprValue::Bool(matches))
-                    }
-                    _ => Err(Error::InvalidFunction(func.clone())),
-                }
-            }
+            Self::FuncCall(func, args) => self.eval_func_call(func, args, ctx).await,
 
             Self::Gt(left, right) => {
                 let left_value = Box::pin(left.eval(ctx)).await?;
@@ -206,6 +162,74 @@ impl Expr {
             }
         }
     }
+
+    pub(crate) async fn eval_func_call(
+        &self,
+        func: &str,
+        args: &[Expr],
+        ctx: &dyn Context,
+    ) -> Result<ExprValue, Error> {
+        // Evaluate the arguments.
+        let mut args_values = vec![];
+        for arg in args {
+            let value = Box::pin(arg.eval(ctx)).await?;
+            args_values.push(value);
+        }
+
+        // Get the function to call.
+        let func_name = func;
+        let func = ctx.get_fn(func).await?;
+
+        // Call the function or call the builtin function.
+        if let Some(func) = func {
+            return func.call(ExprFnContext { args: args_values }).await;
+        } else {
+            match func_name {
+                "matches" => self.eval_builtin_func_call_matches(&args_values).await,
+                _ => Err(Error::NoSuchFunction(func_name.to_string())),
+            }
+        }
+    }
+
+    pub(crate) async fn eval_builtin_func_call_matches(
+        &self,
+        args: &[ExprValue],
+    ) -> Result<ExprValue, Error> {
+        if args.len() != 2 {
+            return Err(Error::InvalidArgumentCount {
+                expected: 2,
+                got: args.len(),
+            });
+        }
+        let text = match &args[0] {
+            ExprValue::Str(s) => s,
+            _ => {
+                return Err(Error::InvalidArgumentType {
+                    expected: "string".to_string(),
+                    got: format!("{:?}", args[0]),
+                });
+            }
+        };
+        let pattern = match &args[1] {
+            ExprValue::Str(s) => s,
+            _ => {
+                return Err(Error::InvalidArgumentType {
+                    expected: "string".to_string(),
+                    got: format!("{:?}", args[1]),
+                });
+            }
+        };
+        let pattern = regex::Regex::new(&pattern);
+        let pattern = match pattern {
+            Ok(pattern) => pattern,
+            Err(e) => {
+                return Err(Error::Internal(format!("failed to compile regex: {}", e)));
+            }
+        };
+
+        let matches = pattern.is_match(&text);
+        Ok(ExprValue::Bool(matches))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -266,3 +290,14 @@ impl<T: Into<ExprValue>> Into<ExprValue> for Vec<T> {
         ExprValue::Array(self.into_iter().map(|item| item.into()).collect())
     }
 }
+
+pub struct ExprFnContext {
+    pub args: Vec<ExprValue>,
+}
+
+#[async_trait::async_trait]
+pub trait ExprFn: Send + Sync {
+    async fn call(&self, ctx: ExprFnContext) -> Result<ExprValue, Error>;
+}
+
+pub type BoxedExprFn = Box<dyn ExprFn>;

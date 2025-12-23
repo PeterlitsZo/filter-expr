@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{Error, expr::ExprValue};
+use crate::{Error, expr::{BoxedExprFn, ExprValue}};
 
 /// A macro to create a `SimpleContext` from key-value pairs.
 ///
@@ -41,6 +41,7 @@ macro_rules! simple_context {
 #[async_trait::async_trait]
 pub trait Context: Send + Sync {
     async fn get_var(&self, name: &str) -> Result<ExprValue, Error>;
+    async fn get_fn(&self, name: &str) -> Result<Option<&BoxedExprFn>, Error>;
 }
 
 /// A simple context that stores the variables in a hash map.
@@ -49,11 +50,19 @@ pub trait Context: Send + Sync {
 /// implementation that can be used.
 pub struct SimpleContext {
     vars: HashMap<String, ExprValue>,
+    fns: HashMap<String, BoxedExprFn>,
 }
 
 impl SimpleContext {
     pub fn new(vars: HashMap<String, ExprValue>) -> Self {
-        Self { vars }
+        Self {
+            vars,
+            fns: HashMap::new(),
+        }
+    }
+
+    pub fn add_fn(&mut self, name: String, func: BoxedExprFn) {
+        self.fns.insert(name, func);
     }
 }
 
@@ -63,6 +72,10 @@ impl Context for SimpleContext {
         self.vars
             .get(name)
             .cloned()
-            .ok_or(Error::NoSuchField(name.to_string()))
+            .ok_or(Error::NoSuchVar(name.to_string()))
+    }
+
+    async fn get_fn(&self, name: &str) -> Result<Option<&BoxedExprFn>, Error> {
+        Ok(self.fns.get(name))
     }
 }

@@ -3,10 +3,13 @@ pub enum Error {
     #[error("parse the expression: {0}")]
     Parse(String),
 
-    #[error("no such field `{0}`")]
-    NoSuchField(String),
+    #[error("no such variable `{0}`")]
+    NoSuchVar(String),
 
-    #[error("invalid value: {0}")]
+    #[error("no such function `{0}`")]
+    NoSuchFunction(String),
+
+    #[error("invalid value {0}")]
     InvalidValue(String),
 
     #[error("type mismatch: expected same type for comparison, got {0:?} and {1:?}")]
@@ -14,9 +17,6 @@ pub enum Error {
 
     #[error("unsupported character: {0}")]
     UnsupportedCharacter(char),
-
-    #[error("invalid function: {0}")]
-    InvalidFunction(String),
 
     #[error("invalid argument count: expected {expected}, got {got}")]
     InvalidArgumentCount { expected: usize, got: usize },
