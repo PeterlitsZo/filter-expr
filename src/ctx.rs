@@ -40,9 +40,20 @@ macro_rules! simple_context {
 /// The context of the filter for evaluation.
 #[async_trait::async_trait]
 pub trait Context: Send + Sync {
-    async fn get_var(&self, name: &str) -> Result<ExprValue, Error>;
+    /// Get the value of a variable/field.
+    /// 
+    /// It is a async function so that the callee can even request the database
+    /// or network to get the value.
+    /// 
+    /// If the variable is not found, return `None`.
+    /// 
+    /// If some error occurs, return the error.
+    async fn get_var(&self, name: &str) -> Result<Option<ExprValue>, Error>;
 
-    async fn get_fn(&self, name: &str) -> Option<&BoxedExprFn> {
+    /// Get the function by name.
+    /// 
+    /// If the function is not found, return `None`.
+    fn get_fn(&self, name: &str) -> Option<&BoxedExprFn> {
         let _name = name;
 
         None
@@ -73,14 +84,11 @@ impl SimpleContext {
 
 #[async_trait::async_trait]
 impl Context for SimpleContext {
-    async fn get_var(&self, name: &str) -> Result<ExprValue, Error> {
-        self.vars
-            .get(name)
-            .cloned()
-            .ok_or(Error::NoSuchVar(name.to_string()))
+    async fn get_var(&self, name: &str) -> Result<Option<ExprValue>, Error> {
+        Ok(self.vars.get(name).cloned())
     }
 
-    async fn get_fn(&self, name: &str) -> Option<&BoxedExprFn> {
+    fn get_fn(&self, name: &str) -> Option<&BoxedExprFn> {
         self.fns.get(name)
     }
 }

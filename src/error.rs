@@ -8,9 +8,6 @@ pub enum Error {
     #[error("parse the expression: {0}")]
     Parse(String),
 
-    #[error("no such variable `{0}`")]
-    NoSuchVar(String),
-
     #[error("invalid value {0}")]
     InvalidValue(String),
 
@@ -19,6 +16,10 @@ pub enum Error {
 
     #[error("unsupported character: {0}")]
     UnsupportedCharacter(char),
+
+    /// The variable is not found.
+    #[error("no such variable {var:?}")]
+    NoSuchVar { var: String },
 
     /// The function is not found.
     #[error("no such function {function:?}")]

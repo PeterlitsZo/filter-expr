@@ -110,7 +110,10 @@ impl Expr {
         match self {
             Self::Field(field) => {
                 let value = ctx.get_var(field).await?;
-                Ok(value)
+                match value {
+                    Some(value) => Ok(value),
+                    None => Err(Error::NoSuchVar { var: field.to_string() }),
+                }
             }
             Self::Str(value) => Ok(ExprValue::Str(value.clone())),
             Self::I64(value) => Ok(ExprValue::I64(value.clone())),
@@ -331,7 +334,7 @@ impl Expr {
 
         // Get the function to call.
         let func_name = func;
-        let func = ctx.get_fn(func).await;
+        let func = ctx.get_fn(func);
 
         // Call the function or call the builtin function.
         if let Some(func) = func {
