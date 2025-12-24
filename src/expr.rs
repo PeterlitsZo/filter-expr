@@ -112,7 +112,9 @@ impl Expr {
                 let value = ctx.get_var(field).await?;
                 match value {
                     Some(value) => Ok(value),
-                    None => Err(Error::NoSuchVar { var: field.to_string() }),
+                    None => Err(Error::NoSuchVar {
+                        var: field.to_string(),
+                    }),
                 }
             }
             Self::Str(value) => Ok(ExprValue::Str(value.clone())),
@@ -342,6 +344,7 @@ impl Expr {
         } else {
             match func_name {
                 "matches" => self.eval_builtin_func_call_matches(&args_values).await,
+                "type" => self.eval_builtin_func_call_type(&args_values).await,
                 _ => Err(Error::NoSuchFunction {
                     function: func_name.to_string(),
                 }),
@@ -392,6 +395,31 @@ impl Expr {
 
         let matches = pattern.is_match(&text);
         Ok(ExprValue::Bool(matches))
+    }
+
+    pub(crate) async fn eval_builtin_func_call_type(
+        &self,
+        args: &[ExprValue],
+    ) -> Result<ExprValue, Error> {
+        if args.len() != 1 {
+            return Err(Error::InvalidArgumentCountForFunction {
+                function: "type".to_string(),
+                expected: 1,
+                got: args.len(),
+            });
+        }
+
+        Ok(ExprValue::Str(
+            match args[0].typ() {
+                ExprValueType::Str => "str",
+                ExprValueType::I64 => "i64",
+                ExprValueType::F64 => "f64",
+                ExprValueType::Bool => "bool",
+                ExprValueType::Null => "null",
+                ExprValueType::Array => "array",
+            }
+            .to_string(),
+        ))
     }
 }
 

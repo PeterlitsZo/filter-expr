@@ -188,9 +188,11 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
                     "AND" => tokens.push(Token::And),
                     "OR" => tokens.push(Token::Or),
                     "IN" => tokens.push(Token::In),
+
                     "true" => tokens.push(Token::Bool(true)),
                     "false" => tokens.push(Token::Bool(false)),
                     "null" => tokens.push(Token::Null),
+
                     _ => tokens.push(Token::Ident(text)),
                 }
             }
@@ -298,6 +300,37 @@ mod tests {
             Token::LParen,
             Token::Str("John".to_string()),
             Token::RParen,
+        ]);
+
+        let input = r#"type(maybe_i64_or_f64) IN ['i64', 'f64']"#;
+        let tokens = parse_token(input).unwrap();
+        assert_eq!(tokens, vec![
+            Token::Ident("type".to_string()),
+            Token::LParen,
+            Token::Ident("maybe_i64_or_f64".to_string()),
+            Token::RParen,
+            Token::In,
+            Token::LBracket,
+            Token::Str("i64".to_string()),
+            Token::Comma,
+            Token::Str("f64".to_string()),
+            Token::RBracket,
+        ]);
+
+        let input = r#"type(foo.contains('bar')) = 'i64'"#;
+        let tokens = parse_token(input).unwrap();
+        assert_eq!(tokens, vec![
+            Token::Ident("type".to_string()),
+            Token::LParen,
+            Token::Ident("foo".to_string()),
+            Token::Dot,
+            Token::Ident("contains".to_string()),
+            Token::LParen,
+            Token::Str("bar".to_string()),
+            Token::RParen,
+            Token::RParen,
+            Token::Eq,
+            Token::Str("i64".to_string()),
         ]);
     }
 }

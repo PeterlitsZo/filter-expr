@@ -192,32 +192,32 @@ impl Parser {
     }
 
     fn parse_func_call(&mut self, func_name: String) -> Result<Expr, Error> {
-        // Consume (
+        // Consume the '(' token.
         if self.peek() != Some(&Token::LParen) {
-            return Err(Error::Parse("expected (".to_string()));
+            return Err(Error::Parse("expected '('".to_string()));
         }
         self.advance();
 
         let mut args = Vec::new();
 
-        // Handle empty argument list ()
+        // Handle empty argument list.
         if self.peek() == Some(&Token::RParen) {
             self.advance();
             return Ok(Expr::FuncCall(func_name, args));
         }
 
-        // Parse first argument
-        args.push(self.parse_value()?);
+        // Parse first argument.
+        args.push(self.parse_expr()?);
 
         // Parse remaining arguments separated by commas
         while self.peek() == Some(&Token::Comma) {
             self.advance(); // consume comma
-            args.push(self.parse_value()?);
+            args.push(self.parse_expr()?);
         }
 
-        // Consume )
+        // Consume the ')' token
         if self.peek() != Some(&Token::RParen) {
-            return Err(Error::Parse("expected )".to_string()));
+            return Err(Error::Parse("expected ')'".to_string()));
         }
         self.advance();
 
@@ -264,9 +264,9 @@ impl Parser {
                 args.push(self.parse_value()?);
             }
 
-            // Consume )
+            // Consume the ')' token
             if self.peek() != Some(&Token::RParen) {
-                return Err(Error::Parse("expected )".to_string()));
+                return Err(Error::Parse("expected ')'".to_string()));
             }
             self.advance();
 
@@ -489,6 +489,37 @@ mod tests {
                 ]),
                 Expr::gt_(Expr::i64_(1), Expr::i64_(0))
             ])
+        );
+
+        let input = r#"type(maybe_i64_or_f64) IN ['i64', 'f64']"#;
+        let tokens = parse_token(input).unwrap();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse_expr().unwrap();
+        assert_eq!(
+            expr,
+            Expr::in_(
+                Expr::FuncCall("type".to_string(), vec![Expr::field_("maybe_i64_or_f64")]),
+                Expr::array_([Expr::str_("i64"), Expr::str_("f64")])
+            )
+        );
+
+        let input = r#"type(foo.contains('bar')) = 'i64'"#;
+        let tokens = parse_token(input).unwrap();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse_expr().unwrap();
+        assert_eq!(
+            expr,
+            Expr::eq_(
+                Expr::FuncCall(
+                    "type".to_string(),
+                    vec![Expr::method_call_(
+                        Expr::field_("foo"),
+                        "contains".to_string(),
+                        vec![Expr::str_("bar")]
+                    )]
+                ),
+                Expr::str_("i64")
+            )
         );
     }
 }
