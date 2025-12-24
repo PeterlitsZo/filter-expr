@@ -5,3 +5,4 @@
       want to evaluate the expression by itself).
 - [ ] Let the `tokio` dependency be optional.
 - [ ] More documentation.
+- [ ] Add fuzzing tests and more tests.

@@ -57,6 +57,7 @@ assert_eq!(result, true);
         | <null>
         | <ident>
         | <array>
+        | '(' <expr> ')'
 
 <array> = '[' [<value> (',' <value>)* ','?] ']'
 ```

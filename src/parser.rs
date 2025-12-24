@@ -14,11 +14,19 @@ impl Parser {
     /// <expr> = <or_test> ('OR' <or_test>)*
     /// ```
     pub(crate) fn parse_expr(&mut self) -> Result<Expr, Error> {
-        let mut exprs = vec![self.parse_or_test()?];
+        let item = self.parse_or_test()?;
+        let mut exprs = match item {
+            Expr::Or(exprs) => exprs,
+            _ => vec![item],
+        };
 
         while self.peek() == Some(&Token::Or) {
-            self.advance(); // consume `AND` token.
-            exprs.push(self.parse_or_test()?);
+            self.advance(); // consume `OR` token.
+            let item = self.parse_or_test()?;
+            match item {
+                Expr::Or(items) => exprs.extend(items),
+                _ => exprs.push(item),
+            }
         }
 
         if exprs.len() == 1 {
@@ -32,11 +40,19 @@ impl Parser {
     /// <or_test> = <and_test> ('AND' <and_test>)*
     /// ```
     fn parse_or_test(&mut self) -> Result<Expr, Error> {
-        let mut exprs = vec![self.parse_and_test()?];
+        let item = self.parse_and_test()?;
+        let mut exprs = match item {
+            Expr::And(exprs) => exprs,
+            _ => vec![item],
+        };
 
         while self.peek() == Some(&Token::And) {
             self.advance(); // consume `AND` token.
-            exprs.push(self.parse_and_test()?);
+            let item = self.parse_and_test()?;
+            match item {
+                Expr::And(items) => exprs.extend(items),
+                _ => exprs.push(item),
+            }
         }
 
         if exprs.len() == 1 {
@@ -78,15 +94,18 @@ impl Parser {
 
                 let right = self.parse_comparison()?; // Recursive call
 
-                Ok(match operator.unwrap() {
-                    Token::Eq => Expr::Eq(Box::new(primary), Box::new(right)),
-                    Token::Gt => Expr::Gt(Box::new(primary), Box::new(right)),
-                    Token::Lt => Expr::Lt(Box::new(primary), Box::new(right)),
-                    Token::Ge => Expr::Ge(Box::new(primary), Box::new(right)),
-                    Token::Le => Expr::Le(Box::new(primary), Box::new(right)),
-                    Token::Ne => Expr::Ne(Box::new(primary), Box::new(right)),
-                    Token::In => Expr::In(Box::new(primary), Box::new(right)),
-                    _ => unreachable!(),
+                Ok(match operator {
+                    Some(Token::Eq) => Expr::Eq(Box::new(primary), Box::new(right)),
+                    Some(Token::Gt) => Expr::Gt(Box::new(primary), Box::new(right)),
+                    Some(Token::Lt) => Expr::Lt(Box::new(primary), Box::new(right)),
+                    Some(Token::Ge) => Expr::Ge(Box::new(primary), Box::new(right)),
+                    Some(Token::Le) => Expr::Le(Box::new(primary), Box::new(right)),
+                    Some(Token::Ne) => Expr::Ne(Box::new(primary), Box::new(right)),
+                    Some(Token::In) => Expr::In(Box::new(primary), Box::new(right)),
+                    _ => {
+                        let err_msg = format!("unexpected operator: {:?}", operator);
+                        return Err(Error::Parse(err_msg));
+                    }
                 })
             }
             _ => {
@@ -131,11 +150,12 @@ impl Parser {
     ///         | <null>
     ///         | <ident>
     ///         | <array>
+    ///         | '(' <expr> ')'
     ///
     /// <array> = '[' [<value> (',' <value>)* ','?] ']'
     /// ```
     fn parse_value(&mut self) -> Result<Expr, Error> {
-        // Handle array literal [ ... ]
+        // Handle array.
         if self.peek() == Some(&Token::LBracket) {
             return self.parse_array();
         }
@@ -149,14 +169,18 @@ impl Parser {
                 Token::F64(f) => Expr::f64_(f),
                 Token::Bool(b) => Expr::bool_(b),
                 Token::Null => Expr::null_(),
-                Token::Ident(name) => {
-                    // Identifiers are treated as field names.
-                    // Function calls are handled in parse_primary
-                    Expr::field_(name)
+                Token::Ident(name) => Expr::field_(name),
+                Token::LParen => {
+                    let expr = self.parse_expr()?;
+                    if self.peek() != Some(&Token::RParen) {
+                        return Err(Error::Parse("expected ')'".to_string()));
+                    }
+                    self.advance();
+                    expr
                 }
                 _ => {
                     // Unexpected token.
-                    let err_msg = format!("unexpected token: {:?}", token);
+                    let err_msg = format!("parse value: unexpected token: {:?}", token);
                     return Err(Error::Parse(err_msg));
                 }
             })
@@ -411,6 +435,59 @@ mod tests {
             Expr::or_(vec![
                 Expr::and_(vec![Expr::bool_(true), Expr::bool_(false)]),
                 Expr::bool_(true)
+            ])
+        );
+
+        let input = r#"(true OR false) AND true"#;
+        let tokens = parse_token(input).unwrap();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse_expr().unwrap();
+        assert_eq!(
+            expr,
+            Expr::and_(vec![
+                Expr::or_(vec![Expr::bool_(true), Expr::bool_(false)]),
+                Expr::bool_(true)
+            ])
+        );
+
+        let input = r#"(name = 'John' AND age > 18) AND 1 > 0"#;
+        let tokens = parse_token(input).unwrap();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse_expr().unwrap();
+        assert_eq!(
+            expr,
+            Expr::and_(vec![
+                Expr::eq_(Expr::field_("name"), Expr::str_("John")),
+                Expr::gt_(Expr::field_("age"), Expr::i64_(18)),
+                Expr::gt_(Expr::i64_(1), Expr::i64_(0))
+            ])
+        );
+
+        let input = r#"name = 'John' AND (age > 18 AND 1 > 0)"#;
+        let tokens = parse_token(input).unwrap();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse_expr().unwrap();
+        assert_eq!(
+            expr,
+            Expr::and_(vec![
+                Expr::eq_(Expr::field_("name"), Expr::str_("John")),
+                Expr::gt_(Expr::field_("age"), Expr::i64_(18)),
+                Expr::gt_(Expr::i64_(1), Expr::i64_(0))
+            ])
+        );
+
+        let input = r#"(name = 'John' AND age > 18) OR (1 > 0)"#;
+        let tokens = parse_token(input).unwrap();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse_expr().unwrap();
+        assert_eq!(
+            expr,
+            Expr::or_(vec![
+                Expr::and_(vec![
+                    Expr::eq_(Expr::field_("name"), Expr::str_("John")),
+                    Expr::gt_(Expr::field_("age"), Expr::i64_(18)),
+                ]),
+                Expr::gt_(Expr::i64_(1), Expr::i64_(0))
             ])
         );
     }
