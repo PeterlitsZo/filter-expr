@@ -7,3 +7,51 @@
 - [ ] More documentation.
 - [ ] Add fuzzing tests and more tests.
 - [ ] Rename the `field` to `var` in source code.
+- [ ] Support custom method.
+- [ ] Support those methods for string:
+
+  - [x] `to_uppercase`
+  - [x] `to_lowercase`
+  - [x] `contains`
+  - [ ] `starts_with`
+  - [ ] `ends_with`
+  - [ ] `len`
+  - [ ] `is_empty`
+  - [ ] `trim`
+  - [ ] `trim_start`
+  - [ ] `trim_end`
+  - [ ] `strip_prefix`
+  - [ ] `strip_suffix`
+
+- [ ] Support the `DateTime` type.
+- [ ] Support the `DateTime::from_rfc3339` function to create a `DateTime` value
+      by given RFC 3339 string. Like
+      `DateTime::from_rfc3339("2025-01-01T00:00:00Z")`.
+- [ ] Support compare two `DateTime` values.
+- [ ] Support those methods for `DateTime`:
+
+  - [ ] `to_rfc3339`
+  - [ ] `get_day_of_month`
+  - [ ] `get_day_of_week`
+  - [ ] `get_day_of_year`
+  - [ ] `get_year`
+  - [ ] `get_month`
+  - [ ] `get_date`
+  - [ ] `get_hour`
+  - [ ] `get_minute`
+  - [ ] `get_second`
+  - [ ] `get_millisecond`
+  - [ ] `get_microsecond`
+  - [ ] `get_nanosecond`
+
+- [ ] Support the `Type` type.
+- [ ] Support the `type` function to get the type of the value. Like
+      `type(foobar) = i64`.
+- [ ] Support the `Object` type -- just like the JSON object.
+- [ ] Support get the item of the `Array` and `Object` by index or key. Like
+      `array[0] = "John"` or `object.name = "John"`.
+- [ ] Support `==` as the alias of `=` for the equality comparison.
+- [ ] Support escape the special characters in the string. Like `\'` to escape
+      the single quote.
+- [ ] Support `+`, `-`, `*`, `/` operators for the arithmetic operations.
+- [ ] Support `&&`, `||` and `!` operators for the logical operations.
