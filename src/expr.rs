@@ -312,6 +312,133 @@ pub trait ExprFn: Send + Sync {
 
 pub type BoxedExprFn = Box<dyn ExprFn>;
 
+/// A trait for transforming AST expressions.
+///
+/// This trait allows you to recursively transform expressions by visiting
+/// all sub-expressions. The `transform` method is called recursively on all
+/// sub-expressions, allowing you to transform the AST in a composable way.
+///
+/// # Example
+///
+/// ```rust
+/// use filter_expr::{Expr, Transform};
+///
+/// struct MyTransformer;
+///
+/// impl Transform for MyTransformer {
+///     fn transform(&mut self, expr: Expr) -> Expr {
+///         // Transform the expression before recursing
+///         let expr = match expr {
+///             Expr::Field(name) if name == "old_name" => {
+///                 Expr::Field("new_name".to_string())
+///             }
+///             other => other,
+///         };
+///     }
+/// }
+/// ```
+pub trait Transform {
+    /// Transform an expression by recursively transforming all sub-expressions.
+    fn transform(&mut self, expr: Expr) -> Expr
+    where
+        Self: Sized;
+}
+
+impl Expr {
+    /// Recursively transform an expression using the provided transformer.
+    /// 
+    /// ```rust
+    /// use filter_expr::{Expr, Transform};
+    ///
+    /// struct MyTransformer;
+    ///
+    /// impl Transform for MyTransformer {
+    ///     fn transform(&mut self, expr: Expr) -> Expr {
+    ///         // Transform the expression before recursing
+    ///         match expr {
+    ///             Expr::Field(name) if name == "old_name" => {
+    ///                 Expr::Field("new_name".to_string())
+    ///             }
+    ///             other => other,
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// let expr = Expr::Field("old_name".to_string());
+    /// let mut transformer = MyTransformer;
+    /// let result = expr.transform(&mut transformer);
+    /// assert_eq!(result, Expr::Field("new_name".to_string()));
+    /// ```
+    pub fn transform<F: Transform>(self, transformer: &mut F) -> Expr {
+        let this = transformer.transform(self);
+        
+        match this {
+            Expr::Field(name) => Expr::Field(name),
+            Expr::Value(value) => Expr::Value(value),
+            Expr::FuncCall(func, args) => {
+                let args = args
+                    .into_iter()
+                    .map(|arg| transformer.transform(arg))
+                    .collect();
+                Expr::FuncCall(func, args)
+            }
+            Expr::Gt(left, right) => {
+                let left = Box::new(transformer.transform(*left));
+                let right = Box::new(transformer.transform(*right));
+                Expr::Gt(left, right)
+            }
+            Expr::Lt(left, right) => {
+                let left = Box::new(transformer.transform(*left));
+                let right = Box::new(transformer.transform(*right));
+                Expr::Lt(left, right)
+            }
+            Expr::Ge(left, right) => {
+                let left = Box::new(transformer.transform(*left));
+                let right = Box::new(transformer.transform(*right));
+                Expr::Ge(left, right)
+            }
+            Expr::Le(left, right) => {
+                let left = Box::new(transformer.transform(*left));
+                let right = Box::new(transformer.transform(*right));
+                Expr::Le(left, right)
+            }
+            Expr::Eq(left, right) => {
+                let left = Box::new(transformer.transform(*left));
+                let right = Box::new(transformer.transform(*right));
+                Expr::Eq(left, right)
+            }
+            Expr::Ne(left, right) => {
+                let left = Box::new(transformer.transform(*left));
+                let right = Box::new(transformer.transform(*right));
+                Expr::Ne(left, right)
+            }
+            Expr::In(left, right) => {
+                let left = Box::new(transformer.transform(*left));
+                let right = Box::new(transformer.transform(*right));
+                Expr::In(left, right)
+            }
+            Expr::And(exprs) => {
+                let exprs = exprs
+                    .into_iter()
+                    .map(|e| transformer.transform(e))
+                    .collect();
+                Expr::And(exprs)
+            }
+            Expr::Or(exprs) => {
+                let exprs = exprs
+                    .into_iter()
+                    .map(|e| transformer.transform(e))
+                    .collect();
+                Expr::Or(exprs)
+            }
+            Expr::Not(expr) => {
+                let expr = Box::new(transformer.transform(*expr));
+                Expr::Not(expr)
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -359,9 +486,64 @@ mod tests {
         assert!(arr2 > arr1);
 
         // Test incompatible types (should return None).
-        assert!(ExprValue::Str("a".to_string()).partial_cmp(&ExprValue::Int(1)).is_none());
-        assert!(ExprValue::Int(1).partial_cmp(&ExprValue::Bool(true)).is_none());
-        assert!(ExprValue::Str("a".to_string()).partial_cmp(&ExprValue::Bool(false)).is_none());
-        assert!(ExprValue::Array(vec![]).partial_cmp(&ExprValue::Int(1)).is_none());
+        assert!(
+            ExprValue::Str("a".to_string())
+                .partial_cmp(&ExprValue::Int(1))
+                .is_none()
+        );
+        assert!(
+            ExprValue::Int(1)
+                .partial_cmp(&ExprValue::Bool(true))
+                .is_none()
+        );
+        assert!(
+            ExprValue::Str("a".to_string())
+                .partial_cmp(&ExprValue::Bool(false))
+                .is_none()
+        );
+        assert!(
+            ExprValue::Array(vec![])
+                .partial_cmp(&ExprValue::Int(1))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn test_transform_expr() {
+        // Example: Rename field "old_name" to "new_name"
+        struct RenameField {
+            old_name: String,
+            new_name: String,
+        }
+
+        impl Transform for RenameField {
+            fn transform(&mut self, expr: Expr) -> Expr {
+                match expr {
+                    Expr::Field(name) if name == self.old_name => {
+                        Expr::Field(self.new_name.clone())
+                    }
+                    _ => expr,
+                }
+            }
+        }
+
+        let expr = Expr::Eq(
+            Box::new(Expr::Field("old_name".to_string())),
+            Box::new(Expr::value("value")),
+        );
+
+        let mut transformer = RenameField {
+            old_name: "old_name".to_string(),
+            new_name: "new_name".to_string(),
+        };
+
+        let result = expr.transform(&mut transformer);
+        assert_eq!(
+            result,
+            Expr::Eq(
+                Box::new(Expr::Field("new_name".to_string())),
+                Box::new(Expr::value("value"))
+            )
+        );
     }
 }

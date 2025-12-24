@@ -8,7 +8,7 @@ mod token;
 
 pub use ctx::{SimpleContext, Context};
 pub use error::Error;
-pub use expr::{Expr, ExprValue, BoxedExprFn, ExprFn};
+pub use expr::{Expr, ExprValue, BoxedExprFn, ExprFn, Transform};
 
 /// The filter expression.
 pub struct FilterExpr {
