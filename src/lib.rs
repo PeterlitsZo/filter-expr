@@ -286,5 +286,82 @@ mod tests {
         };
         let result = filter_expr.eval(&ctx).await.unwrap();
         assert_eq!(result, true);
+
+        // Parse the filter-expr:
+        //
+        //     type(name) = 'str'
+        //     type(name) = 'null'
+        //     type(foo.contains('bar')) = 'bool'
+        //     type(age) = 'i64'
+        //     type(open) = 'f64'
+        //     type(maybe_i64_or_f64) IN ['i64', 'f64']
+        // =====================================================================
+
+        parse_and_do_test_cases(
+            r#"type(name) = 'str'"#,
+            vec![
+                (simple_context! { "name": "John" }, true),
+                (simple_context! { "name": 18 }, false),
+                (simple_context! { "name": ExprValue::Null }, false),
+            ],
+        )
+        .await;
+
+        parse_and_do_test_cases(
+            r#"type(name) = 'null'"#,
+            vec![
+                (simple_context! { "name": "John" }, false),
+                (simple_context! { "name": ExprValue::Null }, true),
+                (simple_context! { "name": 18 }, false),
+            ],
+        )
+        .await;
+
+        parse_and_do_test_cases(
+            r#"type(foo.contains('bar')) = 'bool'"#,
+            vec![
+                (simple_context! { "foo": "foobar" }, true),
+                (simple_context! { "foo": "bar and foo" }, true),
+            ],
+        )
+        .await;
+
+        parse_and_do_test_cases(
+            r#"type(age) = 'i64'"#,
+            vec![
+                (simple_context! { "age": 18 }, true),
+                (simple_context! { "age": 18.5 }, false),
+            ],
+        )
+        .await;
+
+        parse_and_do_test_cases(
+            r#"type(open) = 'f64'"#,
+            vec![
+                (simple_context! { "open": 18 }, false),
+                (simple_context! { "open": 18.5 }, true),
+                (simple_context! { "open": "18" }, false),
+            ],
+        )
+        .await;
+
+        parse_and_do_test_cases(
+            r#"type(maybe_i64_or_f64) IN ['i64', 'f64']"#,
+            vec![
+                (simple_context! { "maybe_i64_or_f64": 18 }, true),
+                (simple_context! { "maybe_i64_or_f64": 18.5 }, true),
+                (simple_context! { "maybe_i64_or_f64": "18" }, false),
+            ],
+        )
+        .await;
+    }
+
+    async fn parse_and_do_test_cases(input: &str, test_cases: Vec<(SimpleContext, bool)>) {
+        let filter_expr = FilterExpr::parse(input).expect(&format!("failed to parse: {}", input));
+
+        for (ctx, expected) in test_cases {
+            let result = filter_expr.eval(&ctx).await.unwrap();
+            assert_eq!(result, expected, "{} failed", input);
+        }
     }
 }

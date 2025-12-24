@@ -44,9 +44,8 @@
   - [ ] `get_microsecond`
   - [ ] `get_nanosecond`
 
-- [ ] Support the `Type` type.
-- [ ] Support the `type` function to get the type of the value. Like
-      `type(foobar) = i64`.
+- [x] Support the `type` function to get the type of the value. Like
+      `type(foobar) = 'i64'`.
 - [ ] Support the `Object` type -- just like the JSON object.
 - [ ] Support get the item of the `Array` and `Object` by index or key. Like
       `array[0] = "John"` or `object.name = "John"`.
@@ -55,3 +54,5 @@
       the single quote.
 - [ ] Support `+`, `-`, `*`, `/` operators for the arithmetic operations.
 - [ ] Support `&&`, `||` and `!` operators for the logical operations.
+      Support `and`, `or` and `not` as the aliases of `&&`, `||` and `!`.
+- [ ] Use tool `prek` for pre-commit hooks.

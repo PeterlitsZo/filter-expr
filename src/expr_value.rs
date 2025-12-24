@@ -2,12 +2,18 @@ use crate::Error;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprValue {
+    /// The string value.
     Str(String),
+    /// The integer value.
     I64(i64),
+    /// The float value.
     F64(f64),
+    /// The boolean value.
     Bool(bool),
+    /// The null value.
     Null,
 
+    /// The array value.
     Array(Vec<ExprValue>),
 }
 
@@ -82,13 +88,14 @@ impl ExprValue {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum ExprValueType {
     Str,
     I64,
     F64,
     Bool,
     Null,
+
     Array,
 }
 
