@@ -11,32 +11,14 @@ impl Parser {
     }
 
     /// ```text
-    /// <expr> = <factor> ('AND' <factor>)*
+    /// <expr> = <or_test> ('OR' <or_test>)*
     /// ```
     pub(crate) fn parse_expr(&mut self) -> Result<Expr, Error> {
-        let mut exprs = vec![self.parse_factor()?];
-
-        while self.peek() == Some(&Token::And) {
-            self.advance(); // consume `AND` token.
-            exprs.push(self.parse_factor()?);
-        }
-
-        if exprs.len() == 1 {
-            Ok(exprs.into_iter().next().unwrap())
-        } else {
-            Ok(Expr::And(exprs))
-        }
-    }
-
-    /// ```text
-    /// <factor> = <term> ('OR' <term>)*
-    /// ```
-    fn parse_factor(&mut self) -> Result<Expr, Error> {
-        let mut exprs = vec![self.parse_term()?];
+        let mut exprs = vec![self.parse_or_test()?];
 
         while self.peek() == Some(&Token::Or) {
-            self.advance(); // consume `OR` token.
-            exprs.push(self.parse_term()?);
+            self.advance(); // consume `AND` token.
+            exprs.push(self.parse_or_test()?);
         }
 
         if exprs.len() == 1 {
@@ -47,13 +29,31 @@ impl Parser {
     }
 
     /// ```text
-    /// <term> = ['NOT'] <comparison>
+    /// <or_test> = <and_test> ('AND' <and_test>)*
     /// ```
-    fn parse_term(&mut self) -> Result<Expr, Error> {
+    fn parse_or_test(&mut self) -> Result<Expr, Error> {
+        let mut exprs = vec![self.parse_and_test()?];
+
+        while self.peek() == Some(&Token::And) {
+            self.advance(); // consume `AND` token.
+            exprs.push(self.parse_and_test()?);
+        }
+
+        if exprs.len() == 1 {
+            Ok(exprs.into_iter().next().unwrap())
+        } else {
+            Ok(Expr::And(exprs))
+        }
+    }
+
+    /// ```text
+    /// <and_test> = ['NOT'] <comparison>
+    /// ```
+    fn parse_and_test(&mut self) -> Result<Expr, Error> {
         // Handle NOT operator (unary)
         if self.peek() == Some(&Token::Not) {
             self.advance(); // consume NOT
-            let expr = self.parse_term()?;
+            let expr = self.parse_and_test()?;
             return Ok(Expr::Not(Box::new(expr)));
         }
 
@@ -394,6 +394,24 @@ mod tests {
                 "contains".to_string(),
                 vec![Expr::str_("John")]
             )
+        );
+
+        let input = r#"true OR false"#;
+        let tokens = parse_token(input).unwrap();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse_expr().unwrap();
+        assert_eq!(expr, Expr::or_(vec![Expr::bool_(true), Expr::bool_(false)]));
+
+        let input = r#"true AND false OR true"#;
+        let tokens = parse_token(input).unwrap();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse_expr().unwrap();
+        assert_eq!(
+            expr,
+            Expr::or_(vec![
+                Expr::and_(vec![Expr::bool_(true), Expr::bool_(false)]),
+                Expr::bool_(true)
+            ])
         );
     }
 }

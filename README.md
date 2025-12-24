@@ -29,10 +29,10 @@ assert_eq!(result, true);
 ### Expression
 
 ```
-<expr> = <factor> ('AND' <factor>)*
+<expr> = <or_test> ('OR' <or_test>)*
 
-<factor> = <term> ('OR' <term>)*
-<term> = ['NOT'] <comparison>
+<or_test> = <and_test> ('AND' <and_test>)*
+<and_test> = ['NOT'] <comparison>
 ```
 
 ### Comparison
