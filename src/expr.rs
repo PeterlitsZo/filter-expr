@@ -1,4 +1,4 @@
-use crate::{Error, ctx::Context};
+use crate::{Error, ExprFnContext, ExprValue, ExprValueType, ctx::Context};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
@@ -11,6 +11,7 @@ pub enum Expr {
     Array(Vec<Expr>),
 
     FuncCall(String, Vec<Expr>),
+    MethodCall(String, Box<Expr>, Vec<Expr>),
 
     Gt(Box<Expr>, Box<Expr>),
     Lt(Box<Expr>, Box<Expr>),
@@ -53,6 +54,14 @@ impl Expr {
 
     pub(crate) fn array_<T: Into<Vec<Expr>>>(value: T) -> Self {
         Self::Array(value.into())
+    }
+
+    pub(crate) fn func_call_(func: String, args: Vec<Expr>) -> Self {
+        Self::FuncCall(func, args)
+    }
+
+    pub(crate) fn method_call_(obj: Expr, method: String, args: Vec<Expr>) -> Self {
+        Self::MethodCall(method, Box::new(obj), args)
     }
 
     pub(crate) fn gt_(left: Expr, right: Expr) -> Self {
@@ -111,6 +120,9 @@ impl Expr {
             Self::Array(value) => self.eval_array(value, ctx).await,
 
             Self::FuncCall(func, args) => self.eval_func_call(func, args, ctx).await,
+            Self::MethodCall(method, obj, args) => {
+                self.eval_method_call(obj, method, args, ctx).await
+            }
 
             Self::Gt(left, right) => {
                 let left_value = Box::pin(left.eval(ctx)).await?;
@@ -226,13 +238,82 @@ impl Expr {
         }
     }
 
-    pub(crate) async fn eval_array(&self, array: &[Expr], ctx: &dyn Context) -> Result<ExprValue, Error> {
+    pub(crate) async fn eval_array(
+        &self,
+        array: &[Expr],
+        ctx: &dyn Context,
+    ) -> Result<ExprValue, Error> {
         let mut values = vec![];
         for expr in array {
             let value = Box::pin(expr.eval(ctx)).await?;
             values.push(value);
         }
         Ok(ExprValue::Array(values))
+    }
+
+    pub(crate) async fn eval_method_call(
+        &self,
+        obj: &Expr,
+        method: &str,
+        args: &[Expr],
+        ctx: &dyn Context,
+    ) -> Result<ExprValue, Error> {
+        let obj_value = Box::pin(obj.eval(ctx)).await?;
+        match obj_value {
+            ExprValue::Str(s) => match method {
+                "to_uppercase" => {
+                    if args.len() != 0 {
+                        return Err(Error::InvalidArgumentCountForMethod {
+                            method: method.to_string(),
+                            expected: 0,
+                            got: args.len(),
+                        });
+                    }
+                    Ok(ExprValue::Str(s.to_uppercase()))
+                }
+                "to_lowercase" => {
+                    if args.len() != 0 {
+                        return Err(Error::InvalidArgumentCountForMethod {
+                            method: method.to_string(),
+                            expected: 0,
+                            got: args.len(),
+                        });
+                    }
+                    Ok(ExprValue::Str(s.to_lowercase()))
+                }
+                "contains" => {
+                    if args.len() != 1 {
+                        return Err(Error::InvalidArgumentCountForMethod {
+                            method: method.to_string(),
+                            expected: 1,
+                            got: args.len(),
+                        });
+                    }
+                    let arg = Box::pin(args[0].eval(ctx)).await?;
+                    let arg = match arg {
+                        ExprValue::Str(s) => s,
+                        _ => {
+                            return Err(Error::InvalidArgumentTypeForMethod {
+                                method: method.to_string(),
+                                index: 0,
+                                expected: ExprValueType::Str,
+                                got: arg.typ(),
+                            });
+                        }
+                    };
+
+                    Ok(ExprValue::Bool(s.contains(&arg)))
+                }
+                _ => Err(Error::NoSuchMethod {
+                    method: method.to_string(),
+                    obj_type: ExprValueType::Str,
+                }),
+            },
+            _ => Err(Error::NoSuchMethod {
+                method: method.to_string(),
+                obj_type: obj_value.typ(),
+            }),
+        }
     }
 
     pub(crate) async fn eval_func_call(
@@ -258,7 +339,9 @@ impl Expr {
         } else {
             match func_name {
                 "matches" => self.eval_builtin_func_call_matches(&args_values).await,
-                _ => Err(Error::NoSuchFunction(func_name.to_string())),
+                _ => Err(Error::NoSuchFunction {
+                    function: func_name.to_string(),
+                }),
             }
         }
     }
@@ -268,7 +351,8 @@ impl Expr {
         args: &[ExprValue],
     ) -> Result<ExprValue, Error> {
         if args.len() != 2 {
-            return Err(Error::InvalidArgumentCount {
+            return Err(Error::InvalidArgumentCountForFunction {
+                function: "matches".to_string(),
                 expected: 2,
                 got: args.len(),
             });
@@ -276,18 +360,22 @@ impl Expr {
         let text = match &args[0] {
             ExprValue::Str(s) => s,
             _ => {
-                return Err(Error::InvalidArgumentType {
-                    expected: "string".to_string(),
-                    got: format!("{:?}", args[0]),
+                return Err(Error::InvalidArgumentTypeForFunction {
+                    function: "matches".to_string(),
+                    index: 0,
+                    expected: ExprValueType::Str,
+                    got: args[0].typ(),
                 });
             }
         };
         let pattern = match &args[1] {
             ExprValue::Str(s) => s,
             _ => {
-                return Err(Error::InvalidArgumentType {
-                    expected: "string".to_string(),
-                    got: format!("{:?}", args[1]),
+                return Err(Error::InvalidArgumentTypeForFunction {
+                    function: "matches".to_string(),
+                    index: 1,
+                    expected: ExprValueType::Str,
+                    got: args[1].typ(),
                 });
             }
         };
@@ -303,86 +391,6 @@ impl Expr {
         Ok(ExprValue::Bool(matches))
     }
 }
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ExprValue {
-    Str(String),
-    I64(i64),
-    F64(f64),
-    Bool(bool),
-    Null,
-
-    Array(Vec<ExprValue>),
-}
-
-impl PartialOrd for ExprValue {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match (self, other) {
-            (ExprValue::Str(a), ExprValue::Str(b)) => a.partial_cmp(b),
-            (ExprValue::I64(a), ExprValue::I64(b)) => a.partial_cmp(b),
-            (ExprValue::F64(a), ExprValue::F64(b)) => a.partial_cmp(b),
-            (ExprValue::Bool(a), ExprValue::Bool(b)) => a.partial_cmp(b),
-            (ExprValue::Null, ExprValue::Null) => Some(std::cmp::Ordering::Equal),
-
-            (ExprValue::F64(a), ExprValue::I64(b)) => a.partial_cmp(&(*b as f64)),
-            (ExprValue::I64(a), ExprValue::F64(b)) => (*a as f64).partial_cmp(b),
-
-            (ExprValue::Array(a), ExprValue::Array(b)) => a.partial_cmp(b),
-
-            (ExprValue::Null, _) => Some(std::cmp::Ordering::Greater),
-            (_, ExprValue::Null) => Some(std::cmp::Ordering::Less),
-
-            _ => None, // Different types cannot be compared...
-        }
-    }
-}
-
-impl Into<ExprValue> for String {
-    fn into(self) -> ExprValue {
-        ExprValue::Str(self)
-    }
-}
-
-impl Into<ExprValue> for &str {
-    fn into(self) -> ExprValue {
-        ExprValue::Str(self.to_string())
-    }
-}
-
-impl Into<ExprValue> for i64 {
-    fn into(self) -> ExprValue {
-        ExprValue::I64(self)
-    }
-}
-
-impl Into<ExprValue> for f64 {
-    fn into(self) -> ExprValue {
-        ExprValue::F64(self)
-    }
-}
-
-impl Into<ExprValue> for bool {
-    fn into(self) -> ExprValue {
-        ExprValue::Bool(self)
-    }
-}
-
-impl<T: Into<ExprValue>> Into<ExprValue> for Vec<T> {
-    fn into(self) -> ExprValue {
-        ExprValue::Array(self.into_iter().map(|item| item.into()).collect())
-    }
-}
-
-pub struct ExprFnContext {
-    pub args: Vec<ExprValue>,
-}
-
-#[async_trait::async_trait]
-pub trait ExprFn: Send + Sync {
-    async fn call(&self, ctx: ExprFnContext) -> Result<ExprValue, Error>;
-}
-
-pub type BoxedExprFn = Box<dyn ExprFn>;
 
 /// A trait for transforming AST expressions.
 ///
@@ -418,7 +426,7 @@ pub trait Transform {
 
 impl Expr {
     /// Recursively transform an expression using the provided transformer.
-    /// 
+    ///
     /// ```rust
     /// use filter_expr::{Expr, Transform};
     ///
@@ -443,7 +451,7 @@ impl Expr {
     /// ```
     pub fn transform<F: Transform>(self, transformer: &mut F) -> Expr {
         let this = transformer.transform(self);
-        
+
         match this {
             Expr::Field(name) => Expr::Field(name),
             Expr::Str(value) => Expr::Str(value),
@@ -452,6 +460,7 @@ impl Expr {
             Expr::Bool(value) => Expr::Bool(value),
             Expr::Null => Expr::Null,
             Expr::Array(value) => Expr::Array(value),
+
             Expr::FuncCall(func, args) => {
                 let args = args
                     .into_iter()
@@ -459,6 +468,15 @@ impl Expr {
                     .collect();
                 Expr::FuncCall(func, args)
             }
+            Expr::MethodCall(method, obj, args) => {
+                let obj = Box::new(transformer.transform(*obj));
+                let args = args
+                    .into_iter()
+                    .map(|arg| transformer.transform(arg))
+                    .collect();
+                Expr::MethodCall(method, obj, args)
+            }
+
             Expr::Gt(left, right) => {
                 let left = Box::new(transformer.transform(*left));
                 let right = Box::new(transformer.transform(*right));

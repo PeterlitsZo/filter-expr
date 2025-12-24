@@ -3,12 +3,14 @@
 mod ctx;
 mod error;
 mod expr;
+mod expr_value;
 mod parser;
 mod token;
 
-pub use ctx::{SimpleContext, Context};
+pub use ctx::{Context, SimpleContext};
 pub use error::Error;
-pub use expr::{Expr, ExprValue, BoxedExprFn, ExprFn, Transform};
+pub use expr::{Expr, Transform};
+pub use expr_value::{BoxedExprFn, ExprFn, ExprFnContext, ExprValue, ExprValueType};
 
 /// The filter expression.
 pub struct FilterExpr {
@@ -18,10 +20,10 @@ pub struct FilterExpr {
 
 impl FilterExpr {
     /// Parse the filter expression.
-    /// 
+    ///
     /// ```rust
     /// use filter_expr::FilterExpr;
-    /// 
+    ///
     /// let filter_expr = FilterExpr::parse("name = 'John' AND age > 18").unwrap();
     /// ```
     pub fn parse(expr: &str) -> Result<Self, Error> {
@@ -72,7 +74,7 @@ fn parse_expr(input: &str) -> Result<Expr, Error> {
 
 #[cfg(test)]
 mod tests {
-    use crate::expr::{ExprFn, ExprFnContext};
+    use crate::{ExprFn, ExprFnContext};
 
     use super::*;
 
@@ -155,7 +157,8 @@ mod tests {
         impl ExprFn for CustomAddFn {
             async fn call(&self, ctx: ExprFnContext) -> Result<ExprValue, Error> {
                 if ctx.args.len() != 2 {
-                    return Err(Error::InvalidArgumentCount {
+                    return Err(Error::InvalidArgumentCountForFunction {
+                        function: "custom_add".to_string(),
                         expected: 2,
                         got: ctx.args.len(),
                     });
@@ -163,18 +166,22 @@ mod tests {
                 let a = match ctx.args[0] {
                     ExprValue::I64(a) => a,
                     _ => {
-                        return Err(Error::InvalidArgumentType {
-                            expected: "integer".to_string(),
-                            got: format!("{:?}", ctx.args[0]),
+                        return Err(Error::InvalidArgumentTypeForFunction {
+                            function: "custom_add".to_string(),
+                            index: 0,
+                            expected: ExprValueType::I64,
+                            got: ctx.args[0].typ(),
                         });
                     }
                 };
                 let b = match ctx.args[1] {
                     ExprValue::I64(b) => b,
                     _ => {
-                        return Err(Error::InvalidArgumentType {
-                            expected: "integer".to_string(),
-                            got: format!("{:?}", ctx.args[1]),
+                        return Err(Error::InvalidArgumentTypeForFunction {
+                            function: "custom_add".to_string(),
+                            index: 1,
+                            expected: ExprValueType::I64,
+                            got: ctx.args[1].typ(),
                         });
                     }
                 };
@@ -228,6 +235,54 @@ mod tests {
             "open": 1.6,
             "age": 18,
             "is_peter": true,
+        };
+        let result = filter_expr.eval(&ctx).await.unwrap();
+        assert_eq!(result, true);
+
+        // Parse the filter-expr:
+        //
+        //     name.to_uppercase() = 'JOHN'
+        // =====================================================================
+
+        let input = r#"name.to_uppercase() = 'JOHN'"#;
+        let filter_expr = FilterExpr::parse(input).unwrap();
+
+        let ctx = simple_context! {
+            "name": "john",
+        };
+        let result = filter_expr.eval(&ctx).await.unwrap();
+        assert_eq!(result, true);
+
+        let ctx = simple_context! {
+            "name": "Jane",
+        };
+        let result = filter_expr.eval(&ctx).await.unwrap();
+        assert_eq!(result, false);
+
+        let ctx = simple_context! {
+            "name": "John",
+        };
+        let result = filter_expr.eval(&ctx).await.unwrap();
+        assert_eq!(result, true);
+
+        // Parse the filter-expr:
+        //
+        //     name.contains('John')
+        // =====================================================================
+
+        let input = r#"name.contains('John')"#;
+        let filter_expr = FilterExpr::parse(input).unwrap();
+        let result = filter_expr.eval(&ctx).await.unwrap();
+        assert_eq!(result, true);
+
+        let ctx = simple_context! {
+            "name": "Jane",
+        };
+        let result = filter_expr.eval(&ctx).await.unwrap();
+        assert_eq!(result, false);
+
+        let ctx = simple_context! {
+            "name": "The John is a good boy.",
         };
         let result = filter_expr.eval(&ctx).await.unwrap();
         assert_eq!(result, true);

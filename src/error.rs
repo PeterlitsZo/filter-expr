@@ -1,13 +1,15 @@
+use crate::ExprValueType;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("internal: {0}")]
+    Internal(String),
+
     #[error("parse the expression: {0}")]
     Parse(String),
 
     #[error("no such variable `{0}`")]
     NoSuchVar(String),
-
-    #[error("no such function `{0}`")]
-    NoSuchFunction(String),
 
     #[error("invalid value {0}")]
     InvalidValue(String),
@@ -18,12 +20,52 @@ pub enum Error {
     #[error("unsupported character: {0}")]
     UnsupportedCharacter(char),
 
-    #[error("invalid argument count: expected {expected}, got {got}")]
-    InvalidArgumentCount { expected: usize, got: usize },
+    /// The function is not found.
+    #[error("no such function {function:?}")]
+    NoSuchFunction { function: String },
 
-    #[error("invalid argument type: expected {expected}, got {got}")]
-    InvalidArgumentType { expected: String, got: String },
+    /// The method is not found.
+    #[error("no such method {method:?} for type {obj_type:?}")]
+    NoSuchMethod {
+        method: String,
+        obj_type: ExprValueType,
+    },
 
-    #[error("internal: {0}")]
-    Internal(String),
+    /// Invalid argument count for the given function.
+    #[error(
+        "invalid argument count for function {function:?}: expected {expected} argument(s), but got {got} argument(s)"
+    )]
+    InvalidArgumentCountForFunction {
+        function: String,
+        expected: usize,
+        got: usize,
+    },
+
+    /// Invalid argument type for the given function's index-th argument.
+    #[error(
+        "invalid argument type for function {function:?}'s index {index} argument: expected {expected:?}, got {got:?}"
+    )]
+    InvalidArgumentTypeForFunction {
+        function: String,
+        index: usize,
+        expected: ExprValueType,
+        got: ExprValueType,
+    },
+
+    /// Invalid argument count for the given method.
+    #[error("invalid argument count for method {method:?}: expected {expected} argument(s), but got {got} argument(s)")]
+    InvalidArgumentCountForMethod {
+        method: String,
+        expected: usize,
+        got: usize,
+    },
+
+    /// Invalid argument type for the given method's index-th argument.
+    #[error("invalid argument type for method {method:?}'s index {index} argument: expected {expected:?}, got {got:?}")]
+    InvalidArgumentTypeForMethod {
+        method: String,
+        index: usize,
+        expected: ExprValueType,
+        got: ExprValueType,
+    },
 }

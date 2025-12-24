@@ -1,8 +1,4 @@
-use crate::{
-    Error,
-    expr::Expr,
-    token::Token,
-};
+use crate::{Error, expr::Expr, token::Token};
 
 pub(crate) struct Parser {
     tokens: Vec<Token>,
@@ -51,8 +47,7 @@ impl Parser {
     }
 
     /// ```text
-    /// <term> = ['NOT'] <term>
-    ///        | <value> [<operator> <value>]
+    /// <term> = ['NOT'] <comparison>
     /// ```
     fn parse_term(&mut self) -> Result<Expr, Error> {
         // Handle NOT operator (unary)
@@ -62,57 +57,82 @@ impl Parser {
             return Ok(Expr::Not(Box::new(expr)));
         }
 
-        let left = self.parse_value()?;
+        self.parse_comparison()
+    }
 
-        Ok(match self.peek() {
-            Some(&Token::Eq) => {
-                self.advance();
-                let right = self.parse_value()?;
-                Expr::Eq(Box::new(left), Box::new(right))
+    /// ```text
+    /// <comparison> = <primary> <operator> <comparison>
+    ///              | <primary>
+    /// ```
+    fn parse_comparison(&mut self) -> Result<Expr, Error> {
+        // Parse <primary>
+        let primary = self.parse_primary()?;
+
+        // Check if there's an operator
+        let operator = self.peek().cloned();
+        match operator {
+            Some(Token::Eq) | Some(Token::Gt) | Some(Token::Lt) | Some(Token::Ge)
+            | Some(Token::Le) | Some(Token::Ne) | Some(Token::In) => {
+                // Parse <operator> <comparison> (recursive)
+                self.advance(); // consume operator
+
+                let right = self.parse_comparison()?; // Recursive call
+
+                Ok(match operator.unwrap() {
+                    Token::Eq => Expr::Eq(Box::new(primary), Box::new(right)),
+                    Token::Gt => Expr::Gt(Box::new(primary), Box::new(right)),
+                    Token::Lt => Expr::Lt(Box::new(primary), Box::new(right)),
+                    Token::Ge => Expr::Ge(Box::new(primary), Box::new(right)),
+                    Token::Le => Expr::Le(Box::new(primary), Box::new(right)),
+                    Token::Ne => Expr::Ne(Box::new(primary), Box::new(right)),
+                    Token::In => Expr::In(Box::new(primary), Box::new(right)),
+                    _ => unreachable!(),
+                })
             }
-            Some(&Token::Gt) => {
-                self.advance();
-                let right = self.parse_value()?;
-                Expr::Gt(Box::new(left), Box::new(right))
+            _ => {
+                // Just <primary>
+                Ok(primary)
             }
-            Some(&Token::Lt) => {
-                self.advance();
-                let right = self.parse_value()?;
-                Expr::Lt(Box::new(left), Box::new(right))
+        }
+    }
+
+    /// ```text
+    /// <primary> = <func-call>
+    ///           | <method-call>
+    ///           | <value>
+    /// ```
+    fn parse_primary(&mut self) -> Result<Expr, Error> {
+        // Try to parse as function call first (ident followed by '(')
+        if let Some(&Token::Ident(ref name)) = self.peek() {
+            let name = name.clone();
+            self.advance();
+
+            if self.peek() == Some(&Token::LParen) {
+                // It's a function call
+                return self.parse_func_call(name);
+            } else {
+                // It's a field name (value)
+                // We need to check if it's followed by a method call
+                let value = Expr::field_(name);
+                return self.parse_method_call_chain(value);
             }
-            Some(&Token::Ge) => {
-                self.advance();
-                let right = self.parse_value()?;
-                Expr::Ge(Box::new(left), Box::new(right))
-            }
-            Some(&Token::Le) => {
-                self.advance();
-                let right = self.parse_value()?;
-                Expr::Le(Box::new(left), Box::new(right))
-            }
-            Some(&Token::Ne) => {
-                self.advance();
-                let right = self.parse_value()?;
-                Expr::Ne(Box::new(left), Box::new(right))
-            }
-            Some(&Token::In) => {
-                self.advance();
-                let right = self.parse_value()?;
-                Expr::In(Box::new(left), Box::new(right))
-            }
-            _ => left,
-        })
+        }
+
+        // Parse as value (which may include method calls)
+        let value = self.parse_value()?;
+        self.parse_method_call_chain(value)
     }
 
     /// ```text
     /// <value> = <str>
-    ///        | <i64>
-    ///        | <f64>
-    ///        | <bool>
-    ///        | <null>
-    ///        | <func-call>
-    ///        | <ident>
-    ///        | <array>
+    ///         | <i64>
+    ///         | <f64>
+    ///         | <bool>
+    ///         | <null>
+    ///         | <ident>
+    ///         | <array>
+    ///
+    /// <array> = '[' [<value> (',' <value>)* ','?] ']'
     /// ```
     fn parse_value(&mut self) -> Result<Expr, Error> {
         // Handle array literal [ ... ]
@@ -130,13 +150,9 @@ impl Parser {
                 Token::Bool(b) => Expr::bool_(b),
                 Token::Null => Expr::null_(),
                 Token::Ident(name) => {
-                    // Check if this is a function call
-                    if self.peek() == Some(&Token::LParen) {
-                        self.parse_func_call(name)?
-                    } else {
-                        // Identifiers are treated as field names.
-                        Expr::field_(name)
-                    }
+                    // Identifiers are treated as field names.
+                    // Function calls are handled in parse_primary
+                    Expr::field_(name)
                 }
                 _ => {
                     // Unexpected token.
@@ -182,6 +198,57 @@ impl Parser {
         self.advance();
 
         Ok(Expr::FuncCall(func_name, args))
+    }
+
+    fn parse_method_call_chain(&mut self, mut value: Expr) -> Result<Expr, Error> {
+        // Handle method calls: <value> '.' <ident> '(' ... ')'
+        while self.peek() == Some(&Token::Dot) {
+            self.advance(); // consume '.'
+
+            let method_name = match self.peek() {
+                Some(&Token::Ident(ref name)) => {
+                    let name = name.clone();
+                    self.advance();
+                    name
+                }
+                _ => {
+                    return Err(Error::Parse("expected method name after '.'".to_string()));
+                }
+            };
+
+            // Parse method call arguments
+            if self.peek() != Some(&Token::LParen) {
+                return Err(Error::Parse("expected '(' after method name".to_string()));
+            }
+            self.advance(); // consume '('
+
+            let mut args = Vec::new();
+
+            // Handle empty argument list ()
+            if self.peek() == Some(&Token::RParen) {
+                self.advance();
+                value = Expr::MethodCall(method_name, Box::new(value), args);
+                continue;
+            }
+
+            // Parse first argument
+            args.push(self.parse_value()?);
+
+            // Parse remaining arguments separated by commas
+            while self.peek() == Some(&Token::Comma) {
+                self.advance(); // consume comma
+                args.push(self.parse_value()?);
+            }
+
+            // Consume )
+            if self.peek() != Some(&Token::RParen) {
+                return Err(Error::Parse("expected )".to_string()));
+            }
+            self.advance();
+
+            value = Expr::MethodCall(method_name, Box::new(value), args);
+        }
+        Ok(value)
     }
 
     fn parse_array(&mut self) -> Result<Expr, Error> {
@@ -286,11 +353,46 @@ mod tests {
         let tokens = parse_token(input).unwrap();
         let mut parser = Parser::new(tokens);
         let expr = parser.parse_expr().unwrap();
+        assert_eq!(expr, Expr::ne_(Expr::field_("name"), Expr::null_()));
+
+        let input = r#"name.to_uppercase() = 'JOHN'"#;
+        let tokens = parse_token(input).unwrap();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse_expr().unwrap();
         assert_eq!(
             expr,
-            Expr::ne_(
+            Expr::eq_(
+                Expr::method_call_(Expr::field_("name"), "to_uppercase".to_string(), vec![]),
+                Expr::str_("JOHN")
+            )
+        );
+
+        let input = r#"name.to_uppercase().to_lowercase() = 'john'"#;
+        let tokens = parse_token(input).unwrap();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse_expr().unwrap();
+        assert_eq!(
+            expr,
+            Expr::eq_(
+                Expr::method_call_(
+                    Expr::method_call_(Expr::field_("name"), "to_uppercase".to_string(), vec![]),
+                    "to_lowercase".to_string(),
+                    vec![]
+                ),
+                Expr::str_("john")
+            )
+        );
+
+        let input = r#"name.contains('John')"#;
+        let tokens = parse_token(input).unwrap();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse_expr().unwrap();
+        assert_eq!(
+            expr,
+            Expr::method_call_(
                 Expr::field_("name"),
-                Expr::null_()
+                "contains".to_string(),
+                vec![Expr::str_("John")]
             )
         );
     }

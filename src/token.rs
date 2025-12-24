@@ -42,6 +42,8 @@ pub(crate) enum Token {
     Comma,
     /// The colon (`:`).
     Colon,
+    /// The dot (`.`).
+    Dot,
 
     /// The and operator (`&&` or `AND`).
     And,
@@ -147,6 +149,10 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
             ':' => {
                 chars.next();
                 tokens.push(Token::Colon);
+            }
+            '.' => {
+                chars.next();
+                tokens.push(Token::Dot);
             }
 
             // Float or Int.
@@ -269,6 +275,29 @@ mod tests {
             Token::Ident("is_peter".to_string()),
             Token::Eq,
             Token::Bool(true),
+        ]);
+
+        let input = r#"name.to_uppercase() = 'JOHN'"#;
+        let tokens = parse_token(input).unwrap();
+        assert_eq!(tokens, vec![
+            Token::Ident("name".to_string()),
+            Token::Dot,
+            Token::Ident("to_uppercase".to_string()),
+            Token::LParen,
+            Token::RParen,
+            Token::Eq,
+            Token::Str("JOHN".to_string()),
+        ]);
+
+        let input = r#"name.contains('John')"#;
+        let tokens = parse_token(input).unwrap();
+        assert_eq!(tokens, vec![
+            Token::Ident("name".to_string()),
+            Token::Dot,
+            Token::Ident("contains".to_string()),
+            Token::LParen,
+            Token::Str("John".to_string()),
+            Token::RParen,
         ]);
     }
 }

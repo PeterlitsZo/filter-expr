@@ -1,5 +1,7 @@
 # filter-expr
 
+> NOTE: This library is still under development.
+
 A library for parsing the filter expression.
 
 ```rust
@@ -31,22 +33,30 @@ assert_eq!(result, true);
 
 <factor> = <term> ('OR' <term>)*
 <term> = ['NOT'] <comparison>
-       | <value> [<operator> <value>]
+```
+
+### Comparison
+
+```
+<comparison> = <primary> <operator> <comparison>
+             | <primary>
+
+<primary> = <func-call>
+          | <method-call>
+          | <value>
+
 <operator> = '=' | '>' | '<' | '>=' | '<=' | '!=' | 'IN'
-```
 
-### Value
+<func-call> = <ident> '(' [<value> (',' <value>)* ','?] ')'
+<method-call> = <value> '.' <ident> '(' [<value> (',' <value>)* ','?] ')'
 
-```
 <value> = <str>
         | <i64>
         | <f64>
         | <bool>
         | <null>
-        | <func-call>
         | <ident>
         | <array>
 
-<func-call> = <ident> '(' [<value> (',' <value>)* ','?] ')'
 <array> = '[' [<value> (',' <value>)* ','?] ']'
 ```

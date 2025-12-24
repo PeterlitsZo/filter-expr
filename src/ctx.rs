@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{Error, expr::{BoxedExprFn, ExprValue}};
+use crate::{Error, BoxedExprFn, ExprValue};
 
 /// A macro to create a `SimpleContext` from key-value pairs.
 ///
