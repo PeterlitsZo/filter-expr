@@ -17,6 +17,13 @@ pub struct FilterExpr {
 }
 
 impl FilterExpr {
+    /// Parse the filter expression.
+    /// 
+    /// ```rust
+    /// use filter_expr::FilterExpr;
+    /// 
+    /// let filter_expr = FilterExpr::parse("name = 'John' AND age > 18").unwrap();
+    /// ```
     pub fn parse(expr: &str) -> Result<Self, Error> {
         if expr.trim().is_empty() {
             return Ok(Self { expr: None });
@@ -26,14 +33,24 @@ impl FilterExpr {
         Ok(Self { expr: Some(expr) })
     }
 
+    /// Create a new filter expression with the given expression.
     pub fn new(expr: Option<Expr>) -> Self {
         Self { expr }
     }
 
+    /// Get the expression of the filter.
     pub fn expr(&self) -> Option<&Expr> {
         self.expr.as_ref()
     }
 
+    /// Transform the filter expression.
+    pub fn transform<F: Transform>(self, transformer: &mut F) -> Self {
+        Self {
+            expr: self.expr.map(|expr| expr.transform(transformer)),
+        }
+    }
+
+    /// Evaluate the filter expression in the given context.
     pub async fn eval(&self, ctx: &dyn Context) -> Result<bool, Error> {
         if let Some(expr) = &self.expr {
             let value = expr.eval(ctx).await?;
