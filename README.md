@@ -19,7 +19,7 @@ assert_eq!(result, true);
 ### Filter
 
 ```
-<filter> = <expression> | <empty>
+<filter> = <expr> | <empty>
 
 <empty> =
 ```
@@ -27,91 +27,26 @@ assert_eq!(result, true);
 ### Expression
 
 ```
-<expression> = <sequence> ('AND' <sequence>)*
+<expr> = <factor> ('AND' <factor>)*
 
-<sequence> = <factor>+
 <factor> = <term> ('OR' <term>)*
-<term> = ['NOT' | '-'] <simple>
-<simple> = <restriction> | <composite>
+<term> = ['NOT'] <comparison>
+       | <value> [<operator> <value>]
+<operator> = '=' | '>' | '<' | '>=' | '<=' | '!=' | 'IN'
 ```
-
-### Restriction
-
-```
-<restriction> = <comparable> [<operator> <arg>]
-```
-
-E.g. `name = 'John'` or `age > 18` or `1 > 0`.
-
-### Composite
-
-```
-<composite> = '(' <expression> ')'
-```
-
-E.g. `(age + 18)`.
-
-### Comparable
-
-```
-<comparable> = <member> | <function> | <value>
-```
-
-E.g. `name` or `age` or `1`.
-
-### Operator
-
-```
-<operator> = '=' | '>' | '<' | '>=' | '<=' | '!=' | 'IN' | 'NOT' 'IN'
-```
-
-### Arg
-
-```
-<arg> = <comparable> | <composite>
-```
-
-E.g. `'John'` or `18` or `1.0` or `(age + 18)`.
-
-### Member
-
-```
-<member> = <field> ('.' <field>)*
-```
-
-E.g. `name` or `user.name` or `user.address.city`.
-
-### Field
-
-E.g. `name` or `user_name` or `user_address_city`.
 
 ### Value
 
 ```
-<value> = <string>
-        | <integer>
-        | <float>
-        | <boolean>
+<value> = <str>
+        | <i64>
+        | <f64>
+        | <bool>
         | <null>
+        | <func-call>
+        | <ident>
         | <array>
-        | <object>
 
-<string> = <single-quoted-string> | <double-quoted-string>
-<boolean> = 'true' | 'false'
-<integer> = /* an integer number */
-<float> = /* a floating-point number */
-<null> = 'null'
+<func-call> = <ident> '(' [<value> (',' <value>)* ','?] ')'
 <array> = '[' [<value> (',' <value>)* ','?] ']'
-<object> = '{' [<string> ':' <value> (',' <string> ':' <value>)* ','?] '}'
 ```
-
-Examples:
-
-- `'John'`
-- `18`
-- `1.0`
-- `true`
-- `false`
-- `null`
-- `[1, 2, 3]`
-- `{'a': 1, 'b': 2}`

@@ -18,6 +18,10 @@ pub struct FilterExpr {
 
 impl FilterExpr {
     pub fn parse(expr: &str) -> Result<Self, Error> {
+        if expr.trim().is_empty() {
+            return Ok(Self { expr: None });
+        }
+
         let expr = parse_expr(expr)?;
         Ok(Self { expr: Some(expr) })
     }
@@ -140,7 +144,7 @@ mod tests {
                     });
                 }
                 let a = match ctx.args[0] {
-                    ExprValue::Int(a) => a,
+                    ExprValue::I64(a) => a,
                     _ => {
                         return Err(Error::InvalidArgumentType {
                             expected: "integer".to_string(),
@@ -149,7 +153,7 @@ mod tests {
                     }
                 };
                 let b = match ctx.args[1] {
-                    ExprValue::Int(b) => b,
+                    ExprValue::I64(b) => b,
                     _ => {
                         return Err(Error::InvalidArgumentType {
                             expected: "integer".to_string(),

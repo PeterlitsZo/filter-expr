@@ -1,6 +1,6 @@
 use crate::{
     Error,
-    expr::{Expr, ExprValue},
+    expr::Expr,
     token::Token,
 };
 
@@ -14,16 +14,15 @@ impl Parser {
         Self { tokens, pos: 0 }
     }
 
+    /// ```text
+    /// <expr> = <factor> ('AND' <factor>)*
+    /// ```
     pub(crate) fn parse_expr(&mut self) -> Result<Expr, Error> {
-        Ok(self.parse_and_expr()?)
-    }
-
-    fn parse_and_expr(&mut self) -> Result<Expr, Error> {
-        let mut exprs = vec![self.parse_or_expr()?];
+        let mut exprs = vec![self.parse_factor()?];
 
         while self.peek() == Some(&Token::And) {
             self.advance(); // consume `AND` token.
-            exprs.push(self.parse_or_expr()?);
+            exprs.push(self.parse_factor()?);
         }
 
         if exprs.len() == 1 {
@@ -33,12 +32,15 @@ impl Parser {
         }
     }
 
-    fn parse_or_expr(&mut self) -> Result<Expr, Error> {
-        let mut exprs = vec![self.parse_comparison()?];
+    /// ```text
+    /// <factor> = <term> ('OR' <term>)*
+    /// ```
+    fn parse_factor(&mut self) -> Result<Expr, Error> {
+        let mut exprs = vec![self.parse_term()?];
 
         while self.peek() == Some(&Token::Or) {
             self.advance(); // consume `OR` token.
-            exprs.push(self.parse_comparison()?);
+            exprs.push(self.parse_term()?);
         }
 
         if exprs.len() == 1 {
@@ -48,57 +50,71 @@ impl Parser {
         }
     }
 
-    fn parse_comparison(&mut self) -> Result<Expr, Error> {
+    /// ```text
+    /// <term> = ['NOT'] <term>
+    ///        | <value> [<operator> <value>]
+    /// ```
+    fn parse_term(&mut self) -> Result<Expr, Error> {
         // Handle NOT operator (unary)
         if self.peek() == Some(&Token::Not) {
             self.advance(); // consume NOT
-            let expr = self.parse_comparison()?;
+            let expr = self.parse_term()?;
             return Ok(Expr::Not(Box::new(expr)));
         }
 
-        let left = self.parse_value_or_field()?;
+        let left = self.parse_value()?;
 
         Ok(match self.peek() {
             Some(&Token::Eq) => {
                 self.advance();
-                let right = self.parse_value_or_field()?;
+                let right = self.parse_value()?;
                 Expr::Eq(Box::new(left), Box::new(right))
             }
             Some(&Token::Gt) => {
                 self.advance();
-                let right = self.parse_value_or_field()?;
+                let right = self.parse_value()?;
                 Expr::Gt(Box::new(left), Box::new(right))
             }
             Some(&Token::Lt) => {
                 self.advance();
-                let right = self.parse_value_or_field()?;
+                let right = self.parse_value()?;
                 Expr::Lt(Box::new(left), Box::new(right))
             }
             Some(&Token::Ge) => {
                 self.advance();
-                let right = self.parse_value_or_field()?;
+                let right = self.parse_value()?;
                 Expr::Ge(Box::new(left), Box::new(right))
             }
             Some(&Token::Le) => {
                 self.advance();
-                let right = self.parse_value_or_field()?;
+                let right = self.parse_value()?;
                 Expr::Le(Box::new(left), Box::new(right))
             }
             Some(&Token::Ne) => {
                 self.advance();
-                let right = self.parse_value_or_field()?;
+                let right = self.parse_value()?;
                 Expr::Ne(Box::new(left), Box::new(right))
             }
             Some(&Token::In) => {
                 self.advance();
-                let right = self.parse_value_or_field()?;
+                let right = self.parse_value()?;
                 Expr::In(Box::new(left), Box::new(right))
             }
             _ => left,
         })
     }
 
-    fn parse_value_or_field(&mut self) -> Result<Expr, Error> {
+    /// ```text
+    /// <value> = <str>
+    ///        | <i64>
+    ///        | <f64>
+    ///        | <bool>
+    ///        | <null>
+    ///        | <func-call>
+    ///        | <ident>
+    ///        | <array>
+    /// ```
+    fn parse_value(&mut self) -> Result<Expr, Error> {
         // Handle array literal [ ... ]
         if self.peek() == Some(&Token::LBracket) {
             return self.parse_array();
@@ -108,18 +124,18 @@ impl Parser {
         if let Some(token) = token {
             self.advance();
             Ok(match token {
-                Token::Str(s) => Expr::value(s),
-                Token::I64(i) => Expr::value(i),
-                Token::F64(f) => Expr::value(f),
-                Token::Bool(b) => Expr::value(b),
-                Token::Null => Expr::value(ExprValue::Null),
+                Token::Str(s) => Expr::str_(s),
+                Token::I64(i) => Expr::i64_(i),
+                Token::F64(f) => Expr::f64_(f),
+                Token::Bool(b) => Expr::bool_(b),
+                Token::Null => Expr::null_(),
                 Token::Ident(name) => {
                     // Check if this is a function call
                     if self.peek() == Some(&Token::LParen) {
                         self.parse_func_call(name)?
                     } else {
                         // Identifiers are treated as field names.
-                        Expr::field(name)
+                        Expr::field_(name)
                     }
                 }
                 _ => {
@@ -151,12 +167,12 @@ impl Parser {
         }
 
         // Parse first argument
-        args.push(self.parse_value_or_field()?);
+        args.push(self.parse_value()?);
 
         // Parse remaining arguments separated by commas
         while self.peek() == Some(&Token::Comma) {
             self.advance(); // consume comma
-            args.push(self.parse_value_or_field()?);
+            args.push(self.parse_value()?);
         }
 
         // Consume )
@@ -180,16 +196,16 @@ impl Parser {
         // Handle empty array []
         if self.peek() == Some(&Token::RBracket) {
             self.advance();
-            return Ok(Expr::value(ExprValue::Array(vec![])));
+            return Ok(Expr::array_(vec![]));
         }
 
         // Parse first element
-        values.push(self.parse_array_element()?);
+        values.push(self.parse_value()?);
 
         // Parse remaining elements separated by commas
         while self.peek() == Some(&Token::Comma) {
             self.advance(); // consume comma
-            values.push(self.parse_array_element()?);
+            values.push(self.parse_value()?);
         }
 
         // Consume ]
@@ -198,31 +214,7 @@ impl Parser {
         }
         self.advance();
 
-        Ok(Expr::value(ExprValue::Array(values)))
-    }
-
-    fn parse_array_element(&mut self) -> Result<ExprValue, Error> {
-        let token = self.peek().cloned();
-        if let Some(token) = token {
-            self.advance();
-            Ok(match token {
-                Token::Str(s) => ExprValue::Str(s),
-                Token::I64(i) => ExprValue::Int(i),
-                Token::F64(f) => ExprValue::Float(f),
-                Token::Bool(b) => ExprValue::Bool(b),
-                Token::Null => ExprValue::Null,
-                Token::Ident(name) => {
-                    // In array context, identifiers are treated as strings
-                    ExprValue::Str(name)
-                }
-                _ => {
-                    let err_msg = format!("unexpected token in array: {:?}", token);
-                    return Err(Error::Parse(err_msg));
-                }
-            })
-        } else {
-            Err(Error::Parse("unexpected end of input in array".to_string()))
-        }
+        Ok(Expr::array_(values))
     }
 
     fn peek(&self) -> Option<&Token> {
@@ -250,10 +242,10 @@ mod tests {
         let expr = parser.parse_expr().unwrap();
         assert_eq!(
             expr,
-            Expr::And(vec![
-                Expr::Eq(Expr::field_boxed("name"), Expr::value_boxed("John")),
-                Expr::Gt(Expr::field_boxed("age"), Expr::value_boxed(18)),
-                Expr::Gt(Expr::value_boxed(1), Expr::value_boxed(0)),
+            Expr::and_([
+                Expr::eq_(Expr::field_("name"), Expr::str_("John")),
+                Expr::gt_(Expr::field_("age"), Expr::i64_(18)),
+                Expr::gt_(Expr::i64_(1), Expr::i64_(0)),
             ])
         );
 
@@ -263,13 +255,18 @@ mod tests {
         let expr = parser.parse_expr().unwrap();
         assert_eq!(
             expr,
-            Expr::And(vec![
-                Expr::Eq(Expr::field_boxed("name"), Expr::value_boxed("John")),
-                Expr::In(
-                    Expr::field_boxed("age"),
-                    Expr::value_boxed(vec![18, 19, 20, 22])
+            Expr::and_([
+                Expr::eq_(Expr::field_("name"), Expr::str_("John")),
+                Expr::in_(
+                    Expr::field_("age"),
+                    Expr::array_([
+                        Expr::i64_(18),
+                        Expr::i64_(19),
+                        Expr::i64_(20),
+                        Expr::i64_(22)
+                    ])
                 ),
-                Expr::Gt(Expr::value_boxed(1), Expr::value_boxed(0)),
+                Expr::gt_(Expr::i64_(1), Expr::i64_(0)),
             ])
         );
 
@@ -281,7 +278,7 @@ mod tests {
             expr,
             Expr::FuncCall(
                 "matches".to_string(),
-                vec![Expr::field("name"), Expr::value("^J.*n$"),]
+                vec![Expr::field_("name"), Expr::str_("^J.*n$"),]
             )
         );
 
@@ -291,9 +288,9 @@ mod tests {
         let expr = parser.parse_expr().unwrap();
         assert_eq!(
             expr,
-            Expr::Ne(
-                Expr::field_boxed("name"),
-                Expr::value_boxed(ExprValue::Null)
+            Expr::ne_(
+                Expr::field_("name"),
+                Expr::null_()
             )
         );
     }

@@ -3,7 +3,12 @@ use crate::{Error, ctx::Context};
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Field(String),
-    Value(ExprValue),
+    Str(String),
+    I64(i64),
+    F64(f64),
+    Bool(bool),
+    Null,
+    Array(Vec<Expr>),
 
     FuncCall(String, Vec<Expr>),
 
@@ -20,32 +25,90 @@ pub enum Expr {
     Not(Box<Expr>),
 }
 
+#[allow(unused)]
 impl Expr {
-    pub(crate) fn field<T: Into<String>>(field: T) -> Self {
+    pub(crate) fn field_<T: Into<String>>(field: T) -> Self {
         Self::Field(field.into())
     }
 
-    #[cfg(test)]
-    pub(crate) fn field_boxed<T: Into<String>>(field: T) -> Box<Self> {
-        Box::new(Self::field(field))
+    pub(crate) fn str_<T: Into<String>>(value: T) -> Self {
+        Self::Str(value.into())
     }
 
-    pub(crate) fn value<T: Into<ExprValue>>(value: T) -> Self {
-        Self::Value(value.into())
+    pub(crate) fn i64_<T: Into<i64>>(value: T) -> Self {
+        Self::I64(value.into())
     }
 
-    #[cfg(test)]
-    pub(crate) fn value_boxed<T: Into<ExprValue>>(value: T) -> Box<Self> {
-        Box::new(Self::value(value))
+    pub(crate) fn f64_<T: Into<f64>>(value: T) -> Self {
+        Self::F64(value.into())
     }
 
+    pub(crate) fn bool_<T: Into<bool>>(value: T) -> Self {
+        Self::Bool(value.into())
+    }
+
+    pub(crate) fn null_() -> Self {
+        Self::Null
+    }
+
+    pub(crate) fn array_<T: Into<Vec<Expr>>>(value: T) -> Self {
+        Self::Array(value.into())
+    }
+
+    pub(crate) fn gt_(left: Expr, right: Expr) -> Self {
+        Self::Gt(Box::new(left), Box::new(right))
+    }
+
+    pub(crate) fn lt_(left: Expr, right: Expr) -> Self {
+        Self::Lt(Box::new(left), Box::new(right))
+    }
+
+    pub(crate) fn ge_(left: Expr, right: Expr) -> Self {
+        Self::Ge(Box::new(left), Box::new(right))
+    }
+
+    pub(crate) fn le_(left: Expr, right: Expr) -> Self {
+        Self::Le(Box::new(left), Box::new(right))
+    }
+
+    pub(crate) fn eq_(left: Expr, right: Expr) -> Self {
+        Self::Eq(Box::new(left), Box::new(right))
+    }
+
+    pub(crate) fn ne_(left: Expr, right: Expr) -> Self {
+        Self::Ne(Box::new(left), Box::new(right))
+    }
+
+    pub(crate) fn in_(left: Expr, right: Expr) -> Self {
+        Self::In(Box::new(left), Box::new(right))
+    }
+
+    pub(crate) fn and_<T: Into<Vec<Expr>>>(value: T) -> Self {
+        Self::And(value.into())
+    }
+
+    pub(crate) fn or_<T: Into<Vec<Expr>>>(value: T) -> Self {
+        Self::Or(value.into())
+    }
+
+    pub(crate) fn not_(self) -> Self {
+        Self::Not(Box::new(self))
+    }
+}
+
+impl Expr {
     pub(crate) async fn eval(&self, ctx: &dyn Context) -> Result<ExprValue, Error> {
         match self {
             Self::Field(field) => {
                 let value = ctx.get_var(field).await?;
                 Ok(value)
             }
-            Self::Value(value) => Ok(value.clone()),
+            Self::Str(value) => Ok(ExprValue::Str(value.clone())),
+            Self::I64(value) => Ok(ExprValue::I64(value.clone())),
+            Self::F64(value) => Ok(ExprValue::F64(value.clone())),
+            Self::Bool(value) => Ok(ExprValue::Bool(value.clone())),
+            Self::Null => Ok(ExprValue::Null),
+            Self::Array(value) => self.eval_array(value, ctx).await,
 
             Self::FuncCall(func, args) => self.eval_func_call(func, args, ctx).await,
 
@@ -163,6 +226,15 @@ impl Expr {
         }
     }
 
+    pub(crate) async fn eval_array(&self, array: &[Expr], ctx: &dyn Context) -> Result<ExprValue, Error> {
+        let mut values = vec![];
+        for expr in array {
+            let value = Box::pin(expr.eval(ctx)).await?;
+            values.push(value);
+        }
+        Ok(ExprValue::Array(values))
+    }
+
     pub(crate) async fn eval_func_call(
         &self,
         func: &str,
@@ -235,8 +307,8 @@ impl Expr {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprValue {
     Str(String),
-    Int(i64),
-    Float(f64),
+    I64(i64),
+    F64(f64),
     Bool(bool),
     Null,
 
@@ -247,13 +319,13 @@ impl PartialOrd for ExprValue {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match (self, other) {
             (ExprValue::Str(a), ExprValue::Str(b)) => a.partial_cmp(b),
-            (ExprValue::Int(a), ExprValue::Int(b)) => a.partial_cmp(b),
-            (ExprValue::Float(a), ExprValue::Float(b)) => a.partial_cmp(b),
+            (ExprValue::I64(a), ExprValue::I64(b)) => a.partial_cmp(b),
+            (ExprValue::F64(a), ExprValue::F64(b)) => a.partial_cmp(b),
             (ExprValue::Bool(a), ExprValue::Bool(b)) => a.partial_cmp(b),
             (ExprValue::Null, ExprValue::Null) => Some(std::cmp::Ordering::Equal),
 
-            (ExprValue::Float(a), ExprValue::Int(b)) => a.partial_cmp(&(*b as f64)),
-            (ExprValue::Int(a), ExprValue::Float(b)) => (*a as f64).partial_cmp(b),
+            (ExprValue::F64(a), ExprValue::I64(b)) => a.partial_cmp(&(*b as f64)),
+            (ExprValue::I64(a), ExprValue::F64(b)) => (*a as f64).partial_cmp(b),
 
             (ExprValue::Array(a), ExprValue::Array(b)) => a.partial_cmp(b),
 
@@ -279,13 +351,13 @@ impl Into<ExprValue> for &str {
 
 impl Into<ExprValue> for i64 {
     fn into(self) -> ExprValue {
-        ExprValue::Int(self)
+        ExprValue::I64(self)
     }
 }
 
 impl Into<ExprValue> for f64 {
     fn into(self) -> ExprValue {
-        ExprValue::Float(self)
+        ExprValue::F64(self)
     }
 }
 
@@ -328,12 +400,12 @@ pub type BoxedExprFn = Box<dyn ExprFn>;
 /// impl Transform for MyTransformer {
 ///     fn transform(&mut self, expr: Expr) -> Expr {
 ///         // Transform the expression before recursing
-///         let expr = match expr {
+///         match expr {
 ///             Expr::Field(name) if name == "old_name" => {
 ///                 Expr::Field("new_name".to_string())
 ///             }
 ///             other => other,
-///         };
+///         }
 ///     }
 /// }
 /// ```
@@ -374,7 +446,12 @@ impl Expr {
         
         match this {
             Expr::Field(name) => Expr::Field(name),
-            Expr::Value(value) => Expr::Value(value),
+            Expr::Str(value) => Expr::Str(value),
+            Expr::I64(value) => Expr::I64(value),
+            Expr::F64(value) => Expr::F64(value),
+            Expr::Bool(value) => Expr::Bool(value),
+            Expr::Null => Expr::Null,
+            Expr::Array(value) => Expr::Array(value),
             Expr::FuncCall(func, args) => {
                 let args = args
                     .into_iter()
@@ -451,14 +528,14 @@ mod tests {
         assert!(ExprValue::Str("b".to_string()) > ExprValue::Str("a".to_string()));
 
         // Test integer ordering.
-        assert!(ExprValue::Int(1) < ExprValue::Int(2));
-        assert!(ExprValue::Int(1) <= ExprValue::Int(1));
-        assert!(ExprValue::Int(2) > ExprValue::Int(1));
+        assert!(ExprValue::I64(1) < ExprValue::I64(2));
+        assert!(ExprValue::I64(1) <= ExprValue::I64(1));
+        assert!(ExprValue::I64(2) > ExprValue::I64(1));
 
         // Test float ordering.
-        assert!(ExprValue::Float(1.0) < ExprValue::Float(2.0));
-        assert!(ExprValue::Float(1.0) <= ExprValue::Float(1.0));
-        assert!(ExprValue::Float(2.0) > ExprValue::Float(1.0));
+        assert!(ExprValue::F64(1.0) < ExprValue::F64(2.0));
+        assert!(ExprValue::F64(1.0) <= ExprValue::F64(1.0));
+        assert!(ExprValue::F64(2.0) > ExprValue::F64(1.0));
 
         // Test boolean ordering.
         assert!(ExprValue::Bool(false) < ExprValue::Bool(true));
@@ -466,21 +543,21 @@ mod tests {
         assert!(ExprValue::Bool(true) > ExprValue::Bool(false));
 
         // Test Int and Float comparison.
-        assert!(ExprValue::Int(1) < ExprValue::Float(2.0));
-        assert!(ExprValue::Int(2) > ExprValue::Float(1.0));
-        assert!(ExprValue::Float(1.0) < ExprValue::Int(2));
-        assert!(ExprValue::Float(2.0) > ExprValue::Int(1));
+        assert!(ExprValue::I64(1) < ExprValue::F64(2.0));
+        assert!(ExprValue::I64(2) > ExprValue::F64(1.0));
+        assert!(ExprValue::F64(1.0) < ExprValue::I64(2));
+        assert!(ExprValue::F64(2.0) > ExprValue::I64(1));
 
         // Test Null ordering.
         assert!(ExprValue::Null == ExprValue::Null);
         assert!(ExprValue::Null > ExprValue::Str("a".to_string()));
         assert!(ExprValue::Str("a".to_string()) < ExprValue::Null);
-        assert!(ExprValue::Null > ExprValue::Int(1));
-        assert!(ExprValue::Int(1) < ExprValue::Null);
+        assert!(ExprValue::Null > ExprValue::I64(1));
+        assert!(ExprValue::I64(1) < ExprValue::Null);
 
         // Test array ordering.
-        let arr1 = ExprValue::Array(vec![ExprValue::Int(1), ExprValue::Int(2)]);
-        let arr2 = ExprValue::Array(vec![ExprValue::Int(1), ExprValue::Int(3)]);
+        let arr1 = ExprValue::Array(vec![ExprValue::I64(1), ExprValue::I64(2)]);
+        let arr2 = ExprValue::Array(vec![ExprValue::I64(1), ExprValue::I64(3)]);
         assert!(arr1 < arr2);
         assert!(arr1 <= arr1);
         assert!(arr2 > arr1);
@@ -488,11 +565,11 @@ mod tests {
         // Test incompatible types (should return None).
         assert!(
             ExprValue::Str("a".to_string())
-                .partial_cmp(&ExprValue::Int(1))
+                .partial_cmp(&ExprValue::I64(1))
                 .is_none()
         );
         assert!(
-            ExprValue::Int(1)
+            ExprValue::I64(1)
                 .partial_cmp(&ExprValue::Bool(true))
                 .is_none()
         );
@@ -503,7 +580,7 @@ mod tests {
         );
         assert!(
             ExprValue::Array(vec![])
-                .partial_cmp(&ExprValue::Int(1))
+                .partial_cmp(&ExprValue::I64(1))
                 .is_none()
         );
     }
@@ -528,8 +605,8 @@ mod tests {
         }
 
         let expr = Expr::Eq(
-            Box::new(Expr::Field("old_name".to_string())),
-            Box::new(Expr::value("value")),
+            Box::new(Expr::field_("old_name")),
+            Box::new(Expr::str_("value")),
         );
 
         let mut transformer = RenameField {
@@ -541,8 +618,8 @@ mod tests {
         assert_eq!(
             result,
             Expr::Eq(
-                Box::new(Expr::Field("new_name".to_string())),
-                Box::new(Expr::value("value"))
+                Box::new(Expr::field_("new_name")),
+                Box::new(Expr::str_("value"))
             )
         );
     }
