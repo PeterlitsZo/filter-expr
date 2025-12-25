@@ -2,62 +2,15 @@
 
 > NOTE: This library is still under development.
 
-A library for parsing the filter expression.
+Crates:
 
-```rust
-use filter_expr::{FilterExpr, SimpleContext};
+- The core crate's README: [filter-expr](crates/filter-expr/README.md)
+- The evaler crate's README: [filter-expr-evaler](crates/filter-expr-evaler/README.md)
 
-let f = FilterExpr::parse("name = 'John' AND age > 18").unwrap();
-let ctx = SimpleContext::new(HashMap::from([
-    ("name".to_string(), "John".into()),
-    ("age".to_string(), 19.into()),
-]));
-let result = f.eval(&ctx).await.unwrap();
-assert_eq!(result, true);
-```
+The `filter-expr` crate defines how to parse the filter expression, and then you
+can use the `FilterExpr` as the AST of the filter expression. It do not define
+how to evaluate it -- you can do it by yourself or use the `filter-expr-evaler`
+crate.
 
-## Syntax
-
-### Filter
-
-```
-<filter> = <expr> | <empty>
-
-<empty> =
-```
-
-### Expression
-
-```
-<expr> = <or_test> ('OR' <or_test>)*
-
-<or_test> = <and_test> ('AND' <and_test>)*
-<and_test> = ['NOT'] <comparison>
-```
-
-### Comparison
-
-```
-<comparison> = <primary> <operator> <comparison>
-             | <primary>
-
-<primary> = <func-call>
-          | <method-call>
-          | <value>
-
-<operator> = '=' | '>' | '<' | '>=' | '<=' | '!=' | 'IN'
-
-<func-call> = <ident> '(' [<value> (',' <value>)* ','?] ')'
-<method-call> = <value> '.' <ident> '(' [<value> (',' <value>)* ','?] ')'
-
-<value> = <str>
-        | <i64>
-        | <f64>
-        | <bool>
-        | <null>
-        | <ident>
-        | <array>
-        | '(' <expr> ')'
-
-<array> = '[' [<value> (',' <value>)* ','?] ']'
-```
+This project is inspired by CEL and the filter syntax in AIP-160 -- but has
+different syntax.

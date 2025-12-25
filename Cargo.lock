@@ -45,6 +45,15 @@ name = "filter-expr"
 version = "0.1.9"
 dependencies = [
  "async-trait",
+ "thiserror",
+]
+
+[[package]]
+name = "filter-expr-evaler"
+version = "0.1.9"
+dependencies = [
+ "async-trait",
+ "filter-expr",
  "regex",
  "thiserror",
  "tokio",

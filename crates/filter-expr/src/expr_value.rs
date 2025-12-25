@@ -1,5 +1,3 @@
-use crate::Error;
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExprValue {
     /// The string value.
@@ -98,14 +96,3 @@ pub enum ExprValueType {
 
     Array,
 }
-
-pub struct ExprFnContext {
-    pub args: Vec<ExprValue>,
-}
-
-#[async_trait::async_trait]
-pub trait ExprFn: Send + Sync {
-    async fn call(&self, ctx: ExprFnContext) -> Result<ExprValue, Error>;
-}
-
-pub type BoxedExprFn = Box<dyn ExprFn>;

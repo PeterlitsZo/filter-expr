@@ -1,12 +1,9 @@
-use crate::ExprValueType;
+use filter_expr::ExprValueType;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("internal: {0}")]
     Internal(String),
-
-    #[error("parse the expression: {0}")]
-    Parse(String),
 
     #[error("invalid value {0}")]
     InvalidValue(String),
@@ -14,8 +11,9 @@ pub enum Error {
     #[error("type mismatch: expected same type for comparison, got {0:?} and {1:?}")]
     TypeMismatch(String, String),
 
-    #[error("unsupported character: {0}")]
-    UnsupportedCharacter(char),
+    /// Failed to get the variable.
+    #[error("failed to get the variable {var:?}: {error}")]
+    FailedToGetVar { var: String, error: String },
 
     /// The variable is not found.
     #[error("no such variable {var:?}")]
