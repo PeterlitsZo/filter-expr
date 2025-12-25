@@ -1,3 +1,6 @@
+/// The expression.
+/// 
+/// It is an AST of the filter expression.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Field(String),
@@ -247,74 +250,7 @@ impl Expr {
 
 #[cfg(test)]
 mod tests {
-    use crate::ExprValue;
-
     use super::*;
-
-    #[test]
-    fn test_expr_value_ordering() {
-        // Test string ordering.
-        assert!(ExprValue::Str("a".to_string()) < ExprValue::Str("b".to_string()));
-        assert!(ExprValue::Str("a".to_string()) <= ExprValue::Str("a".to_string()));
-        assert!(ExprValue::Str("b".to_string()) > ExprValue::Str("a".to_string()));
-
-        // Test integer ordering.
-        assert!(ExprValue::I64(1) < ExprValue::I64(2));
-        assert!(ExprValue::I64(1) <= ExprValue::I64(1));
-        assert!(ExprValue::I64(2) > ExprValue::I64(1));
-
-        // Test float ordering.
-        assert!(ExprValue::F64(1.0) < ExprValue::F64(2.0));
-        assert!(ExprValue::F64(1.0) <= ExprValue::F64(1.0));
-        assert!(ExprValue::F64(2.0) > ExprValue::F64(1.0));
-
-        // Test boolean ordering.
-        assert!(ExprValue::Bool(false) < ExprValue::Bool(true));
-        assert!(ExprValue::Bool(false) <= ExprValue::Bool(false));
-        assert!(ExprValue::Bool(true) > ExprValue::Bool(false));
-
-        // Test Int and Float comparison.
-        assert!(ExprValue::I64(1) < ExprValue::F64(2.0));
-        assert!(ExprValue::I64(2) > ExprValue::F64(1.0));
-        assert!(ExprValue::F64(1.0) < ExprValue::I64(2));
-        assert!(ExprValue::F64(2.0) > ExprValue::I64(1));
-
-        // Test Null ordering.
-        assert!(ExprValue::Null == ExprValue::Null);
-        assert!(ExprValue::Null > ExprValue::Str("a".to_string()));
-        assert!(ExprValue::Str("a".to_string()) < ExprValue::Null);
-        assert!(ExprValue::Null > ExprValue::I64(1));
-        assert!(ExprValue::I64(1) < ExprValue::Null);
-
-        // Test array ordering.
-        let arr1 = ExprValue::Array(vec![ExprValue::I64(1), ExprValue::I64(2)]);
-        let arr2 = ExprValue::Array(vec![ExprValue::I64(1), ExprValue::I64(3)]);
-        assert!(arr1 < arr2);
-        assert!(arr1 <= arr1);
-        assert!(arr2 > arr1);
-
-        // Test incompatible types (should return None).
-        assert!(
-            ExprValue::Str("a".to_string())
-                .partial_cmp(&ExprValue::I64(1))
-                .is_none()
-        );
-        assert!(
-            ExprValue::I64(1)
-                .partial_cmp(&ExprValue::Bool(true))
-                .is_none()
-        );
-        assert!(
-            ExprValue::Str("a".to_string())
-                .partial_cmp(&ExprValue::Bool(false))
-                .is_none()
-        );
-        assert!(
-            ExprValue::Array(vec![])
-                .partial_cmp(&ExprValue::I64(1))
-                .is_none()
-        );
-    }
 
     #[test]
     fn test_transform_expr() {

@@ -1,4 +1,4 @@
-use filter_expr::ExprValueType;
+use crate::ValueType;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -27,7 +27,7 @@ pub enum Error {
     #[error("no such method {method:?} for type {obj_type:?}")]
     NoSuchMethod {
         method: String,
-        obj_type: ExprValueType,
+        obj_type: ValueType,
     },
 
     /// Invalid argument count for the given function.
@@ -47,8 +47,8 @@ pub enum Error {
     InvalidArgumentTypeForFunction {
         function: String,
         index: usize,
-        expected: ExprValueType,
-        got: ExprValueType,
+        expected: ValueType,
+        got: ValueType,
     },
 
     /// Invalid argument count for the given method.
@@ -64,7 +64,7 @@ pub enum Error {
     InvalidArgumentTypeForMethod {
         method: String,
         index: usize,
-        expected: ExprValueType,
-        got: ExprValueType,
+        expected: ValueType,
+        got: ValueType,
     },
 }

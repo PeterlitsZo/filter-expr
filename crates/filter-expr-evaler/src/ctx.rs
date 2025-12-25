@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::{self, Debug}};
 
-use filter_expr::ExprValue;
+use crate::Value;
 
 use crate::Error;
 
@@ -15,7 +15,7 @@ pub trait Context: Send + Sync {
     /// If the variable is not found, return `None`.
     /// 
     /// If some error occurs, return the error.
-    async fn get_var(&self, name: &str) -> Result<Option<ExprValue>, Error>;
+    async fn get_var(&self, name: &str) -> Result<Option<Value>, Error>;
 
     /// Get the function by name.
     /// 
@@ -67,7 +67,7 @@ macro_rules! simple_context {
 /// For those who don't want to implement the `Context` trait, this is a simple
 /// implementation that can be used.
 pub struct SimpleContext {
-    vars: HashMap<String, ExprValue>,
+    vars: HashMap<String, Value>,
     fns: HashMap<String, BoxedExprFn>,
 }
 
@@ -80,7 +80,7 @@ impl Debug for SimpleContext {
 }
 
 impl SimpleContext {
-    pub fn new(vars: HashMap<String, ExprValue>) -> Self {
+    pub fn new(vars: HashMap<String, Value>) -> Self {
         Self {
             vars,
             fns: HashMap::new(),
@@ -94,7 +94,7 @@ impl SimpleContext {
 
 #[async_trait::async_trait]
 impl Context for SimpleContext {
-    async fn get_var(&self, name: &str) -> Result<Option<ExprValue>, Error> {
+    async fn get_var(&self, name: &str) -> Result<Option<Value>, Error> {
         Ok(self.vars.get(name).cloned())
     }
 
@@ -104,12 +104,12 @@ impl Context for SimpleContext {
 }
 
 pub struct ExprFnContext {
-    pub args: Vec<ExprValue>,
+    pub args: Vec<Value>,
 }
 
 #[async_trait::async_trait]
 pub trait ExprFn: Send + Sync {
-    async fn call(&self, ctx: ExprFnContext) -> Result<ExprValue, Error>;
+    async fn call(&self, ctx: ExprFnContext) -> Result<Value, Error>;
 }
 
 pub type BoxedExprFn = Box<dyn ExprFn>;
