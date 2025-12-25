@@ -13,8 +13,8 @@
   - [x] `to_uppercase`
   - [x] `to_lowercase`
   - [x] `contains`
-  - [ ] `starts_with`
-  - [ ] `ends_with`
+  - [x] `starts_with`
+  - [x] `ends_with`
   - [ ] `len`
   - [ ] `is_empty`
   - [ ] `trim`
@@ -60,3 +60,16 @@
       function `matches` - we can compile the regex pattern before the
       evaluation.
 - [ ] Add benchmark tests and ensure the performance is not too bad.
+- [ ] Support the math functions:
+
+  - [ ] `abs`
+  - [ ] `ceil`
+  - [ ] `floor`
+  - [ ] `round`
+  - [ ] `pow`
+  - [ ] `sqrt`
+  - [ ] `exp`
+  - [ ] `ln`
+  - [ ] `log`
+  - [ ] `log2`
+  - [ ] `log10`

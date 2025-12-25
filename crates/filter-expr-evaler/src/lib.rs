@@ -2,11 +2,13 @@
 
 mod ctx;
 mod error;
+mod value;
 
-use filter_expr::{Expr, ExprValue, ExprValueType, FilterExpr};
+use filter_expr::{Expr, FilterExpr};
 
 pub use crate::ctx::{Context, ExprFn, ExprFnContext, SimpleContext};
 pub use crate::error::Error;
+pub use crate::value::{Value, ValueType};
 
 pub struct FilterExprEvaler {
     filter_expr: FilterExpr,
@@ -23,7 +25,7 @@ impl FilterExprEvaler {
         if let Some(expr) = self.filter_expr.expr() {
             let value = FilterExprEvalerInner::new(self, expr).eval(ctx).await?;
             match value {
-                ExprValue::Bool(b) => Ok(b),
+                Value::Bool(b) => Ok(b),
                 _ => Err(Error::InvalidValue(format!("{:?}", value))),
             }
         } else {
@@ -43,11 +45,11 @@ impl<'a> FilterExprEvalerInner<'a> {
         Self { evaler, expr }
     }
 
-    pub async fn eval(&self, ctx: &dyn Context) -> Result<ExprValue, Error> {
+    pub async fn eval(&self, ctx: &dyn Context) -> Result<Value, Error> {
         return self.eval_expr(self.expr, ctx).await;
     }
 
-    async fn eval_expr(&self, expr: &Expr, ctx: &dyn Context) -> Result<ExprValue, Error> {
+    async fn eval_expr(&self, expr: &Expr, ctx: &dyn Context) -> Result<Value, Error> {
         match expr {
             Expr::Field(field) => {
                 let value = ctx
@@ -64,11 +66,11 @@ impl<'a> FilterExprEvalerInner<'a> {
                     }),
                 }
             }
-            Expr::Str(value) => Ok(ExprValue::Str(value.clone())),
-            Expr::I64(value) => Ok(ExprValue::I64(value.clone())),
-            Expr::F64(value) => Ok(ExprValue::F64(value.clone())),
-            Expr::Bool(value) => Ok(ExprValue::Bool(value.clone())),
-            Expr::Null => Ok(ExprValue::Null),
+            Expr::Str(value) => Ok(Value::Str(value.clone())),
+            Expr::I64(value) => Ok(Value::I64(value.clone())),
+            Expr::F64(value) => Ok(Value::F64(value.clone())),
+            Expr::Bool(value) => Ok(Value::Bool(value.clone())),
+            Expr::Null => Ok(Value::Null),
             Expr::Array(value) => self.eval_array(value, ctx).await,
 
             Expr::FuncCall(func, args) => self.eval_func_call(func, args, ctx).await,
@@ -80,7 +82,7 @@ impl<'a> FilterExprEvalerInner<'a> {
                 let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
                 let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
                 match left_value.partial_cmp(&right_value) {
-                    Some(ordering) => Ok(ExprValue::Bool(ordering == std::cmp::Ordering::Greater)),
+                    Some(ordering) => Ok(Value::Bool(ordering == std::cmp::Ordering::Greater)),
                     None => Err(Error::TypeMismatch(
                         format!("{:?}", left_value),
                         format!("{:?}", right_value),
@@ -91,7 +93,7 @@ impl<'a> FilterExprEvalerInner<'a> {
                 let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
                 let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
                 match left_value.partial_cmp(&right_value) {
-                    Some(ordering) => Ok(ExprValue::Bool(ordering == std::cmp::Ordering::Less)),
+                    Some(ordering) => Ok(Value::Bool(ordering == std::cmp::Ordering::Less)),
                     None => Err(Error::TypeMismatch(
                         format!("{:?}", left_value),
                         format!("{:?}", right_value),
@@ -102,7 +104,7 @@ impl<'a> FilterExprEvalerInner<'a> {
                 let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
                 let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
                 match left_value.partial_cmp(&right_value) {
-                    Some(ordering) => Ok(ExprValue::Bool(
+                    Some(ordering) => Ok(Value::Bool(
                         ordering == std::cmp::Ordering::Greater
                             || ordering == std::cmp::Ordering::Equal,
                     )),
@@ -116,7 +118,7 @@ impl<'a> FilterExprEvalerInner<'a> {
                 let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
                 let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
                 match left_value.partial_cmp(&right_value) {
-                    Some(ordering) => Ok(ExprValue::Bool(
+                    Some(ordering) => Ok(Value::Bool(
                         ordering == std::cmp::Ordering::Less
                             || ordering == std::cmp::Ordering::Equal,
                     )),
@@ -129,18 +131,18 @@ impl<'a> FilterExprEvalerInner<'a> {
             Expr::Eq(left, right) => {
                 let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
                 let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
-                Ok(ExprValue::Bool(left_value == right_value))
+                Ok(Value::Bool(left_value == right_value))
             }
             Expr::Ne(left, right) => {
                 let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
                 let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
-                Ok(ExprValue::Bool(left_value != right_value))
+                Ok(Value::Bool(left_value != right_value))
             }
             Expr::In(left, right) => {
                 let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
                 let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
                 match right_value {
-                    ExprValue::Array(array) => Ok(ExprValue::Bool(array.contains(&left_value))),
+                    Value::Array(array) => Ok(Value::Bool(array.contains(&left_value))),
                     _ => Err(Error::TypeMismatch(
                         format!("{:?}", right_value),
                         format!("{:?}", left_value),
@@ -153,7 +155,7 @@ impl<'a> FilterExprEvalerInner<'a> {
                 for expr in exprs {
                     let value = Box::pin(self.eval_expr(expr, ctx)).await?;
                     match value {
-                        ExprValue::Bool(b) => result = result && b,
+                        Value::Bool(b) => result = result && b,
                         _ => {
                             return Err(Error::InvalidValue(format!(
                                 "expected bool, got {:?}",
@@ -162,14 +164,14 @@ impl<'a> FilterExprEvalerInner<'a> {
                         }
                     }
                 }
-                Ok(ExprValue::Bool(result))
+                Ok(Value::Bool(result))
             }
             Expr::Or(exprs) => {
                 let mut result = false;
                 for expr in exprs {
                     let value = Box::pin(self.eval_expr(expr, ctx)).await?;
                     match value {
-                        ExprValue::Bool(b) => result = result || b,
+                        Value::Bool(b) => result = result || b,
                         _ => {
                             return Err(Error::InvalidValue(format!(
                                 "expected bool, got {:?}",
@@ -178,12 +180,12 @@ impl<'a> FilterExprEvalerInner<'a> {
                         }
                     }
                 }
-                Ok(ExprValue::Bool(result))
+                Ok(Value::Bool(result))
             }
             Expr::Not(expr) => {
                 let value = Box::pin(self.eval_expr(expr, ctx)).await?;
                 match value {
-                    ExprValue::Bool(b) => Ok(ExprValue::Bool(!b)),
+                    Value::Bool(b) => Ok(Value::Bool(!b)),
                     _ => Err(Error::TypeMismatch(format!("{:?}", value), format!("bool"))),
                 }
             }
@@ -195,7 +197,7 @@ impl<'a> FilterExprEvalerInner<'a> {
         func: &str,
         args: &[Expr],
         ctx: &dyn Context,
-    ) -> Result<ExprValue, Error> {
+    ) -> Result<Value, Error> {
         // Evaluate the arguments.
         let mut args_values = vec![];
         for arg in args {
@@ -227,10 +229,10 @@ impl<'a> FilterExprEvalerInner<'a> {
         method: &str,
         args: &[Expr],
         ctx: &dyn Context,
-    ) -> Result<ExprValue, Error> {
+    ) -> Result<Value, Error> {
         let obj_value = Box::pin(self.eval_expr(obj, ctx)).await?;
         match obj_value {
-            ExprValue::Str(s) => match method {
+            Value::Str(s) => match method {
                 "to_uppercase" => {
                     if args.len() != 0 {
                         return Err(Error::InvalidArgumentCountForMethod {
@@ -239,7 +241,7 @@ impl<'a> FilterExprEvalerInner<'a> {
                             got: args.len(),
                         });
                     }
-                    Ok(ExprValue::Str(s.to_uppercase()))
+                    Ok(Value::Str(s.to_uppercase()))
                 }
                 "to_lowercase" => {
                     if args.len() != 0 {
@@ -249,7 +251,7 @@ impl<'a> FilterExprEvalerInner<'a> {
                             got: args.len(),
                         });
                     }
-                    Ok(ExprValue::Str(s.to_lowercase()))
+                    Ok(Value::Str(s.to_lowercase()))
                 }
                 "contains" => {
                     if args.len() != 1 {
@@ -261,18 +263,18 @@ impl<'a> FilterExprEvalerInner<'a> {
                     }
                     let arg = Box::pin(self.eval_expr(&args[0], ctx)).await?;
                     let arg = match arg {
-                        ExprValue::Str(s) => s,
+                        Value::Str(s) => s,
                         _ => {
                             return Err(Error::InvalidArgumentTypeForMethod {
                                 method: method.to_string(),
                                 index: 0,
-                                expected: ExprValueType::Str,
+                                expected: ValueType::Str,
                                 got: arg.typ(),
                             });
                         }
                     };
 
-                    Ok(ExprValue::Bool(s.contains(&arg)))
+                    Ok(Value::Bool(s.contains(&arg)))
                 }
                 "starts_with" => {
                     if args.len() != 1 {
@@ -285,18 +287,18 @@ impl<'a> FilterExprEvalerInner<'a> {
 
                     let arg = Box::pin(self.eval_expr(&args[0], ctx)).await?;
                     let arg = match arg {
-                        ExprValue::Str(s) => s,
+                        Value::Str(s) => s,
                         _ => {
                             return Err(Error::InvalidArgumentTypeForMethod {
                                 method: method.to_string(),
                                 index: 0,
-                                expected: ExprValueType::Str,
+                                expected: ValueType::Str,
                                 got: arg.typ(),
                             });
                         }
                     };
 
-                    Ok(ExprValue::Bool(s.starts_with(&arg)))
+                    Ok(Value::Bool(s.starts_with(&arg)))
                 }
                 "ends_with" => {
                     if args.len() != 1 {
@@ -309,22 +311,22 @@ impl<'a> FilterExprEvalerInner<'a> {
 
                     let arg = Box::pin(self.eval_expr(&args[0], ctx)).await?;
                     let arg = match arg {
-                        ExprValue::Str(s) => s,
+                        Value::Str(s) => s,
                         _ => {
                             return Err(Error::InvalidArgumentTypeForMethod {
                                 method: method.to_string(),
                                 index: 0,
-                                expected: ExprValueType::Str,
+                                expected: ValueType::Str,
                                 got: arg.typ(),
                             });
                         }
                     };
 
-                    Ok(ExprValue::Bool(s.ends_with(&arg)))
+                    Ok(Value::Bool(s.ends_with(&arg)))
                 }
                 _ => Err(Error::NoSuchMethod {
                     method: method.to_string(),
-                    obj_type: ExprValueType::Str,
+                    obj_type: ValueType::Str,
                 }),
             },
             _ => Err(Error::NoSuchMethod {
@@ -338,19 +340,19 @@ impl<'a> FilterExprEvalerInner<'a> {
         &self,
         array: &[Expr],
         ctx: &dyn Context,
-    ) -> Result<ExprValue, Error> {
+    ) -> Result<Value, Error> {
         let mut values = vec![];
         for expr in array {
             let value = Box::pin(self.eval_expr(expr, ctx)).await?;
             values.push(value);
         }
-        Ok(ExprValue::Array(values))
+        Ok(Value::Array(values))
     }
 
     pub(crate) async fn eval_builtin_func_call_matches(
         &self,
-        args: &[ExprValue],
-    ) -> Result<ExprValue, Error> {
+        args: &[Value],
+    ) -> Result<Value, Error> {
         if args.len() != 2 {
             return Err(Error::InvalidArgumentCountForFunction {
                 function: "matches".to_string(),
@@ -359,23 +361,23 @@ impl<'a> FilterExprEvalerInner<'a> {
             });
         }
         let text = match &args[0] {
-            ExprValue::Str(s) => s,
+            Value::Str(s) => s,
             _ => {
                 return Err(Error::InvalidArgumentTypeForFunction {
                     function: "matches".to_string(),
                     index: 0,
-                    expected: ExprValueType::Str,
+                    expected: ValueType::Str,
                     got: args[0].typ(),
                 });
             }
         };
         let pattern = match &args[1] {
-            ExprValue::Str(s) => s,
+            Value::Str(s) => s,
             _ => {
                 return Err(Error::InvalidArgumentTypeForFunction {
                     function: "matches".to_string(),
                     index: 1,
-                    expected: ExprValueType::Str,
+                    expected: ValueType::Str,
                     got: args[1].typ(),
                 });
             }
@@ -389,13 +391,13 @@ impl<'a> FilterExprEvalerInner<'a> {
         };
 
         let matches = pattern.is_match(&text);
-        Ok(ExprValue::Bool(matches))
+        Ok(Value::Bool(matches))
     }
 
     pub(crate) async fn eval_builtin_func_call_type(
         &self,
-        args: &[ExprValue],
-    ) -> Result<ExprValue, Error> {
+        args: &[Value],
+    ) -> Result<Value, Error> {
         if args.len() != 1 {
             return Err(Error::InvalidArgumentCountForFunction {
                 function: "type".to_string(),
@@ -404,14 +406,14 @@ impl<'a> FilterExprEvalerInner<'a> {
             });
         }
 
-        Ok(ExprValue::Str(
+        Ok(Value::Str(
             match args[0].typ() {
-                ExprValueType::Str => "str",
-                ExprValueType::I64 => "i64",
-                ExprValueType::F64 => "f64",
-                ExprValueType::Bool => "bool",
-                ExprValueType::Null => "null",
-                ExprValueType::Array => "array",
+                ValueType::Str => "str",
+                ValueType::I64 => "i64",
+                ValueType::F64 => "f64",
+                ValueType::Bool => "bool",
+                ValueType::Null => "null",
+                ValueType::Array => "array",
             }
             .to_string(),
         ))
@@ -492,7 +494,7 @@ mod tests {
         parse_and_do_test_cases(
             r#"name != null"#,
             vec![
-                (simple_context! { "name": ExprValue::Null }, false),
+                (simple_context! { "name": Value::Null }, false),
                 (simple_context! { "name": "John" }, true),
             ],
         )
@@ -553,7 +555,7 @@ mod tests {
             vec![
                 (simple_context! { "name": "John" }, true),
                 (simple_context! { "name": 18 }, false),
-                (simple_context! { "name": ExprValue::Null }, false),
+                (simple_context! { "name": Value::Null }, false),
             ],
         )
         .await;
@@ -562,7 +564,7 @@ mod tests {
             r#"type(name) = 'null'"#,
             vec![
                 (simple_context! { "name": "John" }, false),
-                (simple_context! { "name": ExprValue::Null }, true),
+                (simple_context! { "name": Value::Null }, true),
                 (simple_context! { "name": 18 }, false),
             ],
         )
@@ -644,7 +646,7 @@ mod tests {
 
     #[async_trait::async_trait]
     impl ExprFn for CustomAddFn {
-        async fn call(&self, ctx: ExprFnContext) -> Result<ExprValue, Error> {
+        async fn call(&self, ctx: ExprFnContext) -> Result<Value, Error> {
             if ctx.args.len() != 2 {
                 return Err(Error::InvalidArgumentCountForFunction {
                     function: "custom_add".to_string(),
@@ -653,28 +655,28 @@ mod tests {
                 });
             }
             let a = match ctx.args[0] {
-                ExprValue::I64(a) => a,
+                Value::I64(a) => a,
                 _ => {
                     return Err(Error::InvalidArgumentTypeForFunction {
                         function: "custom_add".to_string(),
                         index: 0,
-                        expected: ExprValueType::I64,
+                        expected: ValueType::I64,
                         got: ctx.args[0].typ(),
                     });
                 }
             };
             let b = match ctx.args[1] {
-                ExprValue::I64(b) => b,
+                Value::I64(b) => b,
                 _ => {
                     return Err(Error::InvalidArgumentTypeForFunction {
                         function: "custom_add".to_string(),
                         index: 1,
-                        expected: ExprValueType::I64,
+                        expected: ValueType::I64,
                         got: ctx.args[1].typ(),
                     });
                 }
             };
-            Ok((a + b).into())
+            Ok(Value::I64(a + b))
         }
     }
 }

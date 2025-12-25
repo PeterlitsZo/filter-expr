@@ -2,13 +2,11 @@
 
 mod error;
 mod expr;
-mod expr_value;
 mod parser;
 mod token;
 
 pub use error::Error;
 pub use expr::{Expr, Transform};
-pub use expr_value::{ExprValue, ExprValueType};
 
 /// The filter expression.
 pub struct FilterExpr {
