@@ -309,6 +309,54 @@ impl Expr {
 
                     Ok(ExprValue::Bool(s.contains(&arg)))
                 }
+                "starts_with" => {
+                    if args.len() != 1 {
+                        return Err(Error::InvalidArgumentCountForMethod {
+                            method: method.to_string(),
+                            expected: 1,
+                            got: args.len(),
+                        });
+                    }
+
+                    let arg = Box::pin(args[0].eval(ctx)).await?;
+                    let arg = match arg {
+                        ExprValue::Str(s) => s,
+                        _ => {
+                            return Err(Error::InvalidArgumentTypeForMethod {
+                                method: method.to_string(),
+                                index: 0,
+                                expected: ExprValueType::Str,
+                                got: arg.typ(),
+                            });
+                        }
+                    };
+
+                    Ok(ExprValue::Bool(s.starts_with(&arg)))
+                },
+                "ends_with" => {
+                    if args.len() != 1 {
+                        return Err(Error::InvalidArgumentCountForMethod {
+                            method: method.to_string(),
+                            expected: 1,
+                            got: args.len(),
+                        });
+                    }
+
+                    let arg = Box::pin(args[0].eval(ctx)).await?;
+                    let arg = match arg {
+                        ExprValue::Str(s) => s,
+                        _ => {
+                            return Err(Error::InvalidArgumentTypeForMethod {
+                                method: method.to_string(),
+                                index: 0,
+                                expected: ExprValueType::Str,
+                                got: arg.typ(),
+                            });
+                        }
+                    };
+
+                    Ok(ExprValue::Bool(s.ends_with(&arg)))
+                },
                 _ => Err(Error::NoSuchMethod {
                     method: method.to_string(),
                     obj_type: ExprValueType::Str,

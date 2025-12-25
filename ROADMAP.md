@@ -56,3 +56,7 @@
 - [ ] Support `&&`, `||` and `!` operators for the logical operations.
       Support `and`, `or` and `not` as the aliases of `&&`, `||` and `!`.
 - [ ] Use tool `prek` for pre-commit hooks.
+- [ ] Emit the bytecode for the expression evaluation. It should speed up the
+      function `matches` - we can compile the regex pattern before the
+      evaluation.
+- [ ] Add benchmark tests and ensure the performance is not too bad.

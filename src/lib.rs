@@ -354,6 +354,30 @@ mod tests {
             ],
         )
         .await;
+
+        // Parse the filter-expr:
+        //
+        //     name.starts_with('J')
+        //     name.ends_with('n')
+        // =====================================================================
+
+        parse_and_do_test_cases(
+            r#"name.starts_with('J')"#,
+            vec![
+                (simple_context! { "name": "John" }, true),
+                (simple_context! { "name": "Peterlits" }, false),
+            ],
+        )
+        .await;
+
+        parse_and_do_test_cases(
+            r#"name.ends_with('n')"#,
+            vec![
+                (simple_context! { "name": "John" }, true),
+                (simple_context! { "name": "Jane" }, false),
+            ],
+        )
+        .await;
     }
 
     async fn parse_and_do_test_cases(input: &str, test_cases: Vec<(SimpleContext, bool)>) {
