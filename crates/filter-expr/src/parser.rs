@@ -103,7 +103,7 @@ impl Parser {
                     Some(Token::Ne) => Expr::Ne(Box::new(primary), Box::new(right)),
                     Some(Token::In) => Expr::In(Box::new(primary), Box::new(right)),
                     _ => {
-                        let err_msg = format!("unexpected operator: {:?}", operator);
+                        let err_msg = format!("unexpected operator: {operator:?}");
                         return Err(Error::Parse(err_msg));
                     }
                 })
@@ -122,7 +122,7 @@ impl Parser {
     /// ```
     fn parse_primary(&mut self) -> Result<Expr, Error> {
         // Try to parse as function call first (ident followed by '(')
-        if let Some(&Token::Ident(ref name)) = self.peek() {
+        if let Some(Token::Ident(name)) = self.peek() {
             let name = name.clone();
             self.advance();
 
@@ -180,14 +180,14 @@ impl Parser {
                 }
                 _ => {
                     // Unexpected token.
-                    let err_msg = format!("parse value: unexpected token: {:?}", token);
+                    let err_msg = format!("parse value: unexpected token: {token:?}");
                     return Err(Error::Parse(err_msg));
                 }
             })
         } else {
             // No more tokens.
             let err_msg = "no more tokens".to_string();
-            return Err(Error::Parse(err_msg));
+            Err(Error::Parse(err_msg))
         }
     }
 
@@ -230,7 +230,7 @@ impl Parser {
             self.advance(); // consume '.'
 
             let method_name = match self.peek() {
-                Some(&Token::Ident(ref name)) => {
+                Some(Token::Ident(name)) => {
                     let name = name.clone();
                     self.advance();
                     name

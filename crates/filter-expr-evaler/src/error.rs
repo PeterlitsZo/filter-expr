@@ -25,10 +25,7 @@ pub enum Error {
 
     /// The method is not found.
     #[error("no such method {method:?} for type {obj_type:?}")]
-    NoSuchMethod {
-        method: String,
-        obj_type: ValueType,
-    },
+    NoSuchMethod { method: String, obj_type: ValueType },
 
     /// Invalid argument count for the given function.
     #[error(
@@ -52,7 +49,9 @@ pub enum Error {
     },
 
     /// Invalid argument count for the given method.
-    #[error("invalid argument count for method {method:?}: expected {expected} argument(s), but got {got} argument(s)")]
+    #[error(
+        "invalid argument count for method {method:?}: expected {expected} argument(s), but got {got} argument(s)"
+    )]
     InvalidArgumentCountForMethod {
         method: String,
         expected: usize,
@@ -60,7 +59,9 @@ pub enum Error {
     },
 
     /// Invalid argument type for the given method's index-th argument.
-    #[error("invalid argument type for method {method:?}'s index {index} argument: expected {expected:?}, got {got:?}")]
+    #[error(
+        "invalid argument type for method {method:?}'s index {index} argument: expected {expected:?}, got {got:?}"
+    )]
     InvalidArgumentTypeForMethod {
         method: String,
         index: usize,

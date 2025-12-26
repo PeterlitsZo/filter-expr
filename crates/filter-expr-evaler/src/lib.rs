@@ -1,32 +1,102 @@
 //! Evaluator for filter expressions.
 
+mod asm;
+mod asm_codegen;
+mod ast_runner;
+mod bc;
+mod bc_codegen;
+mod bc_runner;
 mod ctx;
 mod error;
 mod value;
 
+use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
+
 use filter_expr::{Expr, FilterExpr};
+use regex::Regex;
+
+use crate::ast_runner::AstRunner;
+use crate::bc::Bytecode;
 
 pub use crate::ctx::{Context, ExprFn, ExprFnContext, SimpleContext};
 pub use crate::error::Error;
 pub use crate::value::{Value, ValueType};
 
+struct FilterExprEvalerCache {
+    /// The cached compiled bytecode.
+    ///
+    /// Used to avoid compiling the same expression multiple times.
+    pub(crate) cached_bytecode: Option<Arc<Bytecode>>,
+
+    /// The cached compiled regex.
+    ///
+    /// It is useful to avoid compiling the same regex multiple times.
+    pub(crate) cached_regex: BTreeMap<String, Arc<Regex>>,
+}
+
 pub struct FilterExprEvaler {
     filter_expr: FilterExpr,
+
+    cache: Arc<Mutex<FilterExprEvalerCache>>,
 }
 
 impl FilterExprEvaler {
     /// Create a new filter expression evaluator.
     pub fn new(filter_expr: FilterExpr) -> Self {
-        Self { filter_expr }
+        Self {
+            filter_expr,
+            cache: Arc::new(Mutex::new(FilterExprEvalerCache {
+                cached_bytecode: None,
+                cached_regex: BTreeMap::new(),
+            })),
+        }
+    }
+
+    /// Evaluate the filter expression using the default runner.
+    pub async fn eval(&self, ctx: &dyn Context) -> Result<bool, Error> {
+        self.eval_by_bytecode_runner(ctx).await
     }
 
     /// Evaluate the filter expression in the given context.
-    pub async fn eval(&self, ctx: &dyn Context) -> Result<bool, Error> {
+    pub async fn eval_by_bytecode_runner(&self, ctx: &dyn Context) -> Result<bool, Error> {
         if let Some(expr) = self.filter_expr.expr() {
-            let value = FilterExprEvalerInner::new(self, expr).eval(ctx).await?;
+            let value = FilterExprEvalerInner::new(self, expr)
+                .eval_by_bytecode_runner(ctx)
+                .await?;
             match value {
                 Value::Bool(b) => Ok(b),
-                _ => Err(Error::InvalidValue(format!("{:?}", value))),
+                _ => Err(Error::InvalidValue(format!("{value:?}"))),
+            }
+        } else {
+            Ok(true)
+        }
+    }
+
+    /// Evaluate the filter expression using AST runner.
+    pub async fn eval_by_ast_runner(&self, ctx: &dyn Context) -> Result<bool, Error> {
+        if let Some(expr) = self.filter_expr.expr() {
+            let value = FilterExprEvalerInner::new(self, expr)
+                .eval_by_ast_runner(ctx)
+                .await?;
+            match value {
+                Value::Bool(b) => Ok(b),
+                _ => Err(Error::InvalidValue(format!("{value:?}"))),
+            }
+        } else {
+            Ok(true)
+        }
+    }
+
+    /// Evaluate the filter expression using bytecode execution.
+    pub async fn eval_by_bytecode(&self, ctx: &dyn Context) -> Result<bool, Error> {
+        if let Some(expr) = self.filter_expr.expr() {
+            let value = FilterExprEvalerInner::new(self, expr)
+                .eval_by_bytecode_runner(ctx)
+                .await?;
+            match value {
+                Value::Bool(b) => Ok(b),
+                _ => Err(Error::InvalidValue(format!("{value:?}"))),
             }
         } else {
             Ok(true)
@@ -35,7 +105,6 @@ impl FilterExprEvaler {
 }
 
 struct FilterExprEvalerInner<'a> {
-    #[allow(unused)]
     evaler: &'a FilterExprEvaler,
     expr: &'a Expr,
 }
@@ -45,378 +114,40 @@ impl<'a> FilterExprEvalerInner<'a> {
         Self { evaler, expr }
     }
 
-    pub async fn eval(&self, ctx: &dyn Context) -> Result<Value, Error> {
-        return self.eval_expr(self.expr, ctx).await;
+    /// Evaluate the expression using AST runner.
+    pub async fn eval_by_ast_runner(&self, ctx: &dyn Context) -> Result<Value, Error> {
+        AstRunner::new(self.expr, self.evaler.cache.clone())
+            .run(ctx)
+            .await
     }
 
-    async fn eval_expr(&self, expr: &Expr, ctx: &dyn Context) -> Result<Value, Error> {
-        match expr {
-            Expr::Field(field) => {
-                let value = ctx
-                    .get_var(field)
-                    .await
-                    .map_err(|e| Error::FailedToGetVar {
-                        var: field.to_string(),
-                        error: e.to_string(),
-                    })?;
-                match value {
-                    Some(value) => Ok(value),
-                    None => Err(Error::NoSuchVar {
-                        var: field.to_string(),
-                    }),
-                }
-            }
-            Expr::Str(value) => Ok(Value::Str(value.clone())),
-            Expr::I64(value) => Ok(Value::I64(value.clone())),
-            Expr::F64(value) => Ok(Value::F64(value.clone())),
-            Expr::Bool(value) => Ok(Value::Bool(value.clone())),
-            Expr::Null => Ok(Value::Null),
-            Expr::Array(value) => self.eval_array(value, ctx).await,
-
-            Expr::FuncCall(func, args) => self.eval_func_call(func, args, ctx).await,
-            Expr::MethodCall(method, obj, args) => {
-                self.eval_method_call(obj, method, args, ctx).await
+    /// Evaluate the expression using bytecode runner.
+    pub async fn eval_by_bytecode_runner(&self, ctx: &dyn Context) -> Result<Value, Error> {
+        let bytecode = {
+            // Check if bytecode is cached, generate if not.
+            let mut cache = self
+                .evaler
+                .cache
+                .lock()
+                .map_err(|e| Error::Internal(format!("failed to lock cache: {e}")))?;
+            if cache.cached_bytecode.is_none() {
+                // Generate bytecode and cache it.
+                let asm = asm_codegen::AsmCodegen::new().codegen(self.expr);
+                let bytecode = bc_codegen::BytecodeCodegen::new().codegen(asm);
+                cache.cached_bytecode = Some(Arc::new(bytecode));
             }
 
-            Expr::Gt(left, right) => {
-                let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
-                match left_value.partial_cmp(&right_value) {
-                    Some(ordering) => Ok(Value::Bool(ordering == std::cmp::Ordering::Greater)),
-                    None => Err(Error::TypeMismatch(
-                        format!("{:?}", left_value),
-                        format!("{:?}", right_value),
-                    )),
-                }
-            }
-            Expr::Lt(left, right) => {
-                let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
-                match left_value.partial_cmp(&right_value) {
-                    Some(ordering) => Ok(Value::Bool(ordering == std::cmp::Ordering::Less)),
-                    None => Err(Error::TypeMismatch(
-                        format!("{:?}", left_value),
-                        format!("{:?}", right_value),
-                    )),
-                }
-            }
-            Expr::Ge(left, right) => {
-                let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
-                match left_value.partial_cmp(&right_value) {
-                    Some(ordering) => Ok(Value::Bool(
-                        ordering == std::cmp::Ordering::Greater
-                            || ordering == std::cmp::Ordering::Equal,
-                    )),
-                    None => Err(Error::TypeMismatch(
-                        format!("{:?}", left_value),
-                        format!("{:?}", right_value),
-                    )),
-                }
-            }
-            Expr::Le(left, right) => {
-                let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
-                match left_value.partial_cmp(&right_value) {
-                    Some(ordering) => Ok(Value::Bool(
-                        ordering == std::cmp::Ordering::Less
-                            || ordering == std::cmp::Ordering::Equal,
-                    )),
-                    None => Err(Error::TypeMismatch(
-                        format!("{:?}", left_value),
-                        format!("{:?}", right_value),
-                    )),
-                }
-            }
-            Expr::Eq(left, right) => {
-                let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
-                Ok(Value::Bool(left_value == right_value))
-            }
-            Expr::Ne(left, right) => {
-                let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
-                Ok(Value::Bool(left_value != right_value))
-            }
-            Expr::In(left, right) => {
-                let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
-                match right_value {
-                    Value::Array(array) => Ok(Value::Bool(array.contains(&left_value))),
-                    _ => Err(Error::TypeMismatch(
-                        format!("{:?}", right_value),
-                        format!("{:?}", left_value),
-                    )),
-                }
-            }
-
-            Expr::And(exprs) => {
-                let mut result = true;
-                for expr in exprs {
-                    let value = Box::pin(self.eval_expr(expr, ctx)).await?;
-                    match value {
-                        Value::Bool(b) => result = result && b,
-                        _ => {
-                            return Err(Error::InvalidValue(format!(
-                                "expected bool, got {:?}",
-                                value
-                            )));
-                        }
-                    }
-                }
-                Ok(Value::Bool(result))
-            }
-            Expr::Or(exprs) => {
-                let mut result = false;
-                for expr in exprs {
-                    let value = Box::pin(self.eval_expr(expr, ctx)).await?;
-                    match value {
-                        Value::Bool(b) => result = result || b,
-                        _ => {
-                            return Err(Error::InvalidValue(format!(
-                                "expected bool, got {:?}",
-                                value
-                            )));
-                        }
-                    }
-                }
-                Ok(Value::Bool(result))
-            }
-            Expr::Not(expr) => {
-                let value = Box::pin(self.eval_expr(expr, ctx)).await?;
-                match value {
-                    Value::Bool(b) => Ok(Value::Bool(!b)),
-                    _ => Err(Error::TypeMismatch(format!("{:?}", value), format!("bool"))),
-                }
-            }
-        }
-    }
-
-    pub(crate) async fn eval_func_call(
-        &self,
-        func: &str,
-        args: &[Expr],
-        ctx: &dyn Context,
-    ) -> Result<Value, Error> {
-        // Evaluate the arguments.
-        let mut args_values = vec![];
-        for arg in args {
-            let value = Box::pin(self.eval_expr(arg, ctx)).await?;
-            args_values.push(value);
-        }
-
-        // Get the function to call.
-        let func_name = func;
-        let func = ctx.get_fn(func);
-
-        // Call the function or call the builtin function.
-        if let Some(func) = func {
-            return func.call(ExprFnContext { args: args_values }).await;
-        } else {
-            match func_name {
-                "matches" => self.eval_builtin_func_call_matches(&args_values).await,
-                "type" => self.eval_builtin_func_call_type(&args_values).await,
-                _ => Err(Error::NoSuchFunction {
-                    function: func_name.to_string(),
-                }),
-            }
-        }
-    }
-
-    pub(crate) async fn eval_method_call(
-        &self,
-        obj: &Expr,
-        method: &str,
-        args: &[Expr],
-        ctx: &dyn Context,
-    ) -> Result<Value, Error> {
-        let obj_value = Box::pin(self.eval_expr(obj, ctx)).await?;
-        match obj_value {
-            Value::Str(s) => match method {
-                "to_uppercase" => {
-                    if args.len() != 0 {
-                        return Err(Error::InvalidArgumentCountForMethod {
-                            method: method.to_string(),
-                            expected: 0,
-                            got: args.len(),
-                        });
-                    }
-                    Ok(Value::Str(s.to_uppercase()))
-                }
-                "to_lowercase" => {
-                    if args.len() != 0 {
-                        return Err(Error::InvalidArgumentCountForMethod {
-                            method: method.to_string(),
-                            expected: 0,
-                            got: args.len(),
-                        });
-                    }
-                    Ok(Value::Str(s.to_lowercase()))
-                }
-                "contains" => {
-                    if args.len() != 1 {
-                        return Err(Error::InvalidArgumentCountForMethod {
-                            method: method.to_string(),
-                            expected: 1,
-                            got: args.len(),
-                        });
-                    }
-                    let arg = Box::pin(self.eval_expr(&args[0], ctx)).await?;
-                    let arg = match arg {
-                        Value::Str(s) => s,
-                        _ => {
-                            return Err(Error::InvalidArgumentTypeForMethod {
-                                method: method.to_string(),
-                                index: 0,
-                                expected: ValueType::Str,
-                                got: arg.typ(),
-                            });
-                        }
-                    };
-
-                    Ok(Value::Bool(s.contains(&arg)))
-                }
-                "starts_with" => {
-                    if args.len() != 1 {
-                        return Err(Error::InvalidArgumentCountForMethod {
-                            method: method.to_string(),
-                            expected: 1,
-                            got: args.len(),
-                        });
-                    }
-
-                    let arg = Box::pin(self.eval_expr(&args[0], ctx)).await?;
-                    let arg = match arg {
-                        Value::Str(s) => s,
-                        _ => {
-                            return Err(Error::InvalidArgumentTypeForMethod {
-                                method: method.to_string(),
-                                index: 0,
-                                expected: ValueType::Str,
-                                got: arg.typ(),
-                            });
-                        }
-                    };
-
-                    Ok(Value::Bool(s.starts_with(&arg)))
-                }
-                "ends_with" => {
-                    if args.len() != 1 {
-                        return Err(Error::InvalidArgumentCountForMethod {
-                            method: method.to_string(),
-                            expected: 1,
-                            got: args.len(),
-                        });
-                    }
-
-                    let arg = Box::pin(self.eval_expr(&args[0], ctx)).await?;
-                    let arg = match arg {
-                        Value::Str(s) => s,
-                        _ => {
-                            return Err(Error::InvalidArgumentTypeForMethod {
-                                method: method.to_string(),
-                                index: 0,
-                                expected: ValueType::Str,
-                                got: arg.typ(),
-                            });
-                        }
-                    };
-
-                    Ok(Value::Bool(s.ends_with(&arg)))
-                }
-                _ => Err(Error::NoSuchMethod {
-                    method: method.to_string(),
-                    obj_type: ValueType::Str,
-                }),
-            },
-            _ => Err(Error::NoSuchMethod {
-                method: method.to_string(),
-                obj_type: obj_value.typ(),
-            }),
-        }
-    }
-
-    pub(crate) async fn eval_array(
-        &self,
-        array: &[Expr],
-        ctx: &dyn Context,
-    ) -> Result<Value, Error> {
-        let mut values = vec![];
-        for expr in array {
-            let value = Box::pin(self.eval_expr(expr, ctx)).await?;
-            values.push(value);
-        }
-        Ok(Value::Array(values))
-    }
-
-    pub(crate) async fn eval_builtin_func_call_matches(
-        &self,
-        args: &[Value],
-    ) -> Result<Value, Error> {
-        if args.len() != 2 {
-            return Err(Error::InvalidArgumentCountForFunction {
-                function: "matches".to_string(),
-                expected: 2,
-                got: args.len(),
-            });
-        }
-        let text = match &args[0] {
-            Value::Str(s) => s,
-            _ => {
-                return Err(Error::InvalidArgumentTypeForFunction {
-                    function: "matches".to_string(),
-                    index: 0,
-                    expected: ValueType::Str,
-                    got: args[0].typ(),
-                });
-            }
-        };
-        let pattern = match &args[1] {
-            Value::Str(s) => s,
-            _ => {
-                return Err(Error::InvalidArgumentTypeForFunction {
-                    function: "matches".to_string(),
-                    index: 1,
-                    expected: ValueType::Str,
-                    got: args[1].typ(),
-                });
-            }
-        };
-        let pattern = regex::Regex::new(&pattern);
-        let pattern = match pattern {
-            Ok(pattern) => pattern,
-            Err(e) => {
-                return Err(Error::Internal(format!("failed to compile regex: {}", e)));
+            // Get the cached bytecode.
+            match cache.cached_bytecode.as_ref() {
+                Some(bytecode) => bytecode.clone(),
+                None => unreachable!("bytecode should be already cached"),
             }
         };
 
-        let matches = pattern.is_match(&text);
-        Ok(Value::Bool(matches))
-    }
+        let runner = bc_runner::BytecodeRunner::new(&bytecode, self.evaler.cache.clone());
 
-    pub(crate) async fn eval_builtin_func_call_type(
-        &self,
-        args: &[Value],
-    ) -> Result<Value, Error> {
-        if args.len() != 1 {
-            return Err(Error::InvalidArgumentCountForFunction {
-                function: "type".to_string(),
-                expected: 1,
-                got: args.len(),
-            });
-        }
-
-        Ok(Value::Str(
-            match args[0].typ() {
-                ValueType::Str => "str",
-                ValueType::I64 => "i64",
-                ValueType::F64 => "f64",
-                ValueType::Bool => "bool",
-                ValueType::Null => "null",
-                ValueType::Array => "array",
-            }
-            .to_string(),
-        ))
+        // Safety: The bytecode is generated by a internal AsmCodegen.
+        unsafe { runner.run(ctx).await }
     }
 }
 
@@ -633,12 +364,27 @@ mod tests {
     }
 
     async fn parse_and_do_test_cases(input: &str, test_cases: Vec<(SimpleContext, bool)>) {
-        let filter_expr = FilterExpr::parse(input).expect(&format!("failed to parse: {}", input));
+        let filter_expr =
+            FilterExpr::parse(input).unwrap_or_else(|_| panic!("failed to parse: {input}"));
         let evaler = FilterExprEvaler::new(filter_expr);
 
         for (ctx, expected) in test_cases {
-            let result = evaler.eval(&ctx).await.unwrap();
-            assert_eq!(result, expected, "{} failed with context {:?}", input, ctx);
+            let result = evaler
+                .eval_by_bytecode_runner(&ctx)
+                .await
+                .unwrap_or_else(|_| panic!("failed to eval by bytecode runner: {input}"));
+            assert_eq!(
+                result, expected,
+                "{input} failed with context with bytecode runner {ctx:?}"
+            );
+            let result = evaler
+                .eval_by_ast_runner(&ctx)
+                .await
+                .unwrap_or_else(|_| panic!("failed to eval by ast runner: {input}"));
+            assert_eq!(
+                result, expected,
+                "{input} failed with context with ast runner {ctx:?}"
+            );
         }
     }
 
@@ -676,7 +422,7 @@ mod tests {
                     });
                 }
             };
-            Ok(Value::I64(a + b))
+            Ok(Value::i64(a + b))
         }
     }
 }
