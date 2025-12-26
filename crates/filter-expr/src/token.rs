@@ -56,7 +56,7 @@ pub(crate) enum Token {
 pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
     let mut tokens = Vec::new();
     let mut chars = input.chars().peekable();
-    
+
     while let Some(&ch) = chars.peek() {
         match ch {
             // Skip whitespace.
@@ -156,10 +156,10 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
             }
 
             // Float or Int.
-            c if c.is_digit(10) || c == '.' => {
+            c if c.is_ascii_digit() || c == '.' => {
                 let mut text = String::new();
                 while let Some(&c) = chars.peek() {
-                    if !(c.is_digit(10) || c == '.') {
+                    if !(c.is_ascii_digit() || c == '.') {
                         break;
                     }
                     text.push(c);
@@ -182,7 +182,7 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
                     text.push(c);
                     chars.next();
                 }
-                
+
                 // Check if it's a keyword or literal
                 match text.as_str() {
                     "AND" => tokens.push(Token::And),
@@ -203,7 +203,7 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
             }
         }
     }
-    
+
     Ok(tokens)
 }
 
@@ -215,122 +215,146 @@ mod tests {
     fn test_parse_token() {
         let input = "name = 'John' AND age > 18";
         let tokens = parse_token(input).unwrap();
-        assert_eq!(tokens, vec![
-            Token::Ident("name".to_string()),
-            Token::Eq,
-            Token::Str("John".to_string()),
-            Token::And,
-            Token::Ident("age".to_string()),
-            Token::Gt,
-            Token::I64(18),
-        ]);
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Ident("name".to_string()),
+                Token::Eq,
+                Token::Str("John".to_string()),
+                Token::And,
+                Token::Ident("age".to_string()),
+                Token::Gt,
+                Token::I64(18),
+            ]
+        );
 
         let input = r#"name = "John" AND age IN [18, 19, 20, 21]"#;
         let tokens = parse_token(input).unwrap();
-        assert_eq!(tokens, vec![
-            Token::Ident("name".to_string()),
-            Token::Eq,
-            Token::Str("John".to_string()),
-            Token::And, Token::Ident("age".to_string()),
-            Token::In,
-            Token::LBracket,
-            Token::I64(18),
-            Token::Comma,
-            Token::I64(19),
-            Token::Comma,
-            Token::I64(20),
-            Token::Comma,
-            Token::I64(21),
-            Token::RBracket,
-        ]);
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Ident("name".to_string()),
+                Token::Eq,
+                Token::Str("John".to_string()),
+                Token::And,
+                Token::Ident("age".to_string()),
+                Token::In,
+                Token::LBracket,
+                Token::I64(18),
+                Token::Comma,
+                Token::I64(19),
+                Token::Comma,
+                Token::I64(20),
+                Token::Comma,
+                Token::I64(21),
+                Token::RBracket,
+            ]
+        );
 
         let input = r#"matches(name, "^J.*n$")"#;
         let tokens = parse_token(input).unwrap();
-        assert_eq!(tokens, vec![
-            Token::Ident("matches".to_string()),
-            Token::LParen,
-            Token::Ident("name".to_string()),
-            Token::Comma,
-            Token::Str("^J.*n$".to_string()),
-            Token::RParen,
-        ]);
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Ident("matches".to_string()),
+                Token::LParen,
+                Token::Ident("name".to_string()),
+                Token::Comma,
+                Token::Str("^J.*n$".to_string()),
+                Token::RParen,
+            ]
+        );
 
         let input = r#"name != null"#;
         let tokens = parse_token(input).unwrap();
-        assert_eq!(tokens, vec![
-            Token::Ident("name".to_string()),
-            Token::Ne,
-            Token::Null,
-        ]);
+        assert_eq!(
+            tokens,
+            vec![Token::Ident("name".to_string()), Token::Ne, Token::Null,]
+        );
 
         let input = r#"open = 1.5 AND age = 18 AND is_peter = true"#;
         let tokens = parse_token(input).unwrap();
-        assert_eq!(tokens, vec![
-            Token::Ident("open".to_string()),
-            Token::Eq,
-            Token::F64(1.5),
-            Token::And,
-            Token::Ident("age".to_string()),
-            Token::Eq,
-            Token::I64(18),
-            Token::And,
-            Token::Ident("is_peter".to_string()),
-            Token::Eq,
-            Token::Bool(true),
-        ]);
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Ident("open".to_string()),
+                Token::Eq,
+                Token::F64(1.5),
+                Token::And,
+                Token::Ident("age".to_string()),
+                Token::Eq,
+                Token::I64(18),
+                Token::And,
+                Token::Ident("is_peter".to_string()),
+                Token::Eq,
+                Token::Bool(true),
+            ]
+        );
 
         let input = r#"name.to_uppercase() = 'JOHN'"#;
         let tokens = parse_token(input).unwrap();
-        assert_eq!(tokens, vec![
-            Token::Ident("name".to_string()),
-            Token::Dot,
-            Token::Ident("to_uppercase".to_string()),
-            Token::LParen,
-            Token::RParen,
-            Token::Eq,
-            Token::Str("JOHN".to_string()),
-        ]);
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Ident("name".to_string()),
+                Token::Dot,
+                Token::Ident("to_uppercase".to_string()),
+                Token::LParen,
+                Token::RParen,
+                Token::Eq,
+                Token::Str("JOHN".to_string()),
+            ]
+        );
 
         let input = r#"name.contains('John')"#;
         let tokens = parse_token(input).unwrap();
-        assert_eq!(tokens, vec![
-            Token::Ident("name".to_string()),
-            Token::Dot,
-            Token::Ident("contains".to_string()),
-            Token::LParen,
-            Token::Str("John".to_string()),
-            Token::RParen,
-        ]);
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Ident("name".to_string()),
+                Token::Dot,
+                Token::Ident("contains".to_string()),
+                Token::LParen,
+                Token::Str("John".to_string()),
+                Token::RParen,
+            ]
+        );
 
         let input = r#"type(maybe_i64_or_f64) IN ['i64', 'f64']"#;
         let tokens = parse_token(input).unwrap();
-        assert_eq!(tokens, vec![
-            Token::Ident("type".to_string()),
-            Token::LParen,
-            Token::Ident("maybe_i64_or_f64".to_string()),
-            Token::RParen,
-            Token::In,
-            Token::LBracket,
-            Token::Str("i64".to_string()),
-            Token::Comma,
-            Token::Str("f64".to_string()),
-            Token::RBracket,
-        ]);
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Ident("type".to_string()),
+                Token::LParen,
+                Token::Ident("maybe_i64_or_f64".to_string()),
+                Token::RParen,
+                Token::In,
+                Token::LBracket,
+                Token::Str("i64".to_string()),
+                Token::Comma,
+                Token::Str("f64".to_string()),
+                Token::RBracket,
+            ]
+        );
 
         let input = r#"type(foo.contains('bar')) = 'i64'"#;
         let tokens = parse_token(input).unwrap();
-        assert_eq!(tokens, vec![
-            Token::Ident("type".to_string()),
-            Token::LParen,
-            Token::Ident("foo".to_string()),
-            Token::Dot,
-            Token::Ident("contains".to_string()),
-            Token::LParen,
-            Token::Str("bar".to_string()),
-            Token::RParen,
-            Token::RParen,
-            Token::Eq,
-            Token::Str("i64".to_string()),
-        ]);
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Ident("type".to_string()),
+                Token::LParen,
+                Token::Ident("foo".to_string()),
+                Token::Dot,
+                Token::Ident("contains".to_string()),
+                Token::LParen,
+                Token::Str("bar".to_string()),
+                Token::RParen,
+                Token::RParen,
+                Token::Eq,
+                Token::Str("i64".to_string()),
+            ]
+        );
     }
 }

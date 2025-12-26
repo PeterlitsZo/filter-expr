@@ -1,7 +1,9 @@
+use std::sync::Arc;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     /// The string value.
-    Str(String),
+    Str(Arc<String>),
     /// The integer value.
     I64(i64),
     /// The float value.
@@ -12,7 +14,7 @@ pub enum Value {
     Null,
 
     /// The array value.
-    Array(Vec<Value>),
+    Array(Arc<Vec<Value>>),
 }
 
 impl PartialOrd for Value {
@@ -37,43 +39,67 @@ impl PartialOrd for Value {
     }
 }
 
-impl Into<Value> for String {
-    fn into(self) -> Value {
-        Value::Str(self)
+impl From<String> for Value {
+    fn from(val: String) -> Self {
+        Value::Str(Arc::new(val))
     }
 }
 
-impl Into<Value> for &str {
-    fn into(self) -> Value {
-        Value::Str(self.to_string())
+impl From<&str> for Value {
+    fn from(val: &str) -> Self {
+        Value::Str(Arc::new(val.to_string()))
     }
 }
 
-impl Into<Value> for i64 {
-    fn into(self) -> Value {
-        Value::I64(self)
+impl From<i64> for Value {
+    fn from(val: i64) -> Self {
+        Value::I64(val)
     }
 }
 
-impl Into<Value> for f64 {
-    fn into(self) -> Value {
-        Value::F64(self)
+impl From<f64> for Value {
+    fn from(val: f64) -> Self {
+        Value::F64(val)
     }
 }
 
-impl Into<Value> for bool {
-    fn into(self) -> Value {
-        Value::Bool(self)
+impl From<bool> for Value {
+    fn from(val: bool) -> Self {
+        Value::Bool(val)
     }
 }
 
-impl<T: Into<Value>> Into<Value> for Vec<T> {
-    fn into(self) -> Value {
-        Value::Array(self.into_iter().map(|item| item.into()).collect())
+impl<T: Into<Value>> From<Vec<T>> for Value {
+    fn from(val: Vec<T>) -> Self {
+        Value::Array(Arc::new(val.into_iter().map(|item| item.into()).collect()))
     }
 }
 
 impl Value {
+    pub fn str(s: impl Into<String>) -> Self {
+        Value::Str(Arc::new(s.into()))
+    }
+
+    pub fn i64(i: i64) -> Self {
+        Value::I64(i)
+    }
+
+    pub fn f64(f: f64) -> Self {
+        Value::F64(f)
+    }
+
+    pub fn bool(b: bool) -> Self {
+        Value::Bool(b)
+    }
+
+    pub fn null() -> Self {
+        Value::Null
+    }
+
+    pub fn array(items: impl Into<Vec<Value>>) -> Self {
+        Value::Array(Arc::new(items.into().into_iter().collect()))
+    }
+
     pub fn typ(&self) -> ValueType {
         match self {
             Value::Str(_) => ValueType::Str,
@@ -104,57 +130,49 @@ mod tests {
     #[test]
     fn test_expr_value_ordering() {
         // Test string ordering.
-        assert!(Value::Str("a".to_string()) < Value::Str("b".to_string()));
-        assert!(Value::Str("a".to_string()) <= Value::Str("a".to_string()));
-        assert!(Value::Str("b".to_string()) > Value::Str("a".to_string()));
+        assert!(Value::str("a") < Value::str("b"));
+        assert!(Value::str("a") <= Value::str("a"));
+        assert!(Value::str("b") > Value::str("a"));
 
         // Test integer ordering.
-        assert!(Value::I64(1) < Value::I64(2));
-        assert!(Value::I64(1) <= Value::I64(1));
-        assert!(Value::I64(2) > Value::I64(1));
+        assert!(Value::i64(1) < Value::i64(2));
+        assert!(Value::i64(1) <= Value::i64(1));
+        assert!(Value::i64(2) > Value::i64(1));
 
         // Test float ordering.
-        assert!(Value::F64(1.0) < Value::F64(2.0));
-        assert!(Value::F64(1.0) <= Value::F64(1.0));
-        assert!(Value::F64(2.0) > Value::F64(1.0));
+        assert!(Value::f64(1.0) < Value::f64(2.0));
+        assert!(Value::f64(1.0) <= Value::f64(1.0));
+        assert!(Value::f64(2.0) > Value::f64(1.0));
 
         // Test boolean ordering.
-        assert!(Value::Bool(false) < Value::Bool(true));
-        assert!(Value::Bool(false) <= Value::Bool(false));
-        assert!(Value::Bool(true) > Value::Bool(false));
+        assert!(Value::bool(false) < Value::bool(true));
+        assert!(Value::bool(false) <= Value::bool(false));
+        assert!(Value::bool(true) > Value::bool(false));
 
         // Test Int and Float comparison.
-        assert!(Value::I64(1) < Value::F64(2.0));
-        assert!(Value::I64(2) > Value::F64(1.0));
-        assert!(Value::F64(1.0) < Value::I64(2));
-        assert!(Value::F64(2.0) > Value::I64(1));
+        assert!(Value::i64(1) < Value::f64(2.0));
+        assert!(Value::i64(2) > Value::f64(1.0));
+        assert!(Value::f64(1.0) < Value::i64(2));
+        assert!(Value::f64(2.0) > Value::i64(1));
 
         // Test Null ordering.
-        assert!(Value::Null == Value::Null);
-        assert!(Value::Null > Value::Str("a".to_string()));
-        assert!(Value::Str("a".to_string()) < Value::Null);
-        assert!(Value::Null > Value::I64(1));
-        assert!(Value::I64(1) < Value::Null);
+        assert!(Value::null() == Value::null());
+        assert!(Value::null() > Value::str("a"));
+        assert!(Value::str("a") < Value::null());
+        assert!(Value::null() > Value::i64(1));
+        assert!(Value::i64(1) < Value::null());
 
         // Test array ordering.
-        let arr1 = Value::Array(vec![Value::I64(1), Value::I64(2)]);
-        let arr2 = Value::Array(vec![Value::I64(1), Value::I64(3)]);
+        let arr1 = Value::array([Value::i64(1), Value::i64(2)]);
+        let arr2 = Value::array([Value::i64(1), Value::i64(3)]);
         assert!(arr1 < arr2);
         assert!(arr1 <= arr1);
         assert!(arr2 > arr1);
 
         // Test incompatible types (should return None).
-        assert!(
-            Value::Str("a".to_string())
-                .partial_cmp(&Value::I64(1))
-                .is_none()
-        );
-        assert!(Value::I64(1).partial_cmp(&Value::Bool(true)).is_none());
-        assert!(
-            Value::Str("a".to_string())
-                .partial_cmp(&Value::Bool(false))
-                .is_none()
-        );
-        assert!(Value::Array(vec![]).partial_cmp(&Value::I64(1)).is_none());
+        assert!(Value::str("a").partial_cmp(&Value::i64(1)).is_none());
+        assert!(Value::i64(1).partial_cmp(&Value::bool(true)).is_none());
+        assert!(Value::str("a").partial_cmp(&Value::bool(false)).is_none());
+        assert!(Value::array([]).partial_cmp(&Value::i64(1)).is_none());
     }
 }

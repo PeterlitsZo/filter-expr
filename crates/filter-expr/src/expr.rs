@@ -1,5 +1,5 @@
 /// The expression.
-/// 
+///
 /// It is an AST of the filter expression.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
