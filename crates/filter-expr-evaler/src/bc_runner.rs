@@ -304,12 +304,12 @@ impl<'a> BytecodeRunner<'a> {
             }
         };
 
-        let cached_regex = self
+        let cache = self
             .evaler_cache
             .lock()
             .map_err(|e| Error::Internal(format!("failed to lock evaler cache: {e}")))?;
-        let pattern_regex = cached_regex.cached_regex.get(pattern.as_str()).cloned();
-        drop(cached_regex);
+        let pattern_regex = cache.cached_regex.get(pattern.as_str());
+        drop(cache);
         let matches = match pattern_regex {
             Some(pattern) => pattern.is_match(text),
             None => {
@@ -320,14 +320,15 @@ impl<'a> BytecodeRunner<'a> {
                         return Err(Error::Internal(format!("failed to compile regex: {e}")));
                     }
                 };
-                let mut cached_regex = self
+                let pattern_arc = Arc::new(pattern.clone());
+                let cache = self
                     .evaler_cache
                     .lock()
                     .map_err(|e| Error::Internal(format!("failed to lock evaler cache: {e}")))?;
-                cached_regex
+                cache
                     .cached_regex
-                    .insert(pattern.to_string(), Arc::new(pattern.clone()));
-                pattern.is_match(text)
+                    .insert(pattern.as_str().to_string(), pattern_arc.clone());
+                pattern_arc.is_match(text)
             }
         };
 

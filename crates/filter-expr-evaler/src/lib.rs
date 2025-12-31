@@ -10,10 +10,10 @@ mod ctx;
 mod error;
 mod value;
 
-use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use filter_expr::{Expr, FilterExpr};
+use moka::sync::Cache;
 use regex::Regex;
 
 use crate::ast_runner::AstRunner;
@@ -27,40 +27,38 @@ struct FilterExprEvalerCache {
     /// The cached compiled bytecode.
     ///
     /// Used to avoid compiling the same expression multiple times.
-    pub(crate) cached_bytecode: Option<Arc<Bytecode>>,
+    pub(crate) cached_bytecode: Cache<Expr, Arc<Bytecode>>,
 
     /// The cached compiled regex.
     ///
     /// It is useful to avoid compiling the same regex multiple times.
-    pub(crate) cached_regex: BTreeMap<String, Arc<Regex>>,
+    pub(crate) cached_regex: Cache<String, Arc<Regex>>,
 }
 
 pub struct FilterExprEvaler {
-    filter_expr: FilterExpr,
-
+    /// The global cache shared by runners.
     cache: Arc<Mutex<FilterExprEvalerCache>>,
 }
 
 impl FilterExprEvaler {
     /// Create a new filter expression evaluator.
-    pub fn new(filter_expr: FilterExpr) -> Self {
+    pub fn new() -> Self {
         Self {
-            filter_expr,
             cache: Arc::new(Mutex::new(FilterExprEvalerCache {
-                cached_bytecode: None,
-                cached_regex: BTreeMap::new(),
+                cached_bytecode: Cache::new(128),
+                cached_regex: Cache::new(128),
             })),
         }
     }
 
     /// Evaluate the filter expression using the default runner.
-    pub async fn eval(&self, ctx: &dyn Context) -> Result<bool, Error> {
-        self.eval_by_bytecode_runner(ctx).await
+    pub async fn eval(&self, filter_expr: &FilterExpr, ctx: &dyn Context) -> Result<bool, Error> {
+        self.eval_by_bytecode_runner(filter_expr, ctx).await
     }
 
     /// Evaluate the filter expression in the given context.
-    pub async fn eval_by_bytecode_runner(&self, ctx: &dyn Context) -> Result<bool, Error> {
-        if let Some(expr) = self.filter_expr.expr() {
+    pub async fn eval_by_bytecode_runner(&self, filter_expr: &FilterExpr, ctx: &dyn Context) -> Result<bool, Error> {
+        if let Some(expr) = filter_expr.expr() {
             let value = FilterExprEvalerInner::new(self, expr)
                 .eval_by_bytecode_runner(ctx)
                 .await?;
@@ -74,8 +72,8 @@ impl FilterExprEvaler {
     }
 
     /// Evaluate the filter expression using AST runner.
-    pub async fn eval_by_ast_runner(&self, ctx: &dyn Context) -> Result<bool, Error> {
-        if let Some(expr) = self.filter_expr.expr() {
+    pub async fn eval_by_ast_runner(&self, filter_expr: &FilterExpr, ctx: &dyn Context) -> Result<bool, Error> {
+        if let Some(expr) = filter_expr.expr() {
             let value = FilterExprEvalerInner::new(self, expr)
                 .eval_by_ast_runner(ctx)
                 .await?;
@@ -89,8 +87,8 @@ impl FilterExprEvaler {
     }
 
     /// Evaluate the filter expression using bytecode execution.
-    pub async fn eval_by_bytecode(&self, ctx: &dyn Context) -> Result<bool, Error> {
-        if let Some(expr) = self.filter_expr.expr() {
+    pub async fn eval_by_bytecode(&self, filter_expr: &FilterExpr, ctx: &dyn Context) -> Result<bool, Error> {
+        if let Some(expr) = filter_expr.expr() {
             let value = FilterExprEvalerInner::new(self, expr)
                 .eval_by_bytecode_runner(ctx)
                 .await?;
@@ -124,23 +122,29 @@ impl<'a> FilterExprEvalerInner<'a> {
     /// Evaluate the expression using bytecode runner.
     pub async fn eval_by_bytecode_runner(&self, ctx: &dyn Context) -> Result<Value, Error> {
         let bytecode = {
-            // Check if bytecode is cached, generate if not.
-            let mut cache = self
+            let cache = self
                 .evaler
                 .cache
                 .lock()
                 .map_err(|e| Error::Internal(format!("failed to lock cache: {e}")))?;
-            if cache.cached_bytecode.is_none() {
+            
+            // Check if bytecode is cached, generate if not.
+            if let Some(cached) = cache.cached_bytecode.get(self.expr) {
+                cached
+            } else {
+                drop(cache);
                 // Generate bytecode and cache it.
                 let asm = asm_codegen::AsmCodegen::new().codegen(self.expr);
                 let bytecode = bc_codegen::BytecodeCodegen::new().codegen(asm);
-                cache.cached_bytecode = Some(Arc::new(bytecode));
-            }
-
-            // Get the cached bytecode.
-            match cache.cached_bytecode.as_ref() {
-                Some(bytecode) => bytecode.clone(),
-                None => unreachable!("bytecode should be already cached"),
+                let bytecode_arc = Arc::new(bytecode);
+                
+                let cache = self
+                    .evaler
+                    .cache
+                    .lock()
+                    .map_err(|e| Error::Internal(format!("failed to lock cache: {e}")))?;
+                cache.cached_bytecode.insert(self.expr.clone(), bytecode_arc.clone());
+                bytecode_arc
             }
         };
 
@@ -366,11 +370,11 @@ mod tests {
     async fn parse_and_do_test_cases(input: &str, test_cases: Vec<(SimpleContext, bool)>) {
         let filter_expr =
             FilterExpr::parse(input).unwrap_or_else(|_| panic!("failed to parse: {input}"));
-        let evaler = FilterExprEvaler::new(filter_expr);
+        let evaler = FilterExprEvaler::new();
 
         for (ctx, expected) in test_cases {
             let result = evaler
-                .eval_by_bytecode_runner(&ctx)
+                .eval_by_bytecode_runner(&filter_expr, &ctx)
                 .await
                 .unwrap_or_else(|_| panic!("failed to eval by bytecode runner: {input}"));
             assert_eq!(
@@ -378,7 +382,7 @@ mod tests {
                 "{input} failed with context with bytecode runner {ctx:?}"
             );
             let result = evaler
-                .eval_by_ast_runner(&ctx)
+                .eval_by_ast_runner(&filter_expr, &ctx)
                 .await
                 .unwrap_or_else(|_| panic!("failed to eval by ast runner: {input}"));
             assert_eq!(
