@@ -1,10 +1,11 @@
+use std::cmp::Ordering;
 
 use crate::{Error, Transform, TransformContext, TransformResult};
 
 /// The expression.
 ///
 /// It is an AST of the filter expression.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Field(String),
     Str(String),
@@ -29,6 +30,116 @@ pub enum Expr {
     Or(Vec<Expr>),
     Not(Box<Expr>),
 }
+
+impl PartialOrd for Expr {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Expr {
+    fn cmp(&self, other: &Self) -> Ordering {
+        use Expr::*;
+        use ordered_float::OrderedFloat;
+
+        // Helper function to get variant order.
+        fn variant_order(expr: &Expr) -> u8 {
+            use Expr::*;
+            match expr {
+                Field(..) => 0,
+                Str(..) => 1,
+                I64(..) => 2,
+                F64(..) => 3,
+                Bool(..) => 4,
+                Null => 5,
+                Array(..) => 6,
+
+                FuncCall(..) => 7,
+                MethodCall(..) => 8,
+
+                Gt(..) => 9,
+                Lt(..) => 10,
+                Ge(..) => 11,
+                Le(..) => 12,
+                Eq(..) => 13,
+                Ne(..) => 14,
+                In(..) => 15,
+
+                And(..) => 16,
+                Or(..) => 17,
+                Not(..) => 18,
+            }
+        }
+
+        // First compare by variant order.
+        match variant_order(self).cmp(&variant_order(other)) {
+            Ordering::Equal => {
+                // Same variant, compare contents.
+                match (self, other) {
+                    (Field(a), Field(b)) => a.cmp(b),
+                    (Str(a), Str(b)) => a.cmp(b),
+                    (I64(a), I64(b)) => a.cmp(b),
+                    (F64(a), F64(b)) => OrderedFloat(*a).cmp(&OrderedFloat(*b)),
+                    (Bool(a), Bool(b)) => a.cmp(b),
+                    (Null, Null) => Ordering::Equal,
+                    (Array(a), Array(b)) => a.cmp(b),
+                    (FuncCall(f1, a1), FuncCall(f2, a2)) => match f1.cmp(f2) {
+                        Ordering::Equal => a1.cmp(a2),
+                        other => other,
+                    },
+                    (MethodCall(m1, o1, a1), MethodCall(m2, o2, a2)) => match m1.cmp(m2) {
+                        Ordering::Equal => match o1.cmp(o2) {
+                            Ordering::Equal => a1.cmp(a2),
+                            other => other,
+                        },
+                        other => other,
+                    },
+                    (Gt(l1, r1), Gt(l2, r2)) => match l1.cmp(l2) {
+                        Ordering::Equal => r1.cmp(r2),
+                        other => other,
+                    },
+                    (Lt(l1, r1), Lt(l2, r2)) => match l1.cmp(l2) {
+                        Ordering::Equal => r1.cmp(r2),
+                        other => other,
+                    },
+                    (Ge(l1, r1), Ge(l2, r2)) => match l1.cmp(l2) {
+                        Ordering::Equal => r1.cmp(r2),
+                        other => other,
+                    },
+                    (Le(l1, r1), Le(l2, r2)) => match l1.cmp(l2) {
+                        Ordering::Equal => r1.cmp(r2),
+                        other => other,
+                    },
+                    (Eq(l1, r1), Eq(l2, r2)) => match l1.cmp(l2) {
+                        Ordering::Equal => r1.cmp(r2),
+                        other => other,
+                    },
+                    (Ne(l1, r1), Ne(l2, r2)) => match l1.cmp(l2) {
+                        Ordering::Equal => r1.cmp(r2),
+                        other => other,
+                    },
+                    (In(l1, r1), In(l2, r2)) => match l1.cmp(l2) {
+                        Ordering::Equal => r1.cmp(r2),
+                        other => other,
+                    },
+                    (And(a), And(b)) => a.cmp(b),
+                    (Or(a), Or(b)) => a.cmp(b),
+                    (Not(a), Not(b)) => a.cmp(b),
+                    _ => unreachable!(),
+                }
+            }
+            other => other,
+        }
+    }
+}
+
+impl PartialEq for Expr {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for Expr {}
 
 #[allow(unused)]
 impl Expr {
