@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::hash::{Hash, Hasher};
 
 use crate::{Error, Transform, TransformContext, TransformResult};
 
@@ -140,6 +141,67 @@ impl PartialEq for Expr {
 }
 
 impl Eq for Expr {}
+
+impl Hash for Expr {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        use Expr::*;
+        use ordered_float::OrderedFloat;
+
+        // Hash the discriminant first.
+        std::mem::discriminant(self).hash(state);
+
+        // Then hash the contents.
+        match self {
+            Field(s) => s.hash(state),
+            Str(s) => s.hash(state),
+            I64(i) => i.hash(state),
+            F64(f) => OrderedFloat(*f).hash(state),
+            Bool(b) => b.hash(state),
+            Null => {},
+            Array(v) => v.hash(state),
+            FuncCall(name, args) => {
+                name.hash(state);
+                args.hash(state);
+            }
+            MethodCall(method, obj, args) => {
+                method.hash(state);
+                obj.hash(state);
+                args.hash(state);
+            }
+            Gt(l, r) => {
+                l.hash(state);
+                r.hash(state);
+            }
+            Lt(l, r) => {
+                l.hash(state);
+                r.hash(state);
+            }
+            Ge(l, r) => {
+                l.hash(state);
+                r.hash(state);
+            }
+            Le(l, r) => {
+                l.hash(state);
+                r.hash(state);
+            }
+            Eq(l, r) => {
+                l.hash(state);
+                r.hash(state);
+            }
+            Ne(l, r) => {
+                l.hash(state);
+                r.hash(state);
+            }
+            In(l, r) => {
+                l.hash(state);
+                r.hash(state);
+            }
+            And(v) => v.hash(state),
+            Or(v) => v.hash(state),
+            Not(e) => e.hash(state),
+        }
+    }
+}
 
 #[allow(unused)]
 impl Expr {
