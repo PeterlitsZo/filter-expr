@@ -7,4 +7,5 @@ license.workspace = true
 
 [dependencies]
 async-trait.workspace = true
+ordered-float = "5.1.0"
 thiserror.workspace = true
