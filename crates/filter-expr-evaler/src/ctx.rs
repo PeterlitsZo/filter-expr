@@ -19,15 +19,6 @@ pub trait Context: Send + Sync {
     ///
     /// If some error occurs, return the error.
     async fn get_var(&self, name: &str) -> Result<Option<Value>, Error>;
-
-    /// Get the function by name.
-    ///
-    /// If the function is not found, return `None`.
-    fn get_fn(&self, name: &str) -> Option<&BoxedExprFn> {
-        let _name = name;
-
-        None
-    }
 }
 
 /// A macro to create a `SimpleContext` from key-value pairs.
@@ -71,31 +62,18 @@ macro_rules! simple_context {
 /// implementation that can be used.
 pub struct SimpleContext {
     vars: BTreeMap<String, Value>,
-    fns: BTreeMap<String, BoxedExprFn>,
 }
 
 impl Debug for SimpleContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let fns_len = self.fns.len();
-        write!(
-            f,
-            "SimpleContext {{ vars: {:?}, fns: [{:?} fns] }}",
-            self.vars, fns_len
-        )?;
+        write!(f, "SimpleContext {{ vars: {:?} }}", self.vars)?;
         Ok(())
     }
 }
 
 impl SimpleContext {
     pub fn new(vars: BTreeMap<String, Value>) -> Self {
-        Self {
-            vars,
-            fns: BTreeMap::new(),
-        }
-    }
-
-    pub fn add_fn(&mut self, name: String, func: BoxedExprFn) {
-        self.fns.insert(name, func);
+        Self { vars }
     }
 }
 
@@ -104,19 +82,4 @@ impl Context for SimpleContext {
     async fn get_var(&self, name: &str) -> Result<Option<Value>, Error> {
         Ok(self.vars.get(name).cloned())
     }
-
-    fn get_fn(&self, name: &str) -> Option<&BoxedExprFn> {
-        self.fns.get(name)
-    }
 }
-
-pub struct ExprFnContext {
-    pub args: Vec<Value>,
-}
-
-#[async_trait::async_trait]
-pub trait ExprFn: Send + Sync {
-    async fn call(&self, ctx: ExprFnContext) -> Result<Value, Error>;
-}
-
-pub type BoxedExprFn = Box<dyn ExprFn>;

@@ -1,19 +1,20 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::{
-    FilterExprEvalerCache,
+    FilterExprEvalerEnv, FunctionContext, MethodContext,
     bc::{self, Bytecode},
     ctx::Context,
     error::Error,
-    value::{Value, ValueType},
+    value::Value,
 };
 
 /// A runner for executing bytecode.
 pub(crate) struct BytecodeRunner<'a> {
+    /// The evaler environment.
+    env: FilterExprEvalerEnv,
+
     /// The bytecode to run.
     bytecode: &'a Bytecode,
-    /// The evaler cache.
-    evaler_cache: Arc<Mutex<FilterExprEvalerCache>>,
 
     /// The local slot to cache the local variables.
     ///
@@ -29,13 +30,11 @@ pub(crate) struct BytecodeRunner<'a> {
 
 impl<'a> BytecodeRunner<'a> {
     /// Create a new bytecode runner from bytecode.
-    pub(crate) fn new(
-        bytecode: &'a Bytecode,
-        evaler_cache: Arc<Mutex<FilterExprEvalerCache>>,
-    ) -> Self {
+    pub(crate) fn new(bytecode: &'a Bytecode, env: FilterExprEvalerEnv) -> Self {
         Self {
+            env,
+
             bytecode,
-            evaler_cache,
 
             local_slot: vec![None; bytecode.locals.len()],
 
@@ -112,10 +111,10 @@ impl<'a> BytecodeRunner<'a> {
                 }
 
                 bc::CALL_FUNCTION => {
-                    unsafe { self.run_call_function(ctx).await? };
+                    unsafe { self.run_call_function().await? };
                 }
                 bc::CALL_METHOD => {
-                    unsafe { self.run_call_method()? };
+                    unsafe { self.run_call_method().await? };
                 }
 
                 bc::POP_JUMP_IF_FALSE => {
@@ -240,7 +239,7 @@ impl<'a> BytecodeRunner<'a> {
     }
 
     #[inline(always)]
-    async unsafe fn run_call_function(&mut self, ctx: &dyn Context) -> Result<(), Error> {
+    async unsafe fn run_call_function(&mut self) -> Result<(), Error> {
         let function_index = unsafe { self.read_u32() };
         let argument_count = unsafe { self.read_u32() };
 
@@ -253,113 +252,21 @@ impl<'a> BytecodeRunner<'a> {
 
         let args = unsafe { self.pop_stack_top_n_unchecked(argument_count as usize) };
 
-        if let Some(expr_fn) = ctx.get_fn(&function.name) {
-            let result = expr_fn.call(crate::ctx::ExprFnContext { args }).await?;
-            self.stack.push(result);
-        } else {
-            match function.name.as_str() {
-                "matches" => unsafe { self.run_call_function_matches(&args)? },
-                "type" => unsafe { self.run_call_function_type(&args)? },
-                _ => {
-                    return Err(Error::NoSuchFunction {
-                        function: function.name.clone(),
-                    });
-                }
-            }
-        }
+        let func = self.env.get_function(&function.name)?;
+        let result = func
+            .call(FunctionContext {
+                env: &self.env,
+                args: &args,
+            })
+            .await?;
 
-        Ok(())
-    }
-
-    unsafe fn run_call_function_matches(&mut self, args: &[Value]) -> Result<(), Error> {
-        if args.len() != 2 {
-            return Err(Error::InvalidArgumentCountForFunction {
-                function: "matches".to_string(),
-                expected: 2,
-                got: args.len(),
-            });
-        }
-
-        let (text, pattern) = (&args[0], &args[1]);
-        let text = match text {
-            Value::Str(s) => s,
-            _ => {
-                return Err(Error::InvalidArgumentTypeForFunction {
-                    function: "matches".to_string(),
-                    index: 0,
-                    expected: ValueType::Str,
-                    got: text.typ(),
-                });
-            }
-        };
-        let pattern = match pattern {
-            Value::Str(s) => s,
-            _ => {
-                return Err(Error::InvalidArgumentTypeForFunction {
-                    function: "matches".to_string(),
-                    index: 1,
-                    expected: ValueType::Str,
-                    got: pattern.typ(),
-                });
-            }
-        };
-
-        let cache = self
-            .evaler_cache
-            .lock()
-            .map_err(|e| Error::Internal(format!("failed to lock evaler cache: {e}")))?;
-        let pattern_regex = cache.cached_regex.get(pattern.as_str());
-        drop(cache);
-        let matches = match pattern_regex {
-            Some(pattern) => pattern.is_match(text),
-            None => {
-                let pattern = regex::Regex::new(pattern.as_str());
-                let pattern = match pattern {
-                    Ok(pattern) => pattern,
-                    Err(e) => {
-                        return Err(Error::Internal(format!("failed to compile regex: {e}")));
-                    }
-                };
-                let pattern_arc = Arc::new(pattern.clone());
-                let cache = self
-                    .evaler_cache
-                    .lock()
-                    .map_err(|e| Error::Internal(format!("failed to lock evaler cache: {e}")))?;
-                cache
-                    .cached_regex
-                    .insert(pattern.as_str().to_string(), pattern_arc.clone());
-                pattern_arc.is_match(text)
-            }
-        };
-
-        self.stack.push(Value::Bool(matches));
-
-        Ok(())
-    }
-
-    unsafe fn run_call_function_type(&mut self, args: &[Value]) -> Result<(), Error> {
-        if args.len() != 1 {
-            return Err(Error::InvalidArgumentCountForFunction {
-                function: "type".to_string(),
-                expected: 1,
-                got: args.len(),
-            });
-        }
-
-        let result = Value::str(match &args[0].typ() {
-            ValueType::Str => "str",
-            ValueType::I64 => "i64",
-            ValueType::F64 => "f64",
-            ValueType::Bool => "bool",
-            ValueType::Null => "null",
-            ValueType::Array => "array",
-        });
         self.stack.push(result);
+
         Ok(())
     }
 
     #[inline(always)]
-    unsafe fn run_call_method(&mut self) -> Result<(), Error> {
+    async unsafe fn run_call_method(&mut self) -> Result<(), Error> {
         let method_index = unsafe { self.read_u32() };
         let argument_count = unsafe { self.read_u32() };
 
@@ -378,120 +285,18 @@ impl<'a> BytecodeRunner<'a> {
         let obj = unsafe { self.pop_stack_top_unchecked() };
 
         // Call method by the type of the object.
-        let result = match obj {
-            Value::Str(s) => self.run_call_method_str(s, &method.name, &args)?,
-            _ => {
-                return Err(Error::NoSuchMethod {
-                    method: method.name.clone(),
-                    obj_type: obj.typ(),
-                });
-            }
-        };
+        let method = self.env.get_method(&method.name, obj.typ())?;
+        let result = method
+            .call(MethodContext {
+                env: &self.env,
+                obj: &obj,
+                args: &args,
+            })
+            .await?;
 
         self.stack.push(result);
 
         Ok(())
-    }
-
-    #[inline(always)]
-    fn run_call_method_str(
-        &mut self,
-        s: Arc<String>,
-        method: &str,
-        args: &[Value],
-    ) -> Result<Value, Error> {
-        match method {
-            "to_uppercase" => {
-                if !args.is_empty() {
-                    return Err(Error::InvalidArgumentCountForMethod {
-                        method: method.to_string(),
-                        expected: 0,
-                        got: args.len(),
-                    });
-                }
-                Ok(Value::Str(Arc::new(s.to_uppercase())))
-            }
-            "to_lowercase" => {
-                if !args.is_empty() {
-                    return Err(Error::InvalidArgumentCountForMethod {
-                        method: method.to_string(),
-                        expected: 0,
-                        got: args.len(),
-                    });
-                }
-                Ok(Value::Str(Arc::new(s.to_lowercase())))
-            }
-            "contains" => {
-                if args.len() != 1 {
-                    return Err(Error::InvalidArgumentCountForMethod {
-                        method: method.to_string(),
-                        expected: 1,
-                        got: args.len(),
-                    });
-                }
-
-                let arg = match &args[0] {
-                    Value::Str(s) => s,
-                    _ => {
-                        return Err(Error::InvalidArgumentTypeForMethod {
-                            method: method.to_string(),
-                            index: 0,
-                            expected: ValueType::Str,
-                            got: args[0].typ(),
-                        });
-                    }
-                };
-                Ok(Value::Bool(s.contains(arg.as_str())))
-            }
-            "starts_with" => {
-                if args.len() != 1 {
-                    return Err(Error::InvalidArgumentCountForMethod {
-                        method: method.to_string(),
-                        expected: 1,
-                        got: args.len(),
-                    });
-                }
-                let arg = match &args[0] {
-                    Value::Str(s) => s,
-                    _ => {
-                        return Err(Error::InvalidArgumentTypeForMethod {
-                            method: method.to_string(),
-                            index: 0,
-                            expected: ValueType::Str,
-                            got: args[0].typ(),
-                        });
-                    }
-                };
-                Ok(Value::Bool(s.starts_with(arg.as_str())))
-            }
-            "ends_with" => {
-                if args.len() != 1 {
-                    return Err(Error::InvalidArgumentCountForMethod {
-                        method: method.to_string(),
-                        expected: 1,
-                        got: args.len(),
-                    });
-                }
-                let arg = match &args[0] {
-                    Value::Str(s) => s,
-                    _ => {
-                        return Err(Error::InvalidArgumentTypeForMethod {
-                            method: method.to_string(),
-                            index: 0,
-                            expected: ValueType::Str,
-                            got: args[0].typ(),
-                        });
-                    }
-                };
-                Ok(Value::Bool(s.ends_with(arg.as_str())))
-            }
-            _ => {
-                Err(Error::NoSuchMethod {
-                    method: method.to_string(),
-                    obj_type: ValueType::Str,
-                })
-            }
-        }
     }
 
     /// Read a u32 from the bytecode.  And advance the pc by 4.
