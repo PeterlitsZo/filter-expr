@@ -341,7 +341,10 @@ mod tests {
         assert_eq!(
             asm,
             Asm {
-                instructions: vec![AsmInstruction::LoadF64(f64::consts::PI), AsmInstruction::Return],
+                instructions: vec![
+                    AsmInstruction::LoadF64(f64::consts::PI),
+                    AsmInstruction::Return
+                ],
                 ..Default::default()
             }
         );
