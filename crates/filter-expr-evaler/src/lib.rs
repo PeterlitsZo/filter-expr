@@ -6,11 +6,14 @@ mod ast_runner;
 mod bc;
 mod bc_codegen;
 mod bc_runner;
+mod builtin;
+mod callable;
 mod ctx;
 mod error;
 mod value;
 
-use std::sync::{Arc, Mutex};
+use std::collections::BTreeMap;
+use std::sync::{Arc, RwLock};
 
 use filter_expr::{Expr, FilterExpr};
 use moka::sync::Cache;
@@ -19,35 +22,173 @@ use regex::Regex;
 use crate::ast_runner::AstRunner;
 use crate::bc::Bytecode;
 
-pub use crate::ctx::{Context, ExprFn, ExprFnContext, SimpleContext};
+pub use crate::callable::{ArcFunction, Function, FunctionContext};
+pub use crate::callable::{ArcMethod, Method, MethodContext};
+pub use crate::ctx::{Context, SimpleContext};
 pub use crate::error::Error;
 pub use crate::value::{Value, ValueType};
 
-struct FilterExprEvalerCache {
-    /// The cached compiled bytecode.
-    ///
-    /// Used to avoid compiling the same expression multiple times.
-    pub(crate) cached_bytecode: Cache<Expr, Arc<Bytecode>>,
+/// The environment for the filter expression evaluator.
+#[derive(Clone)]
+pub struct FilterExprEvalerEnv {
+    inner: Arc<RwLock<FilterExprEvalerEnvInner>>,
+}
 
+struct FilterExprEvalerEnvInner {
     /// The cached compiled regex.
     ///
     /// It is useful to avoid compiling the same regex multiple times.
-    pub(crate) cached_regex: Cache<String, Arc<Regex>>,
+    cached_regex: Cache<String, Arc<Regex>>,
+
+    /// The functions.
+    functions: BTreeMap<String, ArcFunction>,
+
+    /// The methods.
+    methods: BTreeMap<(String, ValueType), ArcMethod>,
+}
+
+impl FilterExprEvalerEnv {
+    /// Create a new environment.
+    pub(crate) fn new() -> Self {
+        // Initialize the builtin functions.
+        let mut functions: BTreeMap<String, ArcFunction> = BTreeMap::new();
+        functions.insert("matches".to_string(), Arc::new(builtin::FunctionMatches));
+        functions.insert("type".to_string(), Arc::new(builtin::FunctionType));
+
+        // Initialize the builtin methods.
+        let mut methods: BTreeMap<(String, ValueType), ArcMethod> = BTreeMap::new();
+        methods.insert(
+            ("to_uppercase".to_string(), ValueType::Str),
+            Arc::new(builtin::MethodStrToUppercase),
+        );
+        methods.insert(
+            ("to_lowercase".to_string(), ValueType::Str),
+            Arc::new(builtin::MethodStrToLowercase),
+        );
+        methods.insert(
+            ("contains".to_string(), ValueType::Str),
+            Arc::new(builtin::MethodStrContains),
+        );
+        methods.insert(
+            ("starts_with".to_string(), ValueType::Str),
+            Arc::new(builtin::MethodStrStartsWith),
+        );
+        methods.insert(
+            ("ends_with".to_string(), ValueType::Str),
+            Arc::new(builtin::MethodStrEndsWith),
+        );
+
+        let inner = Arc::new(RwLock::new(FilterExprEvalerEnvInner {
+            cached_regex: Cache::new(128),
+            functions,
+            methods,
+        }));
+
+        Self { inner }
+    }
+
+    /// Add a function to the environment.
+    pub(crate) fn add_function(&self, name: String, function: ArcFunction) -> Result<(), Error> {
+        self.inner
+            .write()
+            .map_err(|e| Error::Internal(format!("failed to lock env: {e}")))?
+            .functions
+            .insert(name, function);
+        Ok(())
+    }
+
+    /// Add a method to the environment.
+    pub(crate) fn add_method(
+        &self,
+        name: String,
+        obj_type: ValueType,
+        method: ArcMethod,
+    ) -> Result<(), Error> {
+        self.inner
+            .write()
+            .map_err(|e| Error::Internal(format!("failed to lock env: {e}")))?
+            .methods
+            .insert((name, obj_type), method);
+        Ok(())
+    }
+
+    /// Get a function from the environment.
+    pub(crate) fn get_function(&self, name: &str) -> Result<ArcFunction, Error> {
+        let inner = self
+            .inner
+            .read()
+            .map_err(|e| Error::Internal(format!("failed to lock env: {e}")))?;
+        let function = inner
+            .functions
+            .get(name)
+            .ok_or_else(|| Error::NoSuchFunction {
+                function: name.to_string(),
+            })?;
+        Ok(Arc::clone(function))
+    }
+
+    /// Get a method from the environment.
+    pub(crate) fn get_method(&self, name: &str, obj_type: ValueType) -> Result<ArcMethod, Error> {
+        let inner = self
+            .inner
+            .read()
+            .map_err(|e| Error::Internal(format!("failed to lock env: {e}")))?;
+        let method = inner
+            .methods
+            .get(&(name.to_string(), obj_type))
+            .ok_or_else(|| Error::NoSuchMethod {
+                method: name.to_string(),
+                obj_type,
+            })?;
+        Ok(Arc::clone(method))
+    }
+}
+
+impl FilterExprEvalerEnv {
+    /// Get a regex (if cached, return the cached one; otherwise, compile and
+    /// cache it).
+    pub(crate) fn get_regex(&self, pattern: &str) -> Result<Arc<Regex>, Error> {
+        let inner = self
+            .inner
+            .read()
+            .map_err(|e| Error::Internal(format!("failed to lock env: {e}")))?;
+        let cached_regex = inner.cached_regex.get(pattern);
+        if let Some(cached) = cached_regex {
+            Ok(cached)
+        } else {
+            let regex = Regex::new(pattern)
+                .map_err(|e| Error::Internal(format!("failed to compile regex: {e}")))?;
+            let regex_arc = Arc::new(regex);
+            inner
+                .cached_regex
+                .insert(pattern.to_string(), regex_arc.clone());
+            Ok(regex_arc)
+        }
+    }
 }
 
 pub struct FilterExprEvaler {
-    /// The global cache shared by runners.
-    cache: Arc<Mutex<FilterExprEvalerCache>>,
+    /// The cached compiled bytecode.
+    ///
+    /// Used to avoid compiling the same expression multiple times.
+    cached_bytecode: Cache<Expr, Arc<Bytecode>>,
+
+    /// The global environment shared by runners.
+    env: FilterExprEvalerEnv,
+}
+
+impl Default for FilterExprEvaler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl FilterExprEvaler {
     /// Create a new filter expression evaluator.
     pub fn new() -> Self {
         Self {
-            cache: Arc::new(Mutex::new(FilterExprEvalerCache {
-                cached_bytecode: Cache::new(128),
-                cached_regex: Cache::new(128),
-            })),
+            cached_bytecode: Cache::new(128),
+            env: FilterExprEvalerEnv::new(),
         }
     }
 
@@ -56,30 +197,19 @@ impl FilterExprEvaler {
         self.eval_by_bytecode_runner(filter_expr, ctx).await
     }
 
-    /// Evaluate the filter expression in the given context.
-    pub async fn eval_by_bytecode_runner(&self, filter_expr: &FilterExpr, ctx: &dyn Context) -> Result<bool, Error> {
-        if let Some(expr) = filter_expr.expr() {
-            let value = FilterExprEvalerInner::new(self, expr)
-                .eval_by_bytecode_runner(ctx)
-                .await?;
-            match value {
-                Value::Bool(b) => Ok(b),
-                _ => Err(Error::InvalidValue(format!("{value:?}"))),
-            }
-        } else {
-            Ok(true)
-        }
-    }
-
     /// Evaluate the filter expression using AST runner.
-    pub async fn eval_by_ast_runner(&self, filter_expr: &FilterExpr, ctx: &dyn Context) -> Result<bool, Error> {
+    pub async fn eval_by_ast_runner(
+        &self,
+        filter_expr: &FilterExpr,
+        ctx: &dyn Context,
+    ) -> Result<bool, Error> {
         if let Some(expr) = filter_expr.expr() {
-            let value = FilterExprEvalerInner::new(self, expr)
-                .eval_by_ast_runner(ctx)
-                .await?;
+            let ast_runner = AstRunner::new(expr, self.env.clone());
+            let value = ast_runner.run(ctx).await?;
+
             match value {
                 Value::Bool(b) => Ok(b),
-                _ => Err(Error::InvalidValue(format!("{value:?}"))),
+                _ => Err(Error::InvalidValue(format!("{value:?} is not a bool"))),
             }
         } else {
             Ok(true)
@@ -87,194 +217,172 @@ impl FilterExprEvaler {
     }
 
     /// Evaluate the filter expression using bytecode execution.
-    pub async fn eval_by_bytecode(&self, filter_expr: &FilterExpr, ctx: &dyn Context) -> Result<bool, Error> {
+    pub async fn eval_by_bytecode_runner(
+        &self,
+        filter_expr: &FilterExpr,
+        ctx: &dyn Context,
+    ) -> Result<bool, Error> {
         if let Some(expr) = filter_expr.expr() {
-            let value = FilterExprEvalerInner::new(self, expr)
-                .eval_by_bytecode_runner(ctx)
-                .await?;
+            let bytecode = {
+                let cached_bytecode = self.cached_bytecode.get(expr);
+
+                // Check if bytecode is cached, generate if not.
+                if let Some(cached) = cached_bytecode {
+                    cached
+                } else {
+                    // Generate bytecode and cache it.
+                    let asm = asm_codegen::AsmCodegen::new().codegen(expr);
+                    let bytecode = bc_codegen::BytecodeCodegen::new().codegen(asm);
+                    let bytecode_arc = Arc::new(bytecode);
+
+                    self.cached_bytecode
+                        .insert(expr.clone(), bytecode_arc.clone());
+                    bytecode_arc
+                }
+            };
+
+            let runner = bc_runner::BytecodeRunner::new(&bytecode, self.env.clone());
+            let value = unsafe { runner.run(ctx).await }?;
+
             match value {
                 Value::Bool(b) => Ok(b),
-                _ => Err(Error::InvalidValue(format!("{value:?}"))),
+                _ => Err(Error::InvalidValue(format!("{value:?} is not a bool"))),
             }
         } else {
             Ok(true)
         }
     }
-}
 
-struct FilterExprEvalerInner<'a> {
-    evaler: &'a FilterExprEvaler,
-    expr: &'a Expr,
-}
-
-impl<'a> FilterExprEvalerInner<'a> {
-    pub fn new(evaler: &'a FilterExprEvaler, expr: &'a Expr) -> Self {
-        Self { evaler, expr }
+    pub fn add_function(&self, name: String, function: ArcFunction) -> Result<(), Error> {
+        self.env.add_function(name, function)
     }
 
-    /// Evaluate the expression using AST runner.
-    pub async fn eval_by_ast_runner(&self, ctx: &dyn Context) -> Result<Value, Error> {
-        AstRunner::new(self.expr, self.evaler.cache.clone())
-            .run(ctx)
-            .await
-    }
-
-    /// Evaluate the expression using bytecode runner.
-    pub async fn eval_by_bytecode_runner(&self, ctx: &dyn Context) -> Result<Value, Error> {
-        let bytecode = {
-            let cache = self
-                .evaler
-                .cache
-                .lock()
-                .map_err(|e| Error::Internal(format!("failed to lock cache: {e}")))?;
-            
-            // Check if bytecode is cached, generate if not.
-            if let Some(cached) = cache.cached_bytecode.get(self.expr) {
-                cached
-            } else {
-                drop(cache);
-                // Generate bytecode and cache it.
-                let asm = asm_codegen::AsmCodegen::new().codegen(self.expr);
-                let bytecode = bc_codegen::BytecodeCodegen::new().codegen(asm);
-                let bytecode_arc = Arc::new(bytecode);
-                
-                let cache = self
-                    .evaler
-                    .cache
-                    .lock()
-                    .map_err(|e| Error::Internal(format!("failed to lock cache: {e}")))?;
-                cache.cached_bytecode.insert(self.expr.clone(), bytecode_arc.clone());
-                bytecode_arc
-            }
-        };
-
-        let runner = bc_runner::BytecodeRunner::new(&bytecode, self.evaler.cache.clone());
-
-        // Safety: The bytecode is generated by a internal AsmCodegen.
-        unsafe { runner.run(ctx).await }
+    pub fn add_method(
+        &self,
+        name: String,
+        obj_type: ValueType,
+        method: ArcMethod,
+    ) -> Result<(), Error> {
+        self.env.add_method(name, obj_type, method)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::ctx::ExprFn;
+    use crate::callable::Function;
 
     use super::*;
 
     #[tokio::test]
     async fn test_parse_and_then_eval() {
+        let evaler = FilterExprEvaler::new();
+        evaler
+            .add_function("custom_add".to_string(), Arc::new(CustomAddFn))
+            .unwrap();
+
+        macro_rules! parse_and_do_test_cases {
+            ($input:expr, $test_cases:expr $(,)?) => {
+                parse_and_do_test_cases(&evaler, $input, $test_cases).await
+            };
+        }
+
         // Parse the filter-expr:
         //
         //     name = 'John' AND age > 18 AND 1 > 0
         // =====================================================================
-        parse_and_do_test_cases(
+        parse_and_do_test_cases!(
             "name = 'John' AND age > 18 AND 1 > 0",
-            vec![
+            &[
                 (simple_context! { "name": "John", "age": 19 }, true),
                 (simple_context! { "name": "John", "age": 18 }, false),
             ],
-        )
-        .await;
+        );
 
         // Parse the filter-expr:
         //
         //     name = "John" AND age IN [18, 19, 20, 22] AND 1 > 0
         // =====================================================================
-        parse_and_do_test_cases(
+        parse_and_do_test_cases!(
             r#"name = "John" AND age IN [18, 19, 20, 22] AND 1 > 0"#,
-            vec![
+            &[
                 (simple_context! { "name": "John", "age": 19 }, true),
                 (simple_context! { "name": "John", "age": 23 }, false),
             ],
-        )
-        .await;
+        );
 
         // Parse the filter-expr:
         //
         //     matches(name, "^J.*n$")
         // =====================================================================
-        parse_and_do_test_cases(
+        parse_and_do_test_cases!(
             r#"matches(name, "^J.*n$")"#,
-            vec![
+            &[
                 (simple_context! { "name": "John" }, true),
                 (simple_context! { "name": "Jane" }, false),
             ],
-        )
-        .await;
+        );
 
         // Parse the filter-expr:
         //
         //     custom_add(1, 2) = 3
         // =====================================================================
-        fn with_custom_add_fn(mut ctx: SimpleContext) -> SimpleContext {
-            ctx.add_fn("custom_add".to_string(), Box::new(CustomAddFn));
-            ctx
-        }
-        parse_and_do_test_cases(
+        parse_and_do_test_cases!(
             r#"custom_add(a, b) = 3"#,
-            vec![
-                (with_custom_add_fn(simple_context! { "a": 1, "b": 2 }), true),
-                (
-                    with_custom_add_fn(simple_context! { "a": 1, "b": 3 }),
-                    false,
-                ),
+            &[
+                (simple_context! { "a": 1, "b": 2 }, true),
+                (simple_context! { "a": 1, "b": 3 }, false),
             ],
-        )
-        .await;
+        );
 
         // Parse the filter-expr:
         //
         //     name != null
         // =====================================================================
-        parse_and_do_test_cases(
+        parse_and_do_test_cases!(
             r#"name != null"#,
-            vec![
+            &[
                 (simple_context! { "name": Value::Null }, false),
                 (simple_context! { "name": "John" }, true),
             ],
-        )
-        .await;
+        );
 
         // Parse the filter-expr:
         //
         //     open > 1.5 AND age > 17.5 AND age < 18.5 AND is_peter = true
         // =====================================================================
-        parse_and_do_test_cases(
+        parse_and_do_test_cases!(
             r#"open > 1.5 AND age > 17.5 AND age < 18.5 AND is_peter = true"#,
-            vec![(
+            &[(
                 simple_context! { "open": 1.6, "age": 18, "is_peter": true },
                 true,
             )],
-        )
-        .await;
+        );
 
         // Parse the filter-expr:
         //
         //     name.to_uppercase() = 'JOHN'
         // =====================================================================
-        parse_and_do_test_cases(
+        parse_and_do_test_cases!(
             r#"name.to_uppercase() = 'JOHN'"#,
-            vec![
+            &[
                 (simple_context! { "name": "john" }, true),
                 (simple_context! { "name": "Jane" }, false),
                 (simple_context! { "name": "John" }, true),
             ],
-        )
-        .await;
+        );
 
         // Parse the filter-expr:
         //
         //     name.contains('John')
         // =====================================================================
-        parse_and_do_test_cases(
+        parse_and_do_test_cases!(
             r#"name.contains('John')"#,
-            vec![
+            &[
                 (simple_context! { "name": "John" }, true),
                 (simple_context! { "name": "Jane" }, false),
                 (simple_context! { "name": "The John is a good boy." }, true),
             ],
-        )
-        .await;
+        );
 
         // Parse the filter-expr:
         //
@@ -285,108 +393,105 @@ mod tests {
         //     type(open) = 'f64'
         //     type(maybe_i64_or_f64) IN ['i64', 'f64']
         // =====================================================================
-        parse_and_do_test_cases(
+        parse_and_do_test_cases!(
             r#"type(name) = 'str'"#,
-            vec![
+            &[
                 (simple_context! { "name": "John" }, true),
                 (simple_context! { "name": 18 }, false),
                 (simple_context! { "name": Value::Null }, false),
             ],
-        )
-        .await;
+        );
 
-        parse_and_do_test_cases(
+        parse_and_do_test_cases!(
             r#"type(name) = 'null'"#,
-            vec![
+            &[
                 (simple_context! { "name": "John" }, false),
                 (simple_context! { "name": Value::Null }, true),
                 (simple_context! { "name": 18 }, false),
             ],
-        )
-        .await;
+        );
 
-        parse_and_do_test_cases(
+        parse_and_do_test_cases!(
             r#"type(foo.contains('bar')) = 'bool'"#,
-            vec![
+            &[
                 (simple_context! { "foo": "foobar" }, true),
                 (simple_context! { "foo": "bar and foo" }, true),
             ],
-        )
-        .await;
+        );
 
-        parse_and_do_test_cases(
+        parse_and_do_test_cases!(
             r#"type(age) = 'i64'"#,
-            vec![
+            &[
                 (simple_context! { "age": 18 }, true),
                 (simple_context! { "age": 18.5 }, false),
             ],
-        )
-        .await;
+        );
 
-        parse_and_do_test_cases(
+        parse_and_do_test_cases!(
             r#"type(open) = 'f64'"#,
-            vec![
+            &[
                 (simple_context! { "open": 18 }, false),
                 (simple_context! { "open": 18.5 }, true),
                 (simple_context! { "open": "18" }, false),
             ],
-        )
-        .await;
+        );
 
-        parse_and_do_test_cases(
+        parse_and_do_test_cases!(
             r#"type(maybe_i64_or_f64) IN ['i64', 'f64']"#,
-            vec![
+            &[
                 (simple_context! { "maybe_i64_or_f64": 18 }, true),
                 (simple_context! { "maybe_i64_or_f64": 18.5 }, true),
                 (simple_context! { "maybe_i64_or_f64": "18" }, false),
             ],
-        )
-        .await;
+        );
 
         // Parse the filter-expr:
         //
         //     name.starts_with('J')
         //     name.ends_with('n')
         // =====================================================================
-        parse_and_do_test_cases(
+        parse_and_do_test_cases!(
             r#"name.starts_with('J')"#,
-            vec![
+            &[
                 (simple_context! { "name": "John" }, true),
                 (simple_context! { "name": "Peterlits" }, false),
             ],
-        )
-        .await;
+        );
 
-        parse_and_do_test_cases(
+        parse_and_do_test_cases!(
             r#"name.ends_with('n')"#,
-            vec![
+            &[
                 (simple_context! { "name": "John" }, true),
                 (simple_context! { "name": "Jane" }, false),
             ],
-        )
-        .await;
+        );
     }
 
-    async fn parse_and_do_test_cases(input: &str, test_cases: Vec<(SimpleContext, bool)>) {
+    async fn parse_and_do_test_cases(
+        evaler: &FilterExprEvaler,
+        input: &str,
+        test_cases: &[(SimpleContext, bool)],
+    ) {
         let filter_expr =
             FilterExpr::parse(input).unwrap_or_else(|_| panic!("failed to parse: {input}"));
-        let evaler = FilterExprEvaler::new();
 
         for (ctx, expected) in test_cases {
             let result = evaler
-                .eval_by_bytecode_runner(&filter_expr, &ctx)
+                .eval_by_bytecode_runner(&filter_expr, ctx)
                 .await
-                .unwrap_or_else(|_| panic!("failed to eval by bytecode runner: {input}"));
+                .unwrap_or_else(|e| {
+                    panic!("failed to eval by bytecode runner (input={input}): {e}")
+                });
             assert_eq!(
-                result, expected,
+                result, *expected,
                 "{input} failed with context with bytecode runner {ctx:?}"
             );
             let result = evaler
-                .eval_by_ast_runner(&filter_expr, &ctx)
+                .eval_by_ast_runner(&filter_expr, ctx)
                 .await
-                .unwrap_or_else(|_| panic!("failed to eval by ast runner: {input}"));
+                .unwrap_or_else(|e| panic!("failed to eval by ast runner (input={input}): {e}"));
             assert_eq!(
-                result, expected,
+                result, *expected,
                 "{input} failed with context with ast runner {ctx:?}"
             );
         }
@@ -395,8 +500,8 @@ mod tests {
     struct CustomAddFn;
 
     #[async_trait::async_trait]
-    impl ExprFn for CustomAddFn {
-        async fn call(&self, ctx: ExprFnContext) -> Result<Value, Error> {
+    impl Function for CustomAddFn {
+        async fn call(&self, ctx: FunctionContext<'_, '_>) -> Result<Value, Error> {
             if ctx.args.len() != 2 {
                 return Err(Error::InvalidArgumentCountForFunction {
                     function: "custom_add".to_string(),

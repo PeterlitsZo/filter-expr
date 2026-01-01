@@ -1,21 +1,19 @@
-use std::sync::{Arc, Mutex};
-
 use filter_expr::Expr;
 
-use crate::{Context, Error, ExprFnContext, FilterExprEvalerCache, Value, ValueType};
+use crate::{Context, Error, FilterExprEvalerEnv, FunctionContext, MethodContext, Value};
 
 /// A runner for executing AST.
 pub(crate) struct AstRunner<'a> {
     /// The expr (AST) to run.
     expr: &'a Expr,
-    /// The evaler cache.
-    evaler_cache: Arc<Mutex<FilterExprEvalerCache>>,
+    /// The evaler environment.
+    env: FilterExprEvalerEnv,
 }
 
 impl<'a> AstRunner<'a> {
     /// Create a new AST runner from expr.
-    pub(crate) fn new(expr: &'a Expr, evaler_cache: Arc<Mutex<FilterExprEvalerCache>>) -> Self {
-        Self { expr, evaler_cache }
+    pub(crate) fn new(expr: &'a Expr, env: FilterExprEvalerEnv) -> Self {
+        Self { expr, env }
     }
 
     /// Run the expr and return the result.
@@ -158,7 +156,10 @@ impl<'a> AstRunner<'a> {
                 let value = Box::pin(self.eval_expr(expr, ctx)).await?;
                 match value {
                     Value::Bool(b) => Ok(Value::Bool(!b)),
-                    _ => Err(Error::TypeMismatch(format!("{value:?}"), "bool".to_string())),
+                    _ => Err(Error::TypeMismatch(
+                        format!("{value:?}"),
+                        "bool".to_string(),
+                    )),
                 }
             }
         }
@@ -179,20 +180,15 @@ impl<'a> AstRunner<'a> {
 
         // Get the function to call.
         let func_name = func;
-        let func = ctx.get_fn(func);
+        let func = self.env.get_function(func_name)?;
 
         // Call the function or call the builtin function.
-        if let Some(func) = func {
-            return func.call(ExprFnContext { args: args_values }).await;
-        } else {
-            match func_name {
-                "matches" => self.eval_builtin_func_call_matches(&args_values).await,
-                "type" => self.eval_builtin_func_call_type(&args_values).await,
-                _ => Err(Error::NoSuchFunction {
-                    function: func_name.to_string(),
-                }),
-            }
-        }
+        return func
+            .call(FunctionContext {
+                env: &self.env,
+                args: &args_values,
+            })
+            .await;
     }
 
     async fn eval_method_call(
@@ -203,109 +199,22 @@ impl<'a> AstRunner<'a> {
         ctx: &dyn Context,
     ) -> Result<Value, Error> {
         let obj_value = Box::pin(self.eval_expr(obj, ctx)).await?;
-        match obj_value {
-            Value::Str(s) => match method {
-                "to_uppercase" => {
-                    if !args.is_empty() {
-                        return Err(Error::InvalidArgumentCountForMethod {
-                            method: method.to_string(),
-                            expected: 0,
-                            got: args.len(),
-                        });
-                    }
-                    Ok(Value::str(s.to_uppercase()))
-                }
-                "to_lowercase" => {
-                    if !args.is_empty() {
-                        return Err(Error::InvalidArgumentCountForMethod {
-                            method: method.to_string(),
-                            expected: 0,
-                            got: args.len(),
-                        });
-                    }
-                    Ok(Value::str(s.to_lowercase()))
-                }
-                "contains" => {
-                    if args.len() != 1 {
-                        return Err(Error::InvalidArgumentCountForMethod {
-                            method: method.to_string(),
-                            expected: 1,
-                            got: args.len(),
-                        });
-                    }
-                    let arg = Box::pin(self.eval_expr(&args[0], ctx)).await?;
-                    let arg = match arg {
-                        Value::Str(s) => s,
-                        _ => {
-                            return Err(Error::InvalidArgumentTypeForMethod {
-                                method: method.to_string(),
-                                index: 0,
-                                expected: ValueType::Str,
-                                got: arg.typ(),
-                            });
-                        }
-                    };
-
-                    Ok(Value::bool(s.contains(arg.as_str())))
-                }
-                "starts_with" => {
-                    if args.len() != 1 {
-                        return Err(Error::InvalidArgumentCountForMethod {
-                            method: method.to_string(),
-                            expected: 1,
-                            got: args.len(),
-                        });
-                    }
-
-                    let arg = Box::pin(self.eval_expr(&args[0], ctx)).await?;
-                    let arg = match arg {
-                        Value::Str(s) => s,
-                        _ => {
-                            return Err(Error::InvalidArgumentTypeForMethod {
-                                method: method.to_string(),
-                                index: 0,
-                                expected: ValueType::Str,
-                                got: arg.typ(),
-                            });
-                        }
-                    };
-
-                    Ok(Value::bool(s.starts_with(arg.as_str())))
-                }
-                "ends_with" => {
-                    if args.len() != 1 {
-                        return Err(Error::InvalidArgumentCountForMethod {
-                            method: method.to_string(),
-                            expected: 1,
-                            got: args.len(),
-                        });
-                    }
-
-                    let arg = Box::pin(self.eval_expr(&args[0], ctx)).await?;
-                    let arg = match arg {
-                        Value::Str(s) => s,
-                        _ => {
-                            return Err(Error::InvalidArgumentTypeForMethod {
-                                method: method.to_string(),
-                                index: 0,
-                                expected: ValueType::Str,
-                                got: arg.typ(),
-                            });
-                        }
-                    };
-
-                    Ok(Value::bool(s.ends_with(arg.as_str())))
-                }
-                _ => Err(Error::NoSuchMethod {
-                    method: method.to_string(),
-                    obj_type: ValueType::Str,
-                }),
-            },
-            _ => Err(Error::NoSuchMethod {
-                method: method.to_string(),
-                obj_type: obj_value.typ(),
-            }),
+        let mut args_values = vec![];
+        for arg in args {
+            let value = Box::pin(self.eval_expr(arg, ctx)).await?;
+            args_values.push(value);
         }
+
+        let method = self.env.get_method(method, obj_value.typ())?;
+
+        let result = method
+            .call(MethodContext {
+                env: &self.env,
+                obj: &obj_value,
+                args: &args_values,
+            })
+            .await?;
+        Ok(result)
     }
 
     async fn eval_array(&self, array: &[Expr], ctx: &dyn Context) -> Result<Value, Error> {
@@ -315,81 +224,5 @@ impl<'a> AstRunner<'a> {
             values.push(value);
         }
         Ok(Value::array(values))
-    }
-
-    async fn eval_builtin_func_call_matches(&self, args: &[Value]) -> Result<Value, Error> {
-        if args.len() != 2 {
-            return Err(Error::InvalidArgumentCountForFunction {
-                function: "matches".to_string(),
-                expected: 2,
-                got: args.len(),
-            });
-        }
-        let text = match &args[0] {
-            Value::Str(s) => s,
-            _ => {
-                return Err(Error::InvalidArgumentTypeForFunction {
-                    function: "matches".to_string(),
-                    index: 0,
-                    expected: ValueType::Str,
-                    got: args[0].typ(),
-                });
-            }
-        };
-        let pattern = match &args[1] {
-            Value::Str(s) => s,
-            _ => {
-                return Err(Error::InvalidArgumentTypeForFunction {
-                    function: "matches".to_string(),
-                    index: 1,
-                    expected: ValueType::Str,
-                    got: args[1].typ(),
-                });
-            }
-        };
-        let cache = self
-            .evaler_cache
-            .lock()
-            .map_err(|e| Error::Internal(format!("failed to lock evaler cache: {e}")))?;
-        let pattern_regex = cache.cached_regex.get(pattern.as_str());
-        drop(cache);
-
-        let matches = match pattern_regex {
-            Some(pattern) => pattern.is_match(text),
-            None => {
-                let pattern = regex::Regex::new(pattern.as_str())
-                    .map_err(|e| Error::Internal(format!("failed to compile regex: {e}")))?;
-                let pattern_arc = Arc::new(pattern.clone());
-                let cache = self
-                    .evaler_cache
-                    .lock()
-                    .map_err(|e| Error::Internal(format!("failed to lock evaler cache: {e}")))?;
-                cache
-                    .cached_regex
-                    .insert(pattern.as_str().to_string(), pattern_arc.clone());
-                pattern_arc.is_match(text)
-            }
-        };
-
-        Ok(Value::Bool(matches))
-    }
-
-    async fn eval_builtin_func_call_type(&self, args: &[Value]) -> Result<Value, Error> {
-        if args.len() != 1 {
-            return Err(Error::InvalidArgumentCountForFunction {
-                function: "type".to_string(),
-                expected: 1,
-                got: args.len(),
-            });
-        }
-
-        Ok(Value::str(match args[0].typ() {
-            ValueType::Str => "str",
-            ValueType::I64 => "i64",
-            ValueType::F64 => "f64",
-            ValueType::Bool => "bool",
-            ValueType::Null => "null",
-            ValueType::Array => "array",
-        }))
     }
 }
