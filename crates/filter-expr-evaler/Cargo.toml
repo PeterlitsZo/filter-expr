@@ -1,12 +1,12 @@
 [package]
 name = "filter-expr-evaler"
 description = "Evaluator for filter expressions."
-version = "0.1.10"
+version = "0.1.11"
 edition.workspace = true
 license.workspace = true
 
 [dependencies]
-filter-expr = { path = "../filter-expr", version = "0.1.10" }
+filter-expr = { path = "../filter-expr", version = "0.1.11" }
 
 async-trait.workspace = true
 thiserror.workspace = true
