@@ -46,6 +46,7 @@ version = "0.1.10"
 dependencies = [
  "async-trait",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]

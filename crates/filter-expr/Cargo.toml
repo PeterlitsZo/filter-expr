@@ -8,3 +8,6 @@ license.workspace = true
 [dependencies]
 async-trait.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+tokio = { version = "1.48.0", features = ["full"] }

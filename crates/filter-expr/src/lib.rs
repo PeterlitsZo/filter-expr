@@ -42,10 +42,13 @@ impl FilterExpr {
     }
 
     /// Transform the filter expression.
-    pub fn transform<F: Transform>(self, transformer: &mut F) -> Self {
-        Self {
-            expr: self.expr.map(|expr| expr.transform(transformer)),
-        }
+    pub async fn transform<F: Transform>(self, transformer: &mut F) -> Result<Self, Error> {
+        Ok(Self {
+            expr: match self.expr {
+                Some(expr) => Some(expr.transform(transformer).await?),
+                None => None,
+            },
+        })
     }
 }
 
