@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use chrono::{DateTime, FixedOffset};
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     /// The string value.
@@ -15,6 +17,9 @@ pub enum Value {
 
     /// The array value.
     Array(Arc<Vec<Value>>),
+
+    /// The datetime value.
+    DateTime(DateTime<FixedOffset>),
 }
 
 impl PartialOrd for Value {
@@ -30,6 +35,8 @@ impl PartialOrd for Value {
             (Value::I64(a), Value::F64(b)) => (*a as f64).partial_cmp(b),
 
             (Value::Array(a), Value::Array(b)) => a.partial_cmp(b),
+
+            (Value::DateTime(a), Value::DateTime(b)) => a.partial_cmp(b),
 
             (Value::Null, _) => Some(std::cmp::Ordering::Greater),
             (_, Value::Null) => Some(std::cmp::Ordering::Less),
@@ -100,6 +107,10 @@ impl Value {
         Value::Array(Arc::new(items.into().into_iter().collect()))
     }
 
+    pub fn datetime(dt: impl Into<DateTime<FixedOffset>>) -> Self {
+        Value::DateTime(dt.into())
+    }
+
     pub fn typ(&self) -> ValueType {
         match self {
             Value::Str(_) => ValueType::Str,
@@ -107,7 +118,10 @@ impl Value {
             Value::F64(_) => ValueType::F64,
             Value::Bool(_) => ValueType::Bool,
             Value::Null => ValueType::Null,
+
             Value::Array(_) => ValueType::Array,
+
+            Value::DateTime(_) => ValueType::DateTime,
         }
     }
 }
@@ -121,6 +135,8 @@ pub enum ValueType {
     Null,
 
     Array,
+
+    DateTime,
 }
 
 #[cfg(test)]

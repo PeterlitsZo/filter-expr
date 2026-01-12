@@ -21,7 +21,7 @@ You can evaluate it by yourself or use the `filter-expr-evaler` crate.
 
 ### Filter
 
-```
+```text
 <filter> = <expr> | <empty>
 
 <empty> =
@@ -29,7 +29,7 @@ You can evaluate it by yourself or use the `filter-expr-evaler` crate.
 
 ### Expression
 
-```
+```text
 <expr> = <or_test> ('OR' <or_test>)*
 
 <or_test> = <and_test> ('AND' <and_test>)*
@@ -38,19 +38,29 @@ You can evaluate it by yourself or use the `filter-expr-evaler` crate.
 
 ### Comparison
 
-```
-<comparison> = <primary> <operator> <comparison>
+```text
+<comparison> = <primary> <operator> <primary>
              | <primary>
 
+<operator> = '=' | '>' | '<' | '>=' | '<=' | '!=' | 'IN'
+```
+
+### Primary
+
+```text
 <primary> = <func-call>
           | <method-call>
           | <value>
 
-<operator> = '=' | '>' | '<' | '>=' | '<=' | '!=' | 'IN'
-
-<func-call> = <ident> '(' [<value> (',' <value>)* ','?] ')'
+<func-call> = <function-path> '(' [<value> (',' <value>)* ','?] ')'
 <method-call> = <value> '.' <ident> '(' [<value> (',' <value>)* ','?] ')'
 
+<function-path> = <ident> ('::' <ident>)*
+```
+
+### Value
+
+```text
 <value> = <str>
         | <i64>
         | <f64>

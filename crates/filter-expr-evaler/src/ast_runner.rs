@@ -1,4 +1,4 @@
-use filter_expr::Expr;
+use filter_expr::{Expr, FunctionPath};
 
 use crate::{Context, Error, FilterExprEvalerEnv, FunctionContext, MethodContext, Value};
 
@@ -167,7 +167,7 @@ impl<'a> AstRunner<'a> {
 
     async fn eval_func_call(
         &self,
-        func: &str,
+        func: &FunctionPath,
         args: &[Expr],
         ctx: &dyn Context,
     ) -> Result<Value, Error> {

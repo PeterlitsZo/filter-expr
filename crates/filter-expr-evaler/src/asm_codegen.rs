@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use filter_expr::Expr;
+use filter_expr::{Expr, FunctionPath};
 
 use crate::asm::{Asm, AsmFunction, AsmInstruction, AsmLabel, AsmLocal, AsmMethod};
 
@@ -14,7 +14,7 @@ pub(crate) struct AsmCodegen {
 
     locals_map: HashMap<String, u32>,
     str_pool_map: HashMap<String, u32>,
-    functions_map: HashMap<String, u32>,
+    functions_map: HashMap<FunctionPath, u32>,
     methods_map: HashMap<String, u32>,
     label_counter: u32,
 }
@@ -241,7 +241,7 @@ impl AsmCodegen {
         self.instructions.push(AsmInstruction::Not);
     }
 
-    pub(crate) fn codegen_func_call(&mut self, func_name: &str, args: &[Expr]) {
+    pub(crate) fn codegen_func_call(&mut self, func_name: &FunctionPath, args: &[Expr]) {
         for arg in args {
             self.codegen_expr(arg);
         }
@@ -251,8 +251,8 @@ impl AsmCodegen {
             index
         } else {
             let index = self.functions.len() as u32;
-            self.functions_map.insert(func_name.to_string(), index);
-            self.functions.push(AsmFunction::new(func_name.to_string()));
+            self.functions_map.insert(func_name.clone(), index);
+            self.functions.push(AsmFunction::new(func_name.clone()));
             index
         };
 
@@ -768,14 +768,11 @@ mod tests {
     #[test]
     fn test_codegen_func_call() {
         let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::FuncCall(
-            "len".to_string(),
-            vec![Expr::Str("hello".to_string())],
-        ));
+        let asm = asm_codegen.codegen(&Expr::simple_func_call_("len", [Expr::str_("hello")]));
         assert_eq!(
             asm,
             Asm {
-                functions: vec![AsmFunction::new("len")],
+                functions: vec![AsmFunction::new(FunctionPath::new_simple("len"))],
                 str_pool: vec![Arc::new("hello".to_string())],
                 instructions: vec![
                     AsmInstruction::LoadString(0),
@@ -785,19 +782,30 @@ mod tests {
                 ..Default::default()
             }
         );
+
+        let asm_codegen = AsmCodegen::new();
+        let asm = asm_codegen.codegen(&Expr::namespaced_func_call_(["std", "time", "now"], []));
+        assert_eq!(
+            asm,
+            Asm {
+                functions: vec![AsmFunction::new(FunctionPath::new_namespaced(["std", "time", "now"]))],
+                instructions: vec![AsmInstruction::CallFunction(0, 0), AsmInstruction::Return],
+                ..Default::default()
+            }
+        );
     }
 
     #[test]
     fn test_codegen_func_call_multiple_args() {
         let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::FuncCall(
-            "substr".to_string(),
-            vec![Expr::Str("hello".to_string()), Expr::I64(0), Expr::I64(3)],
+        let asm = asm_codegen.codegen(&Expr::simple_func_call_(
+            "substr",
+            [Expr::str_("hello"), Expr::i64_(0), Expr::i64_(3)],
         ));
         assert_eq!(
             asm,
             Asm {
-                functions: vec![AsmFunction::new("substr")],
+                functions: vec![AsmFunction::new(FunctionPath::new_simple("substr"))],
                 str_pool: vec![Arc::new("hello".to_string())],
                 instructions: vec![
                     AsmInstruction::LoadString(0),
@@ -814,11 +822,11 @@ mod tests {
     #[test]
     fn test_codegen_func_call_no_args() {
         let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::FuncCall("now".to_string(), vec![]));
+        let asm = asm_codegen.codegen(&Expr::simple_func_call_("now", []));
         assert_eq!(
             asm,
             Asm {
-                functions: vec![AsmFunction::new("now")],
+                functions: vec![AsmFunction::new(FunctionPath::new_simple("now"))],
                 instructions: vec![AsmInstruction::CallFunction(0, 0), AsmInstruction::Return],
                 ..Default::default()
             }
@@ -828,17 +836,14 @@ mod tests {
     #[test]
     fn test_codegen_func_call_same_function_twice() {
         let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::FuncCall(
-            "len".to_string(),
-            vec![Expr::FuncCall(
-                "len".to_string(),
-                vec![Expr::Str("test".to_string())],
-            )],
+        let asm = asm_codegen.codegen(&Expr::simple_func_call_(
+            "len",
+            [Expr::simple_func_call_("len", [Expr::str_("test")])],
         ));
         assert_eq!(
             asm,
             Asm {
-                functions: vec![AsmFunction::new("len")],
+                functions: vec![AsmFunction::new(FunctionPath::new_simple("len"))],
                 str_pool: vec![Arc::new("test".to_string())],
                 instructions: vec![
                     AsmInstruction::LoadString(0),
@@ -954,16 +959,13 @@ mod tests {
     fn test_codegen_func_call_in_comparison() {
         let asm_codegen = AsmCodegen::new();
         let asm = asm_codegen.codegen(&Expr::Gt(
-            Box::new(Expr::FuncCall(
-                "len".to_string(),
-                vec![Expr::Str("hello".to_string())],
-            )),
+            Box::new(Expr::simple_func_call_("len", [Expr::str_("hello")])),
             Box::new(Expr::I64(3)),
         ));
         assert_eq!(
             asm,
             Asm {
-                functions: vec![AsmFunction::new("len")],
+                functions: vec![AsmFunction::new(FunctionPath::new_simple("len"))],
                 str_pool: vec![Arc::new("hello".to_string())],
                 instructions: vec![
                     AsmInstruction::LoadString(0),

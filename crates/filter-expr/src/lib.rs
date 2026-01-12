@@ -9,7 +9,7 @@ mod transform;
 use std::fmt::Debug;
 
 pub use error::Error;
-pub use expr::Expr;
+pub use expr::{Expr, FunctionPath};
 pub use transform::{Transform, TransformContext, TransformResult};
 
 /// The filter expression.
