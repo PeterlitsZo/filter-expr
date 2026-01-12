@@ -31,6 +31,11 @@ impl FilterExpr {
         Ok(Self { expr: Some(expr) })
     }
 
+    /// Check if the filter expression is empty.
+    pub fn is_empty(&self) -> bool {
+        self.expr.is_none()
+    }
+
     /// Create a new filter expression with the given expression.
     pub fn new(expr: Option<Expr>) -> Self {
         Self { expr }
