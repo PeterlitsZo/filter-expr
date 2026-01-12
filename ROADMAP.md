@@ -23,10 +23,13 @@
   - [ ] `strip_prefix`
   - [ ] `strip_suffix`
 
-- [ ] Support the `DateTime` type.
-- [ ] Support the `DateTime::from_rfc3339` function to create a `DateTime` value
+- [x] Support the `DateTime` type.
+- [x] Support the `DateTime::from_rfc3339` function to create a `DateTime` value
       by given RFC 3339 string. Like
       `DateTime::from_rfc3339("2025-01-01T00:00:00Z")`.
+- [ ] Support the `DateTime::from_timestamp` function to create a `DateTime` value
+      by given timestamp. Like
+      `DateTime::from_timestamp(1714732800)`.
 - [ ] Support compare two `DateTime` values.
 - [ ] Support those methods for `DateTime`:
 
@@ -77,3 +80,4 @@
 - [ ] Support the regex! Like `regex("foobar")` to create a regex value.
       (I think maybe we can use the syntax `/foobar/` or `r"foobar"` to create
       the regex value -- but maybe not a good idea.)
+- [ ] The `filter-expr`'s `Error` type should be more structured.

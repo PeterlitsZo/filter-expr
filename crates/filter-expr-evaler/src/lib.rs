@@ -15,7 +15,7 @@ mod value;
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 
-use filter_expr::{Expr, FilterExpr};
+use filter_expr::{Expr, FilterExpr, FunctionPath};
 use moka::sync::Cache;
 use regex::Regex;
 
@@ -41,7 +41,7 @@ struct FilterExprEvalerEnvInner {
     cached_regex: Cache<String, Arc<Regex>>,
 
     /// The functions.
-    functions: BTreeMap<String, ArcFunction>,
+    functions: BTreeMap<FunctionPath, ArcFunction>,
 
     /// The methods.
     methods: BTreeMap<(String, ValueType), ArcMethod>,
@@ -51,9 +51,19 @@ impl FilterExprEvalerEnv {
     /// Create a new environment.
     pub(crate) fn new() -> Self {
         // Initialize the builtin functions.
-        let mut functions: BTreeMap<String, ArcFunction> = BTreeMap::new();
-        functions.insert("matches".to_string(), Arc::new(builtin::FunctionMatches));
-        functions.insert("type".to_string(), Arc::new(builtin::FunctionType));
+        let mut functions: BTreeMap<FunctionPath, ArcFunction> = BTreeMap::new();
+        functions.insert(
+            FunctionPath::new_simple("matches"),
+            Arc::new(builtin::FunctionMatches),
+        );
+        functions.insert(
+            FunctionPath::new_simple("type"),
+            Arc::new(builtin::FunctionType),
+        );
+        functions.insert(
+            FunctionPath::new_namespaced(["DateTime", "from_rfc3339"]),
+            Arc::new(builtin::FunctionDatetimeFromRfc3339),
+        );
 
         // Initialize the builtin methods.
         let mut methods: BTreeMap<(String, ValueType), ArcMethod> = BTreeMap::new();
@@ -88,7 +98,11 @@ impl FilterExprEvalerEnv {
     }
 
     /// Add a function to the environment.
-    pub(crate) fn add_function(&self, name: String, function: ArcFunction) -> Result<(), Error> {
+    pub(crate) fn add_function(
+        &self,
+        name: FunctionPath,
+        function: ArcFunction,
+    ) -> Result<(), Error> {
         self.inner
             .write()
             .map_err(|e| Error::Internal(format!("failed to lock env: {e}")))?
@@ -113,7 +127,7 @@ impl FilterExprEvalerEnv {
     }
 
     /// Get a function from the environment.
-    pub(crate) fn get_function(&self, name: &str) -> Result<ArcFunction, Error> {
+    pub(crate) fn get_function(&self, name: &FunctionPath) -> Result<ArcFunction, Error> {
         let inner = self
             .inner
             .read()
@@ -253,7 +267,7 @@ impl FilterExprEvaler {
         }
     }
 
-    pub fn add_function(&self, name: String, function: ArcFunction) -> Result<(), Error> {
+    pub fn add_function(&self, name: FunctionPath, function: ArcFunction) -> Result<(), Error> {
         self.env.add_function(name, function)
     }
 
@@ -269,6 +283,8 @@ impl FilterExprEvaler {
 
 #[cfg(test)]
 mod tests {
+    use chrono::DateTime;
+
     use crate::callable::Function;
 
     use super::*;
@@ -277,7 +293,10 @@ mod tests {
     async fn test_parse_and_then_eval() {
         let evaler = FilterExprEvaler::new();
         evaler
-            .add_function("custom_add".to_string(), Arc::new(CustomAddFn))
+            .add_function(
+                FunctionPath::new_simple("custom_add"),
+                Arc::new(CustomAddFn),
+            )
             .unwrap();
 
         macro_rules! parse_and_do_test_cases {
@@ -463,6 +482,66 @@ mod tests {
             &[
                 (simple_context! { "name": "John" }, true),
                 (simple_context! { "name": "Jane" }, false),
+            ],
+        );
+
+        // Parse the filter-expr:
+        //
+        //     DateTime::from_rfc3339(started_at) > DateTime::from_rfc3339("2026-01-01T00:00:00+08:00")
+        // =====================================================================
+        parse_and_do_test_cases!(
+            r#"DateTime::from_rfc3339(started_at) > DateTime::from_rfc3339("2026-01-01T00:00:00+08:00")"#,
+            &[
+                (
+                    simple_context! { "started_at": "2026-10-01T00:00:00+08:00" },
+                    true
+                ),
+                (
+                    simple_context! { "started_at": "2026-01-05T12:00:00+08:00" },
+                    true
+                ),
+                (
+                    simple_context! { "started_at": "2026-01-01T00:00:00+08:00" },
+                    false
+                ),
+                (
+                    simple_context! { "started_at": "2026-01-01T00:00:00Z" },
+                    true
+                ),
+                (
+                    simple_context! { "started_at": "2025-12-31T23:59:59+08:00" },
+                    false
+                ),
+            ],
+        );
+
+        // Parse the filter-expr:
+        //
+        //     started_at > DateTime::from_rfc3339("2026-01-01T00:00:00+08:00")
+        // =====================================================================
+        fn parse_rfc3339_as_datetime(s: &str) -> Value {
+            Value::datetime(DateTime::parse_from_rfc3339(s).unwrap())
+        }
+
+        parse_and_do_test_cases!(
+            r#"started_at >= DateTime::from_rfc3339("2026-01-01T00:00:00+08:00") AND started_at < DateTime::from_rfc3339("2026-01-02T00:00:00+08:00")"#,
+            &[
+                (
+                    simple_context! { "started_at": parse_rfc3339_as_datetime("2025-12-31T23:59:59+08:00") },
+                    false
+                ),
+                (
+                    simple_context! { "started_at": parse_rfc3339_as_datetime("2026-01-01T00:00:00+08:00") },
+                    true
+                ),
+                (
+                    simple_context! { "started_at": parse_rfc3339_as_datetime("2026-01-01T12:00:00+08:00") },
+                    true
+                ),
+                (
+                    simple_context! { "started_at": parse_rfc3339_as_datetime("2026-01-02T00:00:00+08:00") },
+                    false
+                ),
             ],
         );
     }

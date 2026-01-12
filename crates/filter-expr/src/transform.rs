@@ -110,6 +110,8 @@ mod tests {
         mod foo {
             use std::time::Duration;
 
+            use crate::FunctionPath;
+
             use super::*;
 
             pub struct FooTransformer;
@@ -127,7 +129,7 @@ mod tests {
             impl Transform for FooTransformer {
                 async fn transform(&mut self, expr: Expr, _ctx: TransformContext) -> TransformResult {
                     TransformResult::Continue(match expr {
-                        Expr::FuncCall(fn_name, args) if fn_name == "is_not_bad" => {
+                        Expr::FuncCall(fn_name, args) if fn_name == FunctionPath::Simple("is_not_bad".to_string()) => {
                             if args.len() != 1 {
                                 return TransformResult::Err(Box::new(Error::UnexpectedArgumentsLength {
                                     expected: 1,
@@ -153,8 +155,8 @@ mod tests {
         }
 
         let expr = Expr::and_([
-            Expr::func_call_("is_not_bad", vec![Expr::field_("magic")]),
-            Expr::func_call_("is_not_bad", vec![Expr::field_("foobar")]),
+            Expr::simple_func_call_("is_not_bad", vec![Expr::field_("magic")]),
+            Expr::simple_func_call_("is_not_bad", vec![Expr::field_("foobar")]),
         ]);
 
         let mut transformer = foo::FooTransformer;

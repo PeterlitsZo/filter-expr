@@ -1,6 +1,8 @@
 use core::fmt;
 use std::sync::Arc;
 
+use filter_expr::FunctionPath;
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub(crate) struct Asm {
     pub(crate) locals: Vec<AsmLocal>,
@@ -25,11 +27,11 @@ impl AsmLocal {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct AsmFunction {
-    pub(crate) name: String,
+    pub(crate) name: FunctionPath,
 }
 
 impl AsmFunction {
-    pub(crate) fn new(name: impl Into<String>) -> Self {
+    pub(crate) fn new(name: FunctionPath) -> Self {
         Self { name: name.into() }
     }
 }

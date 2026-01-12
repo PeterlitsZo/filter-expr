@@ -1,3 +1,5 @@
+use chrono::DateTime;
+
 use crate::{Error, Function, FunctionContext, Value, ValueType};
 
 pub(crate) struct FunctionMatches;
@@ -64,6 +66,38 @@ impl Function for FunctionType {
             ValueType::Bool => "bool",
             ValueType::Null => "null",
             ValueType::Array => "array",
+            ValueType::DateTime => "DateTime",
         }))
+    }
+}
+
+pub(crate) struct FunctionDatetimeFromRfc3339;
+
+#[async_trait::async_trait]
+impl Function for FunctionDatetimeFromRfc3339 {
+    async fn call(&self, ctx: FunctionContext<'_, '_>) -> Result<Value, Error> {
+        if ctx.args.len() != 1 {
+            return Err(Error::InvalidArgumentCountForFunction {
+                function: "datetime_from_rfc3339".to_string(),
+                expected: 1,
+                got: ctx.args.len(),
+            });
+        }
+
+        let s = match &ctx.args[0] {
+            Value::Str(s) => s,
+            _ => {
+                return Err(Error::InvalidArgumentTypeForFunction {
+                    function: "datetime_from_rfc3339".to_string(),
+                    index: 0,
+                    expected: ValueType::Str,
+                    got: ctx.args[0].typ(),
+                });
+            }
+        };
+
+        let datetime = DateTime::parse_from_rfc3339(s).map_err(|e| Error::Internal(e.to_string()))?;
+
+        Ok(Value::DateTime(datetime))
     }
 }

@@ -1,4 +1,8 @@
-use crate::{Error, expr::Expr, token::Token};
+use crate::{
+    Error,
+    expr::{Expr, FunctionPath},
+    token::Token,
+};
 
 pub(crate) struct Parser {
     tokens: Vec<Token>,
@@ -121,16 +125,22 @@ impl Parser {
     ///           | <value>
     /// ```
     fn parse_primary(&mut self) -> Result<Expr, Error> {
-        // Try to parse as function call first (ident followed by '(')
+        // Try to parse as function call first (ident followed by '(' or '::')
         if let Some(Token::Ident(name)) = self.peek() {
             let name = name.clone();
             self.advance();
 
+            // Check if it's a namespaced function call.
+            if self.peek() == Some(&Token::DoubleColon) {
+                return self.parse_namespaced_func_call(name);
+            }
+
             if self.peek() == Some(&Token::LParen) {
-                // It's a function call
-                return self.parse_func_call(name);
+                // It's a simple function call.
+                return self.parse_func_call(FunctionPath::Simple(name));
             } else {
-                // It's a field name (value)
+                // It's a field name (value).
+                //
                 // We need to check if it's followed by a method call
                 let value = Expr::field_(name);
                 return self.parse_method_call_chain(value);
@@ -191,7 +201,43 @@ impl Parser {
         }
     }
 
-    fn parse_func_call(&mut self, func_name: String) -> Result<Expr, Error> {
+    fn parse_namespaced_func_call(&mut self, first_segment: String) -> Result<Expr, Error> {
+        // We've already consumed the first ident and seen DoubleColon.
+        //
+        // Build the path looks like: `foo::bar::baz`.
+        let mut path = vec![first_segment];
+
+        loop {
+            // Consume the '::'.
+            if self.peek() != Some(&Token::DoubleColon) {
+                return Err(Error::Parse("expected '::'".to_string()));
+            }
+            self.advance();
+
+            // Parse the next segment.
+            let segment = match self.peek() {
+                Some(Token::Ident(name)) => {
+                    let name = name.clone();
+                    self.advance();
+                    name
+                }
+                _ => {
+                    return Err(Error::Parse("expected identifier after '::'".to_string()));
+                }
+            };
+            path.push(segment);
+
+            // Check if there's another '::' or if we're done
+            if self.peek() != Some(&Token::DoubleColon) {
+                break;
+            }
+        }
+
+        // Now parse the function call arguments
+        self.parse_func_call(FunctionPath::Namespaced(path))
+    }
+
+    fn parse_func_call(&mut self, func_path: FunctionPath) -> Result<Expr, Error> {
         // Consume the '(' token.
         if self.peek() != Some(&Token::LParen) {
             return Err(Error::Parse("expected '('".to_string()));
@@ -203,7 +249,7 @@ impl Parser {
         // Handle empty argument list.
         if self.peek() == Some(&Token::RParen) {
             self.advance();
-            return Ok(Expr::FuncCall(func_name, args));
+            return Ok(Expr::FuncCall(func_path, args));
         }
 
         // Parse first argument.
@@ -221,11 +267,11 @@ impl Parser {
         }
         self.advance();
 
-        Ok(Expr::FuncCall(func_name, args))
+        Ok(Expr::FuncCall(func_path, args))
     }
 
     fn parse_method_call_chain(&mut self, mut value: Expr) -> Result<Expr, Error> {
-        // Handle method calls: <value> '.' <ident> '(' ... ')'
+        // Handle method calls: ('.' <ident>)* '(' [<value> (',' <value>)* ','?] ')'
         while self.peek() == Some(&Token::Dot) {
             self.advance(); // consume '.'
 
@@ -272,6 +318,7 @@ impl Parser {
 
             value = Expr::MethodCall(method_name, Box::new(value), args);
         }
+
         Ok(value)
     }
 
@@ -367,10 +414,7 @@ mod tests {
         let expr = parser.parse_expr().unwrap();
         assert_eq!(
             expr,
-            Expr::FuncCall(
-                "matches".to_string(),
-                vec![Expr::field_("name"), Expr::str_("^J.*n$"),]
-            )
+            Expr::simple_func_call_("matches", [Expr::field_("name"), Expr::str_("^J.*n$")])
         );
 
         let input = r#"name != null"#;
@@ -386,7 +430,7 @@ mod tests {
         assert_eq!(
             expr,
             Expr::eq_(
-                Expr::method_call_(Expr::field_("name"), "to_uppercase".to_string(), vec![]),
+                Expr::method_call_(Expr::field_("name"), "to_uppercase", []),
                 Expr::str_("JOHN")
             )
         );
@@ -399,9 +443,9 @@ mod tests {
             expr,
             Expr::eq_(
                 Expr::method_call_(
-                    Expr::method_call_(Expr::field_("name"), "to_uppercase".to_string(), vec![]),
-                    "to_lowercase".to_string(),
-                    vec![]
+                    Expr::method_call_(Expr::field_("name"), "to_uppercase", []),
+                    "to_lowercase",
+                    []
                 ),
                 Expr::str_("john")
             )
@@ -413,11 +457,7 @@ mod tests {
         let expr = parser.parse_expr().unwrap();
         assert_eq!(
             expr,
-            Expr::method_call_(
-                Expr::field_("name"),
-                "contains".to_string(),
-                vec![Expr::str_("John")]
-            )
+            Expr::method_call_(Expr::field_("name"), "contains", [Expr::str_("John")])
         );
 
         let input = r#"true OR false"#;
@@ -432,8 +472,8 @@ mod tests {
         let expr = parser.parse_expr().unwrap();
         assert_eq!(
             expr,
-            Expr::or_(vec![
-                Expr::and_(vec![Expr::bool_(true), Expr::bool_(false)]),
+            Expr::or_([
+                Expr::and_([Expr::bool_(true), Expr::bool_(false)]),
                 Expr::bool_(true)
             ])
         );
@@ -498,7 +538,7 @@ mod tests {
         assert_eq!(
             expr,
             Expr::in_(
-                Expr::FuncCall("type".to_string(), vec![Expr::field_("maybe_i64_or_f64")]),
+                Expr::simple_func_call_("type", [Expr::field_("maybe_i64_or_f64")]),
                 Expr::array_([Expr::str_("i64"), Expr::str_("f64")])
             )
         );
@@ -510,15 +550,30 @@ mod tests {
         assert_eq!(
             expr,
             Expr::eq_(
-                Expr::FuncCall(
-                    "type".to_string(),
-                    vec![Expr::method_call_(
+                Expr::simple_func_call_(
+                    "type",
+                    [Expr::method_call_(
                         Expr::field_("foo"),
-                        "contains".to_string(),
-                        vec![Expr::str_("bar")]
+                        "contains",
+                        [Expr::str_("bar")]
                     )]
                 ),
                 Expr::str_("i64")
+            )
+        );
+
+        let input = r#"the_date = DateTime::from_rfc3339("2025-01-01T00:00:00Z")"#;
+        let tokens = parse_token(input).unwrap();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse_expr().unwrap();
+        assert_eq!(
+            expr,
+            Expr::eq_(
+                Expr::field_("the_date"),
+                Expr::namespaced_func_call_(
+                    ["DateTime", "from_rfc3339"],
+                    [Expr::str_("2025-01-01T00:00:00Z")]
+                )
             )
         );
     }

@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use filter_expr::FunctionPath;
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct BytecodeLocal {
     pub(crate) name: String,
@@ -7,7 +9,7 @@ pub(crate) struct BytecodeLocal {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct BytecodeFunction {
-    pub(crate) name: String,
+    pub(crate) name: FunctionPath,
 }
 
 #[derive(Debug, Clone, PartialEq)]

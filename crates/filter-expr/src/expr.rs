@@ -1,7 +1,39 @@
 use std::cmp::Ordering;
+use std::fmt::{self, Display};
 use std::hash::{Hash, Hasher};
 
 use crate::{Error, Transform, TransformContext, TransformResult};
+
+/// A function path, representing how a function is referenced.
+///
+/// This can be either a simple function name (e.g., `"matches"`) or
+/// a namespaced path (e.g., `["DateTime", "from_rfc3339"]`).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum FunctionPath {
+    /// A simple function name without namespace.
+    Simple(String),
+    /// A namespaced function path (e.g., `DateTime::from_rfc3339`).
+    Namespaced(Vec<String>),
+}
+
+impl Display for FunctionPath {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FunctionPath::Simple(name) => write!(f, "{}", name),
+            FunctionPath::Namespaced(path) => write!(f, "{}", path.join("::")),
+        }
+    }
+}
+
+impl FunctionPath {
+    pub fn new_simple<S: Into<String>>(name: S) -> Self {
+        Self::Simple(name.into())
+    }
+
+    pub fn new_namespaced<S: Into<Vec<I>>, I: Into<String>>(path: S) -> Self {
+        Self::Namespaced(path.into().into_iter().map(|i| i.into()).collect())
+    }
+}
 
 /// The expression.
 ///
@@ -16,7 +48,7 @@ pub enum Expr {
     Null,
     Array(Vec<Expr>),
 
-    FuncCall(String, Vec<Expr>),
+    FuncCall(FunctionPath, Vec<Expr>),
     MethodCall(String, Box<Expr>, Vec<Expr>),
 
     Gt(Box<Expr>, Box<Expr>),
@@ -157,10 +189,10 @@ impl Hash for Expr {
             I64(i) => i.hash(state),
             F64(f) => OrderedFloat(*f).hash(state),
             Bool(b) => b.hash(state),
-            Null => {},
+            Null => {}
             Array(v) => v.hash(state),
-            FuncCall(name, args) => {
-                name.hash(state);
+            FuncCall(path, args) => {
+                path.hash(state);
                 args.hash(state);
             }
             MethodCall(method, obj, args) => {
@@ -204,78 +236,112 @@ impl Hash for Expr {
 }
 
 impl Expr {
+    /// Create a new field expression.
     pub fn field_<T: Into<String>>(field: T) -> Self {
         Self::Field(field.into())
     }
 
+    /// Create a new string expression.
     pub fn str_<T: Into<String>>(value: T) -> Self {
         Self::Str(value.into())
     }
 
+    /// Create a new i64 expression.
     pub fn i64_<T: Into<i64>>(value: T) -> Self {
         Self::I64(value.into())
     }
 
+    /// Create a new f64 expression.
     pub fn f64_<T: Into<f64>>(value: T) -> Self {
         Self::F64(value.into())
     }
 
+    /// Create a new bool expression.
     pub fn bool_<T: Into<bool>>(value: T) -> Self {
         Self::Bool(value.into())
     }
 
+    /// Create a new null expression.
     pub fn null_() -> Self {
         Self::Null
     }
 
+    /// Create a new array expression.
     pub fn array_<T: Into<Vec<Expr>>>(value: T) -> Self {
         Self::Array(value.into())
     }
 
-    pub fn func_call_(func: impl Into<String>, args: Vec<Expr>) -> Self {
-        Self::FuncCall(func.into(), args)
+    /// Create a new simple function call expression.
+    pub fn simple_func_call_<F: Into<String>, A: Into<Vec<Expr>>>(func: F, args: A) -> Self {
+        Self::FuncCall(FunctionPath::Simple(func.into()), args.into())
     }
 
-    pub fn method_call_(obj: Expr, method: impl Into<String>, args: Vec<Expr>) -> Self {
-        Self::MethodCall(method.into(), Box::new(obj), args)
+    /// Create a new namespaced function call expression.
+    pub fn namespaced_func_call_<N: Into<Vec<S>>, S: Into<String>, A: Into<Vec<Expr>>>(
+        func: N,
+        args: A,
+    ) -> Self {
+        Self::FuncCall(
+            FunctionPath::Namespaced(func.into().into_iter().map(|s| s.into()).collect()),
+            args.into(),
+        )
     }
 
+    /// Create a new method call expression.
+    pub fn method_call_<M: Into<String>, A: Into<Vec<Expr>>>(
+        obj: Expr,
+        method: M,
+        args: A,
+    ) -> Self {
+        Self::MethodCall(method.into(), Box::new(obj), args.into())
+    }
+
+    /// Create a new greater than expression.
     pub fn gt_(left: Expr, right: Expr) -> Self {
         Self::Gt(Box::new(left), Box::new(right))
     }
 
+    /// Create a new less than expression.
     pub fn lt_(left: Expr, right: Expr) -> Self {
         Self::Lt(Box::new(left), Box::new(right))
     }
 
+    /// Create a new greater than or equal to expression.
     pub fn ge_(left: Expr, right: Expr) -> Self {
         Self::Ge(Box::new(left), Box::new(right))
     }
 
+    /// Create a new less than or equal to expression.
     pub fn le_(left: Expr, right: Expr) -> Self {
         Self::Le(Box::new(left), Box::new(right))
     }
 
+    /// Create a new equal to expression.
     pub fn eq_(left: Expr, right: Expr) -> Self {
         Self::Eq(Box::new(left), Box::new(right))
     }
 
+    /// Create a new not equal to expression.
     pub fn ne_(left: Expr, right: Expr) -> Self {
         Self::Ne(Box::new(left), Box::new(right))
     }
 
+    /// Create a new in expression.
     pub fn in_(left: Expr, right: Expr) -> Self {
         Self::In(Box::new(left), Box::new(right))
     }
 
+    /// Create a new and expression.
     pub fn and_<T: Into<Vec<Expr>>>(value: T) -> Self {
         Self::And(value.into())
     }
 
+    /// Create a new or expression.
     pub fn or_<T: Into<Vec<Expr>>>(value: T) -> Self {
         Self::Or(value.into())
     }
 
+    /// Create a new not expression.
     pub fn not_(self) -> Self {
         Self::Not(Box::new(self))
     }
