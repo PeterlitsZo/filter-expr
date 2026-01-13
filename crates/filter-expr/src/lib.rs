@@ -13,6 +13,7 @@ pub use expr::Expr;
 pub use transform::{Transform, TransformContext, TransformResult};
 
 /// The filter expression.
+#[derive(Clone, PartialEq)]
 pub struct FilterExpr {
     /// The expression of the filter. Possibly empty.
     expr: Option<Expr>,
