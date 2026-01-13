@@ -1,7 +1,7 @@
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("transform the expression: {0}")]
-    Transform(String),
+    Transform(Box<dyn std::error::Error>),
 
     #[error("parse the expression: {0}")]
     Parse(String),

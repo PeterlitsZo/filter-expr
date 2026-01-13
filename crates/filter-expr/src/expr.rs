@@ -1,6 +1,5 @@
-use async_trait::async_trait;
 
-use crate::Error;
+use crate::{Error, Transform, TransformContext, TransformResult};
 
 /// The expression.
 ///
@@ -110,41 +109,6 @@ impl Expr {
     }
 }
 
-/// A trait for transforming AST expressions.
-///
-/// This trait allows you to recursively transform expressions by visiting
-/// all sub-expressions. The `transform` method is called recursively on all
-/// sub-expressions, allowing you to transform the AST in a composable way.
-///
-/// # Example
-///
-/// ```rust
-/// use filter_expr::{Expr, Transform};
-/// use async_trait::async_trait;
-///
-/// struct MyTransformer;
-///
-/// #[async_trait]
-/// impl Transform for MyTransformer {
-///     async fn transform(&mut self, expr: Expr) -> Result<Expr, filter_expr::Error> {
-///         // Transform the expression before recursing
-///         Ok(match expr {
-///             Expr::Field(name) if name == "old_name" => {
-///                 Expr::Field("new_name".to_string())
-///             }
-///             other => other,
-///         })
-///     }
-/// }
-/// ```
-#[async_trait]
-pub trait Transform {
-    /// Transform an expression by recursively transforming all sub-expressions.
-    async fn transform(&mut self, expr: Expr) -> Result<Expr, Error>
-    where
-        Self: Sized;
-}
-
 impl Expr {
     /// Recursively transform an expression using the provided transformer.
     ///
@@ -176,9 +140,32 @@ impl Expr {
     /// # }
     /// ```
     pub async fn transform<F: Transform>(self, transformer: &mut F) -> Result<Expr, Error> {
-        let this = transformer.transform(self).await?;
+        let ctx = TransformContext { depth: 0 };
 
-        Ok(match this {
+        return Self::transform_expr(transformer, self, ctx).await;
+    }
+
+    async fn transform_expr<F: Transform>(transformer: &mut F, expr: Expr, ctx: TransformContext) -> Result<Expr, Error> {
+        let this = transformer.transform(expr, ctx.clone()).await;
+
+        match this {
+            TransformResult::Continue(expr) => {
+                return Box::pin(Self::transform_children(transformer, expr, ctx)).await;
+            }
+            TransformResult::Stop(expr) => {
+                return Ok(expr);
+            }
+            TransformResult::Err(err) => {
+                return Err(Error::Transform(err));
+            }
+        }
+    }
+
+    async fn transform_children<F: Transform>(transformer: &mut F, expr: Expr, mut ctx: TransformContext) -> Result<Expr, Error> {
+        ctx.depth += 1;
+
+        Ok(match expr {
+            // Do nothing if the expression have no children.
             Expr::Field(name) => Expr::Field(name),
             Expr::Str(value) => Expr::Str(value),
             Expr::I64(value) => Expr::I64(value),
@@ -190,168 +177,72 @@ impl Expr {
             Expr::FuncCall(func, args) => {
                 let mut transformed_args = Vec::new();
                 for arg in args {
-                    transformed_args.push(transformer.transform(arg).await?);
+                    transformed_args.push(Self::transform_expr(transformer, arg, ctx.clone()).await?);
                 }
                 Expr::FuncCall(func, transformed_args)
             }
             Expr::MethodCall(method, obj, args) => {
-                let obj = Box::new(transformer.transform(*obj).await?);
+                let obj = Box::new(Self::transform_expr(transformer, *obj, ctx.clone()).await?);
                 let mut transformed_args = Vec::new();
                 for arg in args {
-                    transformed_args.push(transformer.transform(arg).await?);
+                    transformed_args.push(Self::transform_expr(transformer, arg, ctx.clone()).await?);
                 }
                 Expr::MethodCall(method, obj, transformed_args)
             }
 
             Expr::Gt(left, right) => {
-                let left = Box::new(transformer.transform(*left).await?);
-                let right = Box::new(transformer.transform(*right).await?);
+                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
+                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
                 Expr::Gt(left, right)
             }
             Expr::Lt(left, right) => {
-                let left = Box::new(transformer.transform(*left).await?);
-                let right = Box::new(transformer.transform(*right).await?);
+                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
+                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
                 Expr::Lt(left, right)
             }
             Expr::Ge(left, right) => {
-                let left = Box::new(transformer.transform(*left).await?);
-                let right = Box::new(transformer.transform(*right).await?);
+                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
+                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
                 Expr::Ge(left, right)
             }
             Expr::Le(left, right) => {
-                let left = Box::new(transformer.transform(*left).await?);
-                let right = Box::new(transformer.transform(*right).await?);
+                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
+                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
                 Expr::Le(left, right)
             }
             Expr::Eq(left, right) => {
-                let left = Box::new(transformer.transform(*left).await?);
-                let right = Box::new(transformer.transform(*right).await?);
+                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
+                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
                 Expr::Eq(left, right)
             }
             Expr::Ne(left, right) => {
-                let left = Box::new(transformer.transform(*left).await?);
-                let right = Box::new(transformer.transform(*right).await?);
+                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
+                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
                 Expr::Ne(left, right)
             }
             Expr::In(left, right) => {
-                let left = Box::new(transformer.transform(*left).await?);
-                let right = Box::new(transformer.transform(*right).await?);
+                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
+                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
                 Expr::In(left, right)
             }
             Expr::And(exprs) => {
                 let mut transformed_exprs = Vec::new();
                 for e in exprs {
-                    transformed_exprs.push(transformer.transform(e).await?);
+                    transformed_exprs.push(Self::transform_expr(transformer, e, ctx.clone()).await?);
                 }
                 Expr::And(transformed_exprs)
             }
             Expr::Or(exprs) => {
                 let mut transformed_exprs = Vec::new();
                 for e in exprs {
-                    transformed_exprs.push(transformer.transform(e).await?);
+                    transformed_exprs.push(Self::transform_expr(transformer, e, ctx.clone()).await?);
                 }
                 Expr::Or(transformed_exprs)
             }
             Expr::Not(expr) => {
-                let expr = Box::new(transformer.transform(*expr).await?);
+                let expr = Box::new(Self::transform_expr(transformer, *expr, ctx).await?);
                 Expr::Not(expr)
             }
         })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_transform_expr_to_rename_field() {
-        mod rename_field {
-            use super::*;
-
-            pub struct RenameFieldTransformer {
-                pub old_name: String,
-                pub new_name: String,
-            }
-
-            #[async_trait::async_trait]
-            impl Transform for RenameFieldTransformer {
-                async fn transform(&mut self, expr: Expr) -> Result<Expr, Error> {
-                    Ok(match expr {
-                        Expr::Field(name) if name == self.old_name => {
-                            Expr::Field(self.new_name.clone())
-                        }
-                        _ => expr,
-                    })
-                }
-            }
-        }
-
-        let expr = Expr::eq_(
-            Expr::field_("old_name"),
-            Expr::str_("value"),
-        );
-
-        let mut transformer = rename_field::RenameFieldTransformer {
-            old_name: "old_name".to_string(),
-            new_name: "new_name".to_string(),
-        };
-
-        let result = expr.transform(&mut transformer).await.unwrap();
-        assert_eq!(
-            result,
-            Expr::Eq(
-                Box::new(Expr::field_("new_name")),
-                Box::new(Expr::str_("value"))
-            )
-        );
-    }
-
-    #[tokio::test]
-    async fn test_transform_expr_to_load_datas_from_external_datasource() {
-        mod foo {
-            use std::time::Duration;
-
-            use super::*;
-
-            pub struct FooTransformer;
-
-            #[async_trait::async_trait]
-            impl Transform for FooTransformer {
-                async fn transform(&mut self, expr: Expr) -> Result<Expr, Error> {
-                    Ok(match expr {
-                        Expr::FuncCall(fn_name, args) if fn_name == "is_not_bad" => {
-                            if args.len() != 1 {
-                                return Err(Error::Transform("expected 1 argument".to_string()));
-                            }
-                            let datas = load_datas().await;
-                            Expr::In(Box::new(args[0].clone()), Box::new(Expr::Array(datas)))
-                        }
-                        _ => expr,
-                    })
-                }
-            }
-
-            async fn load_datas() -> Vec<Expr> {
-                tokio::time::sleep(Duration::from_millis(100)).await;
-
-                vec![
-                    Expr::Str("foo".to_string()),
-                    Expr::Str("bar".to_string()),
-                ]
-            }
-        }
-
-        let expr = Expr::and_([
-            Expr::func_call_("is_not_bad", vec![Expr::field_("magic")]),
-            Expr::func_call_("is_not_bad", vec![Expr::field_("foobar")]),
-        ]);
-
-        let mut transformer = foo::FooTransformer;
-        let result = expr.transform(&mut transformer).await.unwrap();
-        assert_eq!(result, Expr::and_([
-            Expr::in_(Expr::field_("magic"), Expr::array_([Expr::str_("foo"), Expr::str_("bar")])),
-            Expr::in_(Expr::field_("foobar"), Expr::array_([Expr::str_("foo"), Expr::str_("bar")])),
-        ]));
     }
 }

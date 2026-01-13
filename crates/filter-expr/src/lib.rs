@@ -4,9 +4,11 @@ mod error;
 mod expr;
 mod parser;
 mod token;
+mod transform;
 
 pub use error::Error;
-pub use expr::{Expr, Transform};
+pub use expr::Expr;
+pub use transform::{Transform, TransformContext, TransformResult};
 
 /// The filter expression.
 pub struct FilterExpr {
