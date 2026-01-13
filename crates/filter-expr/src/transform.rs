@@ -2,7 +2,7 @@ use async_trait::async_trait;
 
 use crate::Expr;
 
-type BoxedError = Box<dyn std::error::Error>;
+type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 
 /// A trait for transforming AST expressions.
 ///
