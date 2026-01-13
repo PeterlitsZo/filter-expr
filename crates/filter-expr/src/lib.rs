@@ -6,6 +6,8 @@ mod parser;
 mod token;
 mod transform;
 
+use std::fmt::Debug;
+
 pub use error::Error;
 pub use expr::Expr;
 pub use transform::{Transform, TransformContext, TransformResult};
@@ -14,6 +16,15 @@ pub use transform::{Transform, TransformContext, TransformResult};
 pub struct FilterExpr {
     /// The expression of the filter. Possibly empty.
     expr: Option<Expr>,
+}
+
+impl Debug for FilterExpr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.expr {
+            Some(expr) => write!(f, "{:?}", expr),
+            None => write!(f, "Empty"),
+        }
+    }
 }
 
 impl FilterExpr {
