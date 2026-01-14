@@ -4,6 +4,8 @@ description = "Evaluator for filter expressions."
 version = "0.1.13"
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/filter-expr"
 
 [dependencies]
 filter-expr = { path = "../filter-expr", version = "0.1.13" }
