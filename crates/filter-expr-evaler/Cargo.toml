@@ -1,14 +1,14 @@
 [package]
 name = "filter-expr-evaler"
 description = "Evaluator for filter expressions."
-version = "0.1.13"
+version = "0.1.14"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 documentation = "https://docs.rs/filter-expr"
 
 [dependencies]
-filter-expr = { path = "../filter-expr", version = "0.1.13" }
+filter-expr = { path = "../filter-expr", version = "0.1.14" }
 
 async-trait.workspace = true
 thiserror.workspace = true

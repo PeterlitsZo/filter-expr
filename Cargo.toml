@@ -11,7 +11,6 @@ edition = "2024"
 license = "MIT"
 repository = "https://github.com/PeterlitsZo/filter-expr"
 keywords = ["filter", "expression", "parser", "ast"]
-documentation = "https://docs.rs/filter-expr"
 
 [workspace.dependencies]
 async-trait = "0.1.89"
