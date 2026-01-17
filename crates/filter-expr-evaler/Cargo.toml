@@ -13,6 +13,7 @@ filter-expr = { path = "../filter-expr", version = "0.1.14" }
 async-trait.workspace = true
 thiserror.workspace = true
 regex = "1.12.2"
+moka = { version = "0.12.12", features = ["sync"] }
 
 [dev-dependencies]
 tokio = { version = "1.48.0", features = ["full"] }
