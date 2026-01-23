@@ -203,81 +203,80 @@ impl Hash for Expr {
     }
 }
 
-#[allow(unused)]
 impl Expr {
-    pub(crate) fn field_<T: Into<String>>(field: T) -> Self {
+    pub fn field_<T: Into<String>>(field: T) -> Self {
         Self::Field(field.into())
     }
 
-    pub(crate) fn str_<T: Into<String>>(value: T) -> Self {
+    pub fn str_<T: Into<String>>(value: T) -> Self {
         Self::Str(value.into())
     }
 
-    pub(crate) fn i64_<T: Into<i64>>(value: T) -> Self {
+    pub fn i64_<T: Into<i64>>(value: T) -> Self {
         Self::I64(value.into())
     }
 
-    pub(crate) fn f64_<T: Into<f64>>(value: T) -> Self {
+    pub fn f64_<T: Into<f64>>(value: T) -> Self {
         Self::F64(value.into())
     }
 
-    pub(crate) fn bool_<T: Into<bool>>(value: T) -> Self {
+    pub fn bool_<T: Into<bool>>(value: T) -> Self {
         Self::Bool(value.into())
     }
 
-    pub(crate) fn null_() -> Self {
+    pub fn null_() -> Self {
         Self::Null
     }
 
-    pub(crate) fn array_<T: Into<Vec<Expr>>>(value: T) -> Self {
+    pub fn array_<T: Into<Vec<Expr>>>(value: T) -> Self {
         Self::Array(value.into())
     }
 
-    pub(crate) fn func_call_(func: impl Into<String>, args: Vec<Expr>) -> Self {
+    pub fn func_call_(func: impl Into<String>, args: Vec<Expr>) -> Self {
         Self::FuncCall(func.into(), args)
     }
 
-    pub(crate) fn method_call_(obj: Expr, method: impl Into<String>, args: Vec<Expr>) -> Self {
+    pub fn method_call_(obj: Expr, method: impl Into<String>, args: Vec<Expr>) -> Self {
         Self::MethodCall(method.into(), Box::new(obj), args)
     }
 
-    pub(crate) fn gt_(left: Expr, right: Expr) -> Self {
+    pub fn gt_(left: Expr, right: Expr) -> Self {
         Self::Gt(Box::new(left), Box::new(right))
     }
 
-    pub(crate) fn lt_(left: Expr, right: Expr) -> Self {
+    pub fn lt_(left: Expr, right: Expr) -> Self {
         Self::Lt(Box::new(left), Box::new(right))
     }
 
-    pub(crate) fn ge_(left: Expr, right: Expr) -> Self {
+    pub fn ge_(left: Expr, right: Expr) -> Self {
         Self::Ge(Box::new(left), Box::new(right))
     }
 
-    pub(crate) fn le_(left: Expr, right: Expr) -> Self {
+    pub fn le_(left: Expr, right: Expr) -> Self {
         Self::Le(Box::new(left), Box::new(right))
     }
 
-    pub(crate) fn eq_(left: Expr, right: Expr) -> Self {
+    pub fn eq_(left: Expr, right: Expr) -> Self {
         Self::Eq(Box::new(left), Box::new(right))
     }
 
-    pub(crate) fn ne_(left: Expr, right: Expr) -> Self {
+    pub fn ne_(left: Expr, right: Expr) -> Self {
         Self::Ne(Box::new(left), Box::new(right))
     }
 
-    pub(crate) fn in_(left: Expr, right: Expr) -> Self {
+    pub fn in_(left: Expr, right: Expr) -> Self {
         Self::In(Box::new(left), Box::new(right))
     }
 
-    pub(crate) fn and_<T: Into<Vec<Expr>>>(value: T) -> Self {
+    pub fn and_<T: Into<Vec<Expr>>>(value: T) -> Self {
         Self::And(value.into())
     }
 
-    pub(crate) fn or_<T: Into<Vec<Expr>>>(value: T) -> Self {
+    pub fn or_<T: Into<Vec<Expr>>>(value: T) -> Self {
         Self::Or(value.into())
     }
 
-    pub(crate) fn not_(self) -> Self {
+    pub fn not_(self) -> Self {
         Self::Not(Box::new(self))
     }
 }
