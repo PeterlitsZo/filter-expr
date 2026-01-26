@@ -62,6 +62,7 @@ impl AsmCodegen {
     fn codegen_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Field(field) => self.codegen_field(field),
+            Expr::FieldAccess(obj, field) => todo!(),
             Expr::Str(value) => self.codegen_str(value),
             Expr::I64(value) => self.codegen_i64(*value),
             Expr::F64(value) => self.codegen_f64(*value),

@@ -118,6 +118,7 @@ impl Parser {
     /// ```text
     /// <primary> = <func-call>
     ///           | <method-call>
+    ///           | <field-access>
     ///           | <value>
     /// ```
     fn parse_primary(&mut self) -> Result<Expr, Error> {
@@ -133,13 +134,13 @@ impl Parser {
                 // It's a field name (value)
                 // We need to check if it's followed by a method call
                 let value = Expr::field_(name);
-                return self.parse_method_call_chain(value);
+                return self.parse_method_call_chain_or_field_access(value);
             }
         }
 
         // Parse as value (which may include method calls)
         let value = self.parse_value()?;
-        self.parse_method_call_chain(value)
+        self.parse_method_call_chain_or_field_access(value)
     }
 
     /// ```text
@@ -224,12 +225,12 @@ impl Parser {
         Ok(Expr::FuncCall(func_name, args))
     }
 
-    fn parse_method_call_chain(&mut self, mut value: Expr) -> Result<Expr, Error> {
+    fn parse_method_call_chain_or_field_access(&mut self, mut value: Expr) -> Result<Expr, Error> {
         // Handle method calls: <value> '.' <ident> '(' ... ')'
         while self.peek() == Some(&Token::Dot) {
             self.advance(); // consume '.'
 
-            let method_name = match self.peek() {
+            let method_or_field_name = match self.peek() {
                 Some(Token::Ident(name)) => {
                     let name = name.clone();
                     self.advance();
@@ -240,9 +241,10 @@ impl Parser {
                 }
             };
 
-            // Parse method call arguments
+            // Parse method call or field access arguments
             if self.peek() != Some(&Token::LParen) {
-                return Err(Error::Parse("expected '(' after method name".to_string()));
+                value = Expr::FieldAccess(Box::new(value), method_or_field_name);
+                continue;
             }
             self.advance(); // consume '('
 
@@ -251,7 +253,7 @@ impl Parser {
             // Handle empty argument list ()
             if self.peek() == Some(&Token::RParen) {
                 self.advance();
-                value = Expr::MethodCall(method_name, Box::new(value), args);
+                value = Expr::MethodCall(method_or_field_name, Box::new(value), args);
                 continue;
             }
 
@@ -270,8 +272,9 @@ impl Parser {
             }
             self.advance();
 
-            value = Expr::MethodCall(method_name, Box::new(value), args);
+            value = Expr::MethodCall(method_or_field_name, Box::new(value), args);
         }
+
         Ok(value)
     }
 
@@ -521,5 +524,17 @@ mod tests {
                 Expr::str_("i64")
             )
         );
+
+        let input = r#"foo.bar.baz = 5"#;
+        let tokens = parse_token(input).unwrap();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse_expr().unwrap();
+        assert_eq!(
+            expr,
+            Expr::eq_(
+                Expr::field_access_(Expr::field_access_(Expr::field_("foo"), "bar"), "baz"),
+                Expr::i64_(5),
+            )
+        )
     }
 }

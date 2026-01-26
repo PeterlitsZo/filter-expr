@@ -44,12 +44,14 @@ You can evaluate it by yourself or use the `filter-expr-evaler` crate.
 
 <primary> = <func-call>
           | <method-call>
+          | <field-access>
           | <value>
 
 <operator> = '=' | '>' | '<' | '>=' | '<=' | '!=' | 'IN'
 
 <func-call> = <ident> '(' [<value> (',' <value>)* ','?] ')'
 <method-call> = <value> '.' <ident> '(' [<value> (',' <value>)* ','?] ')'
+<field-access> = <value> '.' <ident>
 
 <value> = <str>
         | <i64>

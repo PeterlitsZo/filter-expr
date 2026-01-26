@@ -38,11 +38,16 @@ impl<'a> AstRunner<'a> {
                     }),
                 }
             }
+            Expr::FieldAccess(obj, field) => {
+                todo!()
+            }
+
             Expr::Str(value) => Ok(Value::str(value.clone())),
             Expr::I64(value) => Ok(Value::i64(*value)),
             Expr::F64(value) => Ok(Value::f64(*value)),
             Expr::Bool(value) => Ok(Value::bool(*value)),
             Expr::Null => Ok(Value::null()),
+
             Expr::Array(value) => self.eval_array(value, ctx).await,
 
             Expr::FuncCall(func, args) => self.eval_func_call(func, args, ctx).await,

@@ -9,11 +9,14 @@ use crate::{Error, Transform, TransformContext, TransformResult};
 #[derive(Debug, Clone)]
 pub enum Expr {
     Field(String),
+    FieldAccess(Box<Expr>, String),
+
     Str(String),
     I64(i64),
     F64(f64),
     Bool(bool),
     Null,
+
     Array(Vec<Expr>),
 
     FuncCall(String, Vec<Expr>),
@@ -44,31 +47,34 @@ impl Ord for Expr {
         use ordered_float::OrderedFloat;
 
         // Helper function to get variant order.
-        fn variant_order(expr: &Expr) -> u8 {
+        fn variant_order(expr: &Expr) -> u16 {
             use Expr::*;
             match expr {
-                Field(..) => 0,
-                Str(..) => 1,
-                I64(..) => 2,
-                F64(..) => 3,
-                Bool(..) => 4,
-                Null => 5,
-                Array(..) => 6,
+                Field(..) => 100,
+                FieldAccess(..) => 101,
 
-                FuncCall(..) => 7,
-                MethodCall(..) => 8,
+                Str(..) => 200,
+                I64(..) => 201,
+                F64(..) => 202,
+                Bool(..) => 203,
+                Null => 204,
 
-                Gt(..) => 9,
-                Lt(..) => 10,
-                Ge(..) => 11,
-                Le(..) => 12,
-                Eq(..) => 13,
-                Ne(..) => 14,
-                In(..) => 15,
+                Array(..) => 300,
 
-                And(..) => 16,
-                Or(..) => 17,
-                Not(..) => 18,
+                FuncCall(..) => 400,
+                MethodCall(..) => 401,
+
+                Gt(..) => 500,
+                Lt(..) => 501,
+                Ge(..) => 502,
+                Le(..) => 503,
+                Eq(..) => 504,
+                Ne(..) => 505,
+                In(..) => 506,
+
+                And(..) => 600,
+                Or(..) => 601,
+                Not(..) => 602,
             }
         }
 
@@ -78,12 +84,19 @@ impl Ord for Expr {
                 // Same variant, compare contents.
                 match (self, other) {
                     (Field(a), Field(b)) => a.cmp(b),
+                    (FieldAccess(o1, f1), FieldAccess(o2, f2)) => match o1.cmp(o2) {
+                        Ordering::Equal => f1.cmp(f2),
+                        other => other,
+                    },
+
                     (Str(a), Str(b)) => a.cmp(b),
                     (I64(a), I64(b)) => a.cmp(b),
                     (F64(a), F64(b)) => OrderedFloat(*a).cmp(&OrderedFloat(*b)),
                     (Bool(a), Bool(b)) => a.cmp(b),
                     (Null, Null) => Ordering::Equal,
+
                     (Array(a), Array(b)) => a.cmp(b),
+
                     (FuncCall(f1, a1), FuncCall(f2, a2)) => match f1.cmp(f2) {
                         Ordering::Equal => a1.cmp(a2),
                         other => other,
@@ -95,6 +108,7 @@ impl Ord for Expr {
                         },
                         other => other,
                     },
+
                     (Gt(l1, r1), Gt(l2, r2)) => match l1.cmp(l2) {
                         Ordering::Equal => r1.cmp(r2),
                         other => other,
@@ -123,9 +137,11 @@ impl Ord for Expr {
                         Ordering::Equal => r1.cmp(r2),
                         other => other,
                     },
+
                     (And(a), And(b)) => a.cmp(b),
                     (Or(a), Or(b)) => a.cmp(b),
                     (Not(a), Not(b)) => a.cmp(b),
+
                     _ => unreachable!(),
                 }
             }
@@ -153,6 +169,11 @@ impl Hash for Expr {
         // Then hash the contents.
         match self {
             Field(s) => s.hash(state),
+            FieldAccess(obj, field) => {
+                obj.hash(state);
+                field.hash(state);
+            }
+
             Str(s) => s.hash(state),
             I64(i) => i.hash(state),
             F64(f) => OrderedFloat(*f).hash(state),
@@ -206,6 +227,10 @@ impl Hash for Expr {
 impl Expr {
     pub fn field_<T: Into<String>>(field: T) -> Self {
         Self::Field(field.into())
+    }
+
+    pub fn field_access_(obj: Expr, field: impl Into<String>) -> Self {
+        Self::FieldAccess(Box::new(obj), field.into())
     }
 
     pub fn str_<T: Into<String>>(value: T) -> Self {
@@ -339,6 +364,11 @@ impl Expr {
         Ok(match expr {
             // Do nothing if the expression have no children.
             Expr::Field(name) => Expr::Field(name),
+            Expr::FieldAccess(obj, field) => {
+                let obj = Box::new(Self::transform_expr(transformer, *obj, ctx.clone()).await?);
+                Expr::FieldAccess(obj, field)
+            }
+
             Expr::Str(value) => Expr::Str(value),
             Expr::I64(value) => Expr::I64(value),
             Expr::F64(value) => Expr::F64(value),
