@@ -66,28 +66,90 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
 
             // String literal.
             '\'' => {
-                chars.next(); // consume opening quote
+                chars.next();
                 let mut s = String::new();
-                while let Some(&c) = chars.peek() {
-                    if c == '\'' {
-                        chars.next(); // consume closing quote
-                        break;
+                let mut escaped = false;
+                while let Some(c) = chars.next() {
+                    match (escaped, c) {
+                        (false, '\'') => {
+                            break;
+                        }
+                        (false, '\\') => {
+                            escaped = true;
+                        }
+                        (false, c) => {
+                            s.push(c);
+                        }
+
+                        (true, '\'') => {
+                            s.push('\'');
+                            escaped = false;
+                        }
+                        (true, 'n') => {
+                            s.push('\n');
+                            escaped = false;
+                        }
+                        (true, 'r') => {
+                            s.push('\r');
+                            escaped = false;
+                        }
+                        (true, 't') => {
+                            s.push('\t');
+                            escaped = false;
+                        }
+                        (true, '\\') => {
+                            s.push('\\');
+                            escaped = false;
+                        }
+                        (true, c) => {
+                            s.push(c);
+                            escaped = false;
+                        }
                     }
-                    s.push(c);
-                    chars.next();
                 }
                 tokens.push(Token::Str(s));
             }
             '"' => {
-                chars.next(); // consume opening quote
+                chars.next();
                 let mut s = String::new();
-                while let Some(&c) = chars.peek() {
-                    if c == '"' {
-                        chars.next(); // consume closing quote
-                        break;
+                let mut escaped = false;
+                while let Some(c) = chars.next() {
+                    match (escaped, c) {
+                        (false, '"') => {
+                            break;
+                        }
+                        (false, '\\') => {
+                            escaped = true;
+                        }
+                        (false, c) => {
+                            s.push(c);
+                        }
+
+                        (true, '"') => {
+                            s.push('"');
+                            escaped = false;
+                        }
+                        (true, 'n') => {
+                            s.push('\n');
+                            escaped = false;
+                        }
+                        (true, 'r') => {
+                            s.push('\r');
+                            escaped = false;
+                        }
+                        (true, 't') => {
+                            s.push('\t');
+                            escaped = false;
+                        }
+                        (true, '\\') => {
+                            s.push('\\');
+                            escaped = false;
+                        }
+                        (true, c) => {
+                            s.push(c);
+                            escaped = false;
+                        }
                     }
-                    s.push(c);
-                    chars.next();
                 }
                 tokens.push(Token::Str(s));
             }
@@ -354,6 +416,47 @@ mod tests {
                 Token::RParen,
                 Token::Eq,
                 Token::Str("i64".to_string()),
+            ]
+        );
+
+        let input = r#"name = 'John\nDoe' OR name = "John\tDoe""#;
+        let tokens = parse_token(input).unwrap();
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Ident("name".to_string()),
+                Token::Eq,
+                Token::Str("John\nDoe".to_string()),
+                Token::Or,
+                Token::Ident("name".to_string()),
+                Token::Eq,
+                Token::Str("John\tDoe".to_string()),
+            ]
+        );
+
+        let input = r#"name = 'John\\Doe'"#;
+        let tokens = parse_token(input).unwrap();
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Ident("name".to_string()),
+                Token::Eq,
+                Token::Str("John\\Doe".to_string()),
+            ]
+        );
+
+        let input = r#"magic = "\"\n\r\t\\" AND magic = '\'\n\r\t\\'"#;
+        let tokens = parse_token(input).unwrap();
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Ident("magic".to_string()),
+                Token::Eq,
+                Token::Str("\"\n\r\t\\".to_string()),
+                Token::And,
+                Token::Ident("magic".to_string()),
+                Token::Eq,
+                Token::Str("'\n\r\t\\".to_string()),
             ]
         );
     }
