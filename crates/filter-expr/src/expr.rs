@@ -448,3 +448,220 @@ impl Expr {
         })
     }
 }
+
+impl Expr {
+    /// Optimize the expression by applying constant folding and simplification
+    /// rules.
+    ///
+    /// Examples:
+    /// 
+    /// - `true AND true` → `true`
+    /// - `true AND false` → `false`
+    /// - `NOT NOT expr` → `expr`
+    /// - `1 > 2` → `false`
+    pub fn optimize(self) -> Self {
+        use Expr::*;
+
+        match self {
+            // Leaf nodes - no optimization needed.
+            Field(_) | Str(_) | I64(_) | F64(_) | Bool(_) | Null => self,
+
+            // Field access - optimize the object.
+            FieldAccess(obj, field) => {
+                FieldAccess(Box::new(obj.optimize()), field)
+            }
+
+            // Array - optimize all elements.
+            Array(elements) => {
+                Array(elements.into_iter().map(|e| e.optimize()).collect())
+            }
+
+            // Function call - optimize all arguments.
+            FuncCall(func, args) => {
+                FuncCall(func, args.into_iter().map(|a| a.optimize()).collect())
+            }
+
+            // Method call - optimize object and arguments.
+            MethodCall(method, obj, args) => {
+                MethodCall(method, Box::new(obj.optimize()), args.into_iter().map(|a| a.optimize()).collect())
+            }
+
+            // Comparison operators - optimize and fold constants.
+            Gt(left, right) => {
+                let left = left.optimize();
+                let right = right.optimize();
+                match (&left, &right) {
+                    (I64(a), I64(b)) => Bool(*a > *b),
+                    (F64(a), F64(b)) => Bool(*a > *b),
+                    (Str(a), Str(b)) => Bool(a > b),
+                    _ => Gt(Box::new(left), Box::new(right)),
+                }
+            }
+            Lt(left, right) => {
+                let left = left.optimize();
+                let right = right.optimize();
+                match (&left, &right) {
+                    (I64(a), I64(b)) => Bool(*a < *b),
+                    (F64(a), F64(b)) => Bool(*a < *b),
+                    (Str(a), Str(b)) => Bool(a < b),
+                    _ => Lt(Box::new(left), Box::new(right)),
+                }
+            }
+            Ge(left, right) => {
+                let left = left.optimize();
+                let right = right.optimize();
+                match (&left, &right) {
+                    (I64(a), I64(b)) => Bool(*a >= *b),
+                    (F64(a), F64(b)) => Bool(*a >= *b),
+                    (Str(a), Str(b)) => Bool(a >= b),
+                    _ => Ge(Box::new(left), Box::new(right)),
+                }
+            }
+            Le(left, right) => {
+                let left = left.optimize();
+                let right = right.optimize();
+                match (&left, &right) {
+                    (I64(a), I64(b)) => Bool(*a <= *b),
+                    (F64(a), F64(b)) => Bool(*a <= *b),
+                    (Str(a), Str(b)) => Bool(a <= b),
+                    _ => Le(Box::new(left), Box::new(right)),
+                }
+            }
+            Eq(left, right) => {
+                let left = left.optimize();
+                let right = right.optimize();
+                match (&left, &right) {
+                    (I64(a), I64(b)) => Bool(*a == *b),
+                    (F64(a), F64(b)) => Bool(*a == *b),
+                    (Str(a), Str(b)) => Bool(a == b),
+                    (Bool(a), Bool(b)) => Bool(*a == *b),
+                    (Null, Null) => Bool(true),
+                    _ => Eq(Box::new(left), Box::new(right)),
+                }
+            }
+            Ne(left, right) => {
+                let left = left.optimize();
+                let right = right.optimize();
+                match (&left, &right) {
+                    (I64(a), I64(b)) => Bool(*a != *b),
+                    (F64(a), F64(b)) => Bool(*a != *b),
+                    (Str(a), Str(b)) => Bool(a != b),
+                    (Bool(a), Bool(b)) => Bool(*a != *b),
+                    (Null, Null) => Bool(false),
+                    _ => Ne(Box::new(left), Box::new(right)),
+                }
+            }
+            In(left, right) => {
+                let left = left.optimize();
+                let right = right.optimize();
+                In(Box::new(left), Box::new(right))
+            }
+
+            // AND optimization.
+            And(exprs) => {
+                let mut optimized: Vec<Expr> = Vec::new();
+                let mut has_false = false;
+
+                for expr in exprs {
+                    let opt_expr = expr.optimize();
+                    match &opt_expr {
+                        Bool(true) => {
+                            // Skip true values in AND.
+                            continue;
+                        }
+                        Bool(false) => {
+                            // If any operand is false, the whole AND is false.
+                            has_false = true;
+                            break;
+                        }
+                        _ => {
+                            optimized.push(opt_expr);
+                        }
+                    }
+                }
+
+                if has_false {
+                    Bool(false)
+                } else if optimized.is_empty() {
+                    // Empty AND is true (identity element)
+                    Bool(true)
+                } else if optimized.len() == 1 {
+                    // Single element AND is just that element
+                    optimized.into_iter().next().unwrap()
+                } else {
+                    And(optimized)
+                }
+            }
+
+            // OR optimization.
+            Or(exprs) => {
+                let mut optimized: Vec<Expr> = Vec::new();
+                let mut has_true = false;
+
+                for expr in exprs {
+                    let opt_expr = expr.optimize();
+                    match &opt_expr {
+                        Bool(false) => {
+                            // Skip false values in OR
+                            continue;
+                        }
+                        Bool(true) => {
+                            // If any operand is true, the whole OR is true
+                            has_true = true;
+                            break;
+                        }
+                        _ => {
+                            optimized.push(opt_expr);
+                        }
+                    }
+                }
+
+                if has_true {
+                    Bool(true)
+                } else if optimized.is_empty() {
+                    // Empty OR is false (identity element)
+                    Bool(false)
+                } else if optimized.len() == 1 {
+                    // Single element OR is just that element
+                    optimized.into_iter().next().unwrap()
+                } else {
+                    Or(optimized)
+                }
+            }
+
+            // NOT optimization.
+            Not(expr) => {
+                let opt_expr = expr.optimize();
+                match opt_expr {
+                    Bool(true) => Bool(false),
+                    Bool(false) => Bool(true),
+                    Not(inner) => {
+                        // Double negation: NOT NOT expr -> expr
+                        *inner
+                    }
+                    other => Not(Box::new(other)),
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_optimize() {
+        let expr = Expr::And(vec![Expr::Bool(true), Expr::Bool(false)]);
+        let optimized = expr.optimize();
+        assert_eq!(optimized, Expr::Bool(false));
+
+        let expr = Expr::Or(vec![Expr::Bool(false), Expr::Bool(true)]);
+        let optimized = expr.optimize();
+        assert_eq!(optimized, Expr::Bool(true));
+
+        let expr = Expr::Not(Box::new(Expr::Bool(true)));
+        let optimized = expr.optimize();
+        assert_eq!(optimized, Expr::Bool(false));
+    }
+}
