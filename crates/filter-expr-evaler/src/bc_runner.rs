@@ -102,11 +102,9 @@ impl<'a> BytecodeRunner<'a> {
 
                 bc::BUILD_ARRAY => {
                     let length = unsafe { self.read_u32() };
-
-                    let elements: Vec<Value> = self
+                    let elements = self
                         .stack
-                        .drain(self.stack.len() - length as usize..)
-                        .collect();
+                        .split_off(self.stack.len() - length as usize);
                     self.stack.push(Value::Array(Arc::new(elements)));
                 }
 
@@ -229,6 +227,7 @@ impl<'a> BytecodeRunner<'a> {
                 bc::RETURN => {
                     return Ok(unsafe { self.pop_stack_top_unchecked() });
                 }
+
                 _ => {
                     unreachable!("Invalid opcode: {}", opcode);
                 }
@@ -377,7 +376,7 @@ impl<'a> BytecodeRunner<'a> {
         debug_assert!(!self.stack.is_empty(), "stack is empty");
 
         let len = self.stack.len();
-        let value = unsafe { self.stack.get_unchecked(len - 1).clone() };
+        let value = unsafe { std::ptr::read(self.stack.get_unchecked(len - 1)) };
         unsafe { self.stack.set_len(len - 1) };
         value
     }
@@ -392,8 +391,8 @@ impl<'a> BytecodeRunner<'a> {
         debug_assert!(self.stack.len() >= 2, "stack has less than 2 values");
 
         let len = self.stack.len();
-        let top_first = unsafe { self.stack.get_unchecked(len - 1).clone() };
-        let top_second = unsafe { self.stack.get_unchecked(len - 2).clone() };
+        let top_first = unsafe { std::ptr::read(self.stack.get_unchecked(len - 1)) };
+        let top_second = unsafe { std::ptr::read(self.stack.get_unchecked(len - 2)) };
         unsafe { self.stack.set_len(len - 2) };
         (top_second, top_first)
     }
@@ -408,8 +407,6 @@ impl<'a> BytecodeRunner<'a> {
         debug_assert!(self.stack.len() >= n, "stack has less than n values");
 
         let len = self.stack.len();
-        let values = unsafe { self.stack.get_unchecked(len - n..) }.to_vec();
-        unsafe { self.stack.set_len(len - n) };
-        values
+        self.stack.split_off(len - n)
     }
 }
