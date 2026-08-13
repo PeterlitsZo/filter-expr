@@ -41,19 +41,19 @@ sub run_command {
     # Capture output using IPC::Open3.
     my $pid = open3(my $chld_in, my $chld_out, my $chld_err = gensym(), @$command);
     close($chld_in);
-    
+
     # Read and print stdout with 6-space indentation
     while (defined(my $line = <$chld_out>)) {
         print "      stdout | $line";
     }
     close($chld_out);
-    
+
     # Read and print stderr with 6-space indentation
     while (defined(my $line = <$chld_err>)) {
         print "      stderr | $line";
     }
     close($chld_err);
-    
+
     # Wait for the command to complete and check the exit code.
     waitpid($pid, 0);
     my $exit_code = $? >> 8;
@@ -72,22 +72,20 @@ unless ($version =~ /^\d+\.\d+\.\d+/) {
 
 print color('green') . "Releasing version: $version\n" . color('reset');
 
-# Update filter-expr/Cargo.toml.
-my $filter_expr_toml_filename = 'crates/filter-expr/Cargo.toml';
-print_step_message("Updating $filter_expr_toml_filename...");
-my $filter_expr_toml = read_file($filter_expr_toml_filename);
-$filter_expr_toml =~ s/^version = ".*"/version = "$version"/m;
-write_file($filter_expr_toml_filename, $filter_expr_toml);
-print color('green') . "      Updated filter-expr version to $version\n" . color('reset');
+# Update Cargo.toml.
+my $toml_filename = 'Cargo.toml';
+print_step_message("Updating $toml_filename...");
+my $toml = read_file($toml_filename);
+$toml =~ s/^version = ".*"/version = "$version"/m;
+write_file($toml_filename, $toml);
+print color('green') . "      Updated version to $version\n" . color('reset');
 
 # Update filter-expr-evaler/Cargo.toml.
-my $filter_expr_evaler_toml_filename = 'crates/filter-expr-evaler/Cargo.toml';
-print_step_message("Updating $filter_expr_evaler_toml_filename...");
-my $filter_expr_evaler_toml = read_file($filter_expr_evaler_toml_filename);
-$filter_expr_evaler_toml =~ s/^version = ".*"/version = "$version"/m;
-$filter_expr_evaler_toml =~ s/(filter-expr = \{ path = "\.\.\/filter-expr", version = ")[^"]+(")/$1$version$2/m;
-write_file($filter_expr_evaler_toml_filename, $filter_expr_evaler_toml);
-print color('green') . "      Updated filter-expr-evaler version to $version\n" . color('reset');
+my $fee_toml_filename = 'crates/filter-expr-evaler/Cargo.toml';
+print_step_message("Updating $fee_toml_filename...");
+my $fee_toml = read_file($fee_toml_filename);
+$fee_toml =~ s/(filter-expr = \{ path = "\.\.\/filter-expr", version = ")[^"]+(")/$1$version$2/m;
+write_file($fee_toml_filename, $fee_toml);
 print color('green') . "      Updated filter-expr dependency version to $version\n" . color('reset');
 
 # Update Cargo.lock.

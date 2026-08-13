@@ -6,12 +6,12 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.18"
+version = "0.2.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/PeterlitsZo/filter-expr"
 keywords = ["filter", "expression", "parser", "ast"]
 
 [workspace.dependencies]
-async-trait = "0.1.89"
-thiserror = "2.0.17"
+async-trait = "0.1.92"
+thiserror = "2.0.20"
