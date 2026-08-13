@@ -26,7 +26,7 @@ pub trait Context: Send + Sync {
 /// # Example
 ///
 /// ```rust
-/// use filter_expr::simple_context;
+/// use filter_expr_evaler::simple_context;
 ///
 /// let ctx = simple_context! {
 ///     "name": "John",

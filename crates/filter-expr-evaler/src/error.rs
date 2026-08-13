@@ -1,71 +1,88 @@
-use crate::ValueType;
+use std::{
+    collections::HashMap,
+    fmt::{self, Display},
+};
 
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("internal: {0}")]
-    Internal(String),
+pub type Result<T> = std::result::Result<T, Error>;
 
-    #[error("invalid value {0}")]
-    InvalidValue(String),
+#[derive(Debug)]
+pub struct Error {
+    kind: ErrorKind,
+    msg: String,
+    metadata: HashMap<String, String>,
+    source: Option<anyhow::Error>,
+}
 
-    #[error("type mismatch: expected same type for comparison, got {0:?} and {1:?}")]
-    TypeMismatch(String, String),
+impl Error {
+    pub fn new<T>(kind: ErrorKind, msg: T) -> Self
+    where
+        T: Into<String>,
+    {
+        return Self {
+            kind,
+            msg: msg.into(),
+            metadata: HashMap::new(),
+            source: None,
+        };
+    }
 
-    /// Failed to get the variable.
-    #[error("failed to get the variable {var:?}: {error}")]
-    FailedToGetVar { var: String, error: String },
+    pub fn with_source<T>(mut self, source: T) -> Self
+    where
+        T: Into<anyhow::Error>,
+    {
+        self.source = Some(source.into());
+        self
+    }
 
-    /// The variable is not found.
-    #[error("no such variable {var:?}")]
-    NoSuchVar { var: String },
+    pub fn with_metadata<K, V>(mut self, key: K, value: V) -> Self
+    where
+        K: Into<String>,
+        V: Display,
+    {
+        self.metadata.insert(key.into(), value.to_string());
+        self
+    }
+}
 
-    /// The function is not found.
-    #[error("no such function {function:?}")]
-    NoSuchFunction { function: String },
+impl Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}: {}", self.kind, self.msg)?;
 
-    /// The method is not found.
-    #[error("no such method {method:?} for type {obj_type:?}")]
-    NoSuchMethod { method: String, obj_type: ValueType },
+        if !self.metadata.is_empty() {
+            write!(f, " {:?}", self.metadata)?;
+        }
 
-    /// Invalid argument count for the given function.
-    #[error(
-        "invalid argument count for function {function:?}: expected {expected} argument(s), but got {got} argument(s)"
-    )]
-    InvalidArgumentCountForFunction {
-        function: String,
-        expected: usize,
-        got: usize,
-    },
+        if let Some(source) = &self.source {
+            write!(f, ": {source}")?;
+        }
 
-    /// Invalid argument type for the given function's index-th argument.
-    #[error(
-        "invalid argument type for function {function:?}'s index {index} argument: expected {expected:?}, got {got:?}"
-    )]
-    InvalidArgumentTypeForFunction {
-        function: String,
-        index: usize,
-        expected: ValueType,
-        got: ValueType,
-    },
+        Ok(())
+    }
+}
 
-    /// Invalid argument count for the given method.
-    #[error(
-        "invalid argument count for method {method:?}: expected {expected} argument(s), but got {got} argument(s)"
-    )]
-    InvalidArgumentCountForMethod {
-        method: String,
-        expected: usize,
-        got: usize,
-    },
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.source.as_ref().map(|source| source.as_ref())
+    }
+}
 
-    /// Invalid argument type for the given method's index-th argument.
-    #[error(
-        "invalid argument type for method {method:?}'s index {index} argument: expected {expected:?}, got {got:?}"
-    )]
-    InvalidArgumentTypeForMethod {
-        method: String,
-        index: usize,
-        expected: ValueType,
-        got: ValueType,
-    },
+#[derive(Debug)]
+pub enum ErrorKind {
+    /// Internal unexpected error.
+    Internal,
+
+    /// Invalid value.
+    InvalidValue,
+
+    /// Type error.
+    ///
+    /// E.g. If you try to compare a string and a number, this error will be
+    /// raised. If you pass the values to function/method, but arguments'
+    /// type or number do not match its need, this error will be raised as well.
+    TypeMismatch,
+
+    /// Error when get the variable/function/method.
+    ///
+    /// Raised when not such variable/function/method or cannot get it.
+    FailedToGet,
 }

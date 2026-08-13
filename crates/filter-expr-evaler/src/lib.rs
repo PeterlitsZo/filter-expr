@@ -25,8 +25,8 @@ use crate::bc::Bytecode;
 pub use crate::callable::{ArcFunction, Function, FunctionContext};
 pub use crate::callable::{ArcMethod, Method, MethodContext};
 pub use crate::ctx::{Context, SimpleContext};
-pub use crate::error::Error;
-pub use crate::value::{Value, ValueType};
+pub use crate::error::{Error, ErrorKind, Result};
+pub use crate::value::{Userdata, Value, ValueType};
 
 /// The environment for the filter expression evaluator.
 #[derive(Clone)]
@@ -88,10 +88,13 @@ impl FilterExprEvalerEnv {
     }
 
     /// Add a function to the environment.
-    pub(crate) fn add_function(&self, name: String, function: ArcFunction) -> Result<(), Error> {
+    pub(crate) fn add_function(&self, name: String, function: ArcFunction) -> Result<()> {
         self.inner
             .write()
-            .map_err(|e| Error::Internal(format!("failed to lock env: {e}")))?
+            .map_err(|e| {
+                Error::new(ErrorKind::Internal, "failed to lock env")
+                    .with_metadata("error", e.to_string())
+            })?
             .functions
             .insert(name, function);
         Ok(())
@@ -103,42 +106,43 @@ impl FilterExprEvalerEnv {
         name: String,
         obj_type: ValueType,
         method: ArcMethod,
-    ) -> Result<(), Error> {
+    ) -> Result<()> {
         self.inner
             .write()
-            .map_err(|e| Error::Internal(format!("failed to lock env: {e}")))?
+            .map_err(|e| {
+                Error::new(ErrorKind::Internal, "failed to lock env")
+                    .with_metadata("error", e.to_string())
+            })?
             .methods
             .insert((name, obj_type), method);
         Ok(())
     }
 
     /// Get a function from the environment.
-    pub(crate) fn get_function(&self, name: &str) -> Result<ArcFunction, Error> {
-        let inner = self
-            .inner
-            .read()
-            .map_err(|e| Error::Internal(format!("failed to lock env: {e}")))?;
-        let function = inner
-            .functions
-            .get(name)
-            .ok_or_else(|| Error::NoSuchFunction {
-                function: name.to_string(),
-            })?;
+    pub(crate) fn get_function(&self, name: &str) -> Result<ArcFunction> {
+        let inner = self.inner.read().map_err(|e| {
+            Error::new(ErrorKind::Internal, "failed to lock env")
+                .with_metadata("error", e.to_string())
+        })?;
+        let function = inner.functions.get(name).ok_or_else(|| {
+            Error::new(ErrorKind::FailedToGet, "no such function").with_metadata("function", name)
+        })?;
         Ok(Arc::clone(function))
     }
 
     /// Get a method from the environment.
-    pub(crate) fn get_method(&self, name: &str, obj_type: ValueType) -> Result<ArcMethod, Error> {
-        let inner = self
-            .inner
-            .read()
-            .map_err(|e| Error::Internal(format!("failed to lock env: {e}")))?;
+    pub(crate) fn get_method(&self, name: &str, obj_type: ValueType) -> Result<ArcMethod> {
+        let inner = self.inner.read().map_err(|e| {
+            Error::new(ErrorKind::Internal, "failed to lock env")
+                .with_metadata("error", e.to_string())
+        })?;
         let method = inner
             .methods
             .get(&(name.to_string(), obj_type))
-            .ok_or_else(|| Error::NoSuchMethod {
-                method: name.to_string(),
-                obj_type,
+            .ok_or_else(|| {
+                Error::new(ErrorKind::FailedToGet, "no such method")
+                    .with_metadata("method", name)
+                    .with_metadata("obj_type", obj_type)
             })?;
         Ok(Arc::clone(method))
     }
@@ -147,17 +151,20 @@ impl FilterExprEvalerEnv {
 impl FilterExprEvalerEnv {
     /// Get a regex (if cached, return the cached one; otherwise, compile and
     /// cache it).
-    pub(crate) fn get_regex(&self, pattern: &str) -> Result<Arc<Regex>, Error> {
-        let inner = self
-            .inner
-            .read()
-            .map_err(|e| Error::Internal(format!("failed to lock env: {e}")))?;
+    pub(crate) fn get_regex(&self, pattern: &str) -> Result<Arc<Regex>> {
+        let inner = self.inner.read().map_err(|e| {
+            Error::new(ErrorKind::Internal, "failed to lock env")
+                .with_metadata("error", e.to_string())
+        })?;
         let cached_regex = inner.cached_regex.get(pattern);
         if let Some(cached) = cached_regex {
             Ok(cached)
         } else {
-            let regex = Regex::new(pattern)
-                .map_err(|e| Error::Internal(format!("failed to compile regex: {e}")))?;
+            let regex = Regex::new(pattern).map_err(|e| {
+                Error::new(ErrorKind::InvalidValue, "failed to compile regex")
+                    .with_metadata("pattern", pattern)
+                    .with_source(e)
+            })?;
             let regex_arc = Arc::new(regex);
             inner
                 .cached_regex
@@ -193,7 +200,7 @@ impl FilterExprEvaler {
     }
 
     /// Evaluate the filter expression using the default runner.
-    pub async fn eval(&self, filter_expr: &FilterExpr, ctx: &dyn Context) -> Result<bool, Error> {
+    pub async fn eval(&self, filter_expr: &FilterExpr, ctx: &dyn Context) -> Result<bool> {
         self.eval_by_bytecode_runner(filter_expr, ctx).await
     }
 
@@ -202,14 +209,15 @@ impl FilterExprEvaler {
         &self,
         filter_expr: &FilterExpr,
         ctx: &dyn Context,
-    ) -> Result<bool, Error> {
+    ) -> Result<bool> {
         if let Some(expr) = filter_expr.expr() {
             let ast_runner = AstRunner::new(expr, self.env.clone());
             let value = ast_runner.run(ctx).await?;
 
             match value {
                 Value::Bool(b) => Ok(b),
-                _ => Err(Error::InvalidValue(format!("{value:?} is not a bool"))),
+                _ => Err(Error::new(ErrorKind::InvalidValue, "expected bool")
+                    .with_metadata("got", value.typ())),
             }
         } else {
             Ok(true)
@@ -221,7 +229,7 @@ impl FilterExprEvaler {
         &self,
         filter_expr: &FilterExpr,
         ctx: &dyn Context,
-    ) -> Result<bool, Error> {
+    ) -> Result<bool> {
         if let Some(expr) = filter_expr.expr() {
             let bytecode = {
                 let cached_bytecode = self.cached_bytecode.get(expr);
@@ -246,24 +254,26 @@ impl FilterExprEvaler {
 
             match value {
                 Value::Bool(b) => Ok(b),
-                _ => Err(Error::InvalidValue(format!("{value:?} is not a bool"))),
+                _ => Err(Error::new(ErrorKind::InvalidValue, "expected bool")
+                    .with_metadata("got", value.typ())),
             }
         } else {
             Ok(true)
         }
     }
 
-    pub fn add_function(&self, name: String, function: ArcFunction) -> Result<(), Error> {
-        self.env.add_function(name, function)
+    pub fn add_function<N>(&self, name: N, function: ArcFunction) -> Result<()>
+    where
+        N: Into<String>,
+    {
+        self.env.add_function(name.into(), function)
     }
 
-    pub fn add_method(
-        &self,
-        name: String,
-        obj_type: ValueType,
-        method: ArcMethod,
-    ) -> Result<(), Error> {
-        self.env.add_method(name, obj_type, method)
+    pub fn add_method<N>(&self, name: N, obj_type: ValueType, method: ArcMethod) -> Result<()>
+    where
+        N: Into<String>,
+    {
+        self.env.add_method(name.into(), obj_type, method)
     }
 }
 
@@ -277,7 +287,10 @@ mod tests {
     async fn test_parse_and_then_eval() {
         let evaler = FilterExprEvaler::new();
         evaler
-            .add_function("custom_add".to_string(), Arc::new(CustomAddFn))
+            .add_function("custom_add", Arc::new(CustomAddFn))
+            .unwrap();
+        evaler
+            .add_function("new_magic", Arc::new(NewMagic))
             .unwrap();
 
         macro_rules! parse_and_do_test_cases {
@@ -465,6 +478,28 @@ mod tests {
                 (simple_context! { "name": "Jane" }, false),
             ],
         );
+
+        // Parse the filter-expr:
+        //
+        //     new_magic('foo') = new_magic(expected)
+        //     new_magic('foo') = expected
+        // =====================================================================
+        parse_and_do_test_cases!(
+            r#"new_magic('foo') = new_magic(expected)"#,
+            &[
+                (simple_context! { "expected": "foo" }, true),
+                (simple_context! { "expected": "bar" }, false),
+            ],
+        );
+        parse_and_do_test_cases!(
+            r#"new_magic('foo') = expected"#,
+            &[
+                (simple_context! { "expected": "foo" }, true),
+                (simple_context! { "expected": "bar" }, false),
+                (simple_context! { "expected": Value::Userdata(Arc::new(MagicUserdata::Foo)) }, true),
+                (simple_context! { "expected": Value::Userdata(Arc::new(MagicUserdata::Bar)) }, false),
+            ],
+        );
     }
 
     async fn parse_and_do_test_cases(
@@ -497,38 +532,111 @@ mod tests {
         }
     }
 
+    #[derive(Debug, PartialEq, PartialOrd)]
+    enum MagicUserdata {
+        Foo,
+        Bar,
+    }
+
+    impl Userdata for MagicUserdata {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+
+        fn partial_eq(&self, other: &Value) -> Result<bool> {
+            match other {
+                Value::Str(other) => Ok(match other.as_str() {
+                    "foo" => *self == Self::Foo,
+                    "bar" => *self == Self::Bar,
+                    _ => false,
+                }),
+                Value::Userdata(other) => Ok(other
+                    .as_any()
+                    .downcast_ref::<MagicUserdata>()
+                    .is_some_and(|other| self == other)),
+                _ => Ok(false),
+            }
+        }
+
+        fn partial_ord(&self, other: &Value) -> Result<Option<std::cmp::Ordering>> {
+            match other {
+                Value::Userdata(other) => Ok(other
+                    .as_any()
+                    .downcast_ref::<MagicUserdata>()
+                    .and_then(|other| self.partial_cmp(other))),
+                _ => Err(Error::new(
+                    ErrorKind::TypeMismatch,
+                    "cannot compare MagicUserdata with a value having different type",
+                )),
+            }
+        }
+    }
+
+    struct NewMagic;
+
+    #[async_trait::async_trait]
+    impl Function for NewMagic {
+        async fn call(&self, ctx: FunctionContext<'_, '_>) -> Result<Value> {
+            if ctx.args.len() != 1 {
+                return Err(
+                    Error::new(ErrorKind::TypeMismatch, "invalid argument count")
+                        .with_metadata("function", "new_magic")
+                        .with_metadata("expected", 1)
+                        .with_metadata("got", ctx.args.len()),
+                );
+            }
+            let val = match ctx.args[0] {
+                Value::Str(ref val) => val.clone(),
+                _ => {
+                    return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
+                        .with_metadata("function", "custom_add")
+                        .with_metadata("index", 0)
+                        .with_metadata("expected", ValueType::Str)
+                        .with_metadata("got", ctx.args[0].typ()));
+                }
+            };
+            match val.as_str() {
+                "foo" => Ok(Value::Userdata(Arc::new(MagicUserdata::Foo))),
+                "bar" => Ok(Value::Userdata(Arc::new(MagicUserdata::Bar))),
+                _ => Err(Error::new(
+                    ErrorKind::InvalidValue,
+                    "want a string contains 'foo' or 'bar'",
+                )),
+            }
+        }
+    }
+
     struct CustomAddFn;
 
     #[async_trait::async_trait]
     impl Function for CustomAddFn {
-        async fn call(&self, ctx: FunctionContext<'_, '_>) -> Result<Value, Error> {
+        async fn call(&self, ctx: FunctionContext<'_, '_>) -> Result<Value> {
             if ctx.args.len() != 2 {
-                return Err(Error::InvalidArgumentCountForFunction {
-                    function: "custom_add".to_string(),
-                    expected: 2,
-                    got: ctx.args.len(),
-                });
+                return Err(
+                    Error::new(ErrorKind::TypeMismatch, "invalid argument count")
+                        .with_metadata("function", "custom_add")
+                        .with_metadata("expected", 2)
+                        .with_metadata("got", ctx.args.len()),
+                );
             }
             let a = match ctx.args[0] {
                 Value::I64(a) => a,
                 _ => {
-                    return Err(Error::InvalidArgumentTypeForFunction {
-                        function: "custom_add".to_string(),
-                        index: 0,
-                        expected: ValueType::I64,
-                        got: ctx.args[0].typ(),
-                    });
+                    return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
+                        .with_metadata("function", "custom_add")
+                        .with_metadata("index", 0)
+                        .with_metadata("expected", ValueType::I64)
+                        .with_metadata("got", ctx.args[0].typ()));
                 }
             };
             let b = match ctx.args[1] {
                 Value::I64(b) => b,
                 _ => {
-                    return Err(Error::InvalidArgumentTypeForFunction {
-                        function: "custom_add".to_string(),
-                        index: 1,
-                        expected: ValueType::I64,
-                        got: ctx.args[1].typ(),
-                    });
+                    return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
+                        .with_metadata("function", "custom_add")
+                        .with_metadata("index", 1)
+                        .with_metadata("expected", ValueType::I64)
+                        .with_metadata("got", ctx.args[1].typ()));
                 }
             };
             Ok(Value::i64(a + b))

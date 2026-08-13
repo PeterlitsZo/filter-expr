@@ -1,4 +1,4 @@
-use crate::{Error, Method, MethodContext, Value};
+use crate::{Error, ErrorKind, Method, MethodContext, Value, ValueType};
 
 pub(crate) struct MethodStrToUppercase;
 
@@ -8,16 +8,20 @@ impl Method for MethodStrToUppercase {
         let s = match ctx.obj {
             Value::Str(s) => s,
             _ => {
-                return Err(Error::Internal("object is not a string".to_string()));
+                return Err(Error::new(ErrorKind::Internal, "object is not a string")
+                    .with_metadata("method", "to_uppercase")
+                    .with_metadata("expected", ValueType::Str)
+                    .with_metadata("got", ctx.obj.typ()));
             }
         };
 
         if !ctx.args.is_empty() {
-            return Err(Error::InvalidArgumentCountForMethod {
-                method: "to_uppercase".to_string(),
-                expected: 0,
-                got: ctx.args.len(),
-            });
+            return Err(
+                Error::new(ErrorKind::TypeMismatch, "invalid argument count")
+                    .with_metadata("method", "to_uppercase")
+                    .with_metadata("expected", 0)
+                    .with_metadata("got", ctx.args.len()),
+            );
         }
 
         Ok(Value::str(s.to_uppercase()))
@@ -32,16 +36,20 @@ impl Method for MethodStrToLowercase {
         let s = match ctx.obj {
             Value::Str(s) => s,
             _ => {
-                return Err(Error::Internal("object is not a string".to_string()));
+                return Err(Error::new(ErrorKind::Internal, "object is not a string")
+                    .with_metadata("method", "to_lowercase")
+                    .with_metadata("expected", ValueType::Str)
+                    .with_metadata("got", ctx.obj.typ()));
             }
         };
 
         if !ctx.args.is_empty() {
-            return Err(Error::InvalidArgumentCountForMethod {
-                method: "to_lowercase".to_string(),
-                expected: 0,
-                got: ctx.args.len(),
-            });
+            return Err(
+                Error::new(ErrorKind::TypeMismatch, "invalid argument count")
+                    .with_metadata("method", "to_lowercase")
+                    .with_metadata("expected", 0)
+                    .with_metadata("got", ctx.args.len()),
+            );
         }
 
         Ok(Value::str(s.to_lowercase()))
@@ -56,22 +64,30 @@ impl Method for MethodStrContains {
         let s = match ctx.obj {
             Value::Str(s) => s,
             _ => {
-                return Err(Error::Internal("object is not a string".to_string()));
+                return Err(Error::new(ErrorKind::Internal, "object is not a string")
+                    .with_metadata("method", "contains")
+                    .with_metadata("expected", ValueType::Str)
+                    .with_metadata("got", ctx.obj.typ()));
             }
         };
 
         if ctx.args.len() != 1 {
-            return Err(Error::InvalidArgumentCountForMethod {
-                method: "contains".to_string(),
-                expected: 1,
-                got: ctx.args.len(),
-            });
+            return Err(
+                Error::new(ErrorKind::TypeMismatch, "invalid argument count")
+                    .with_metadata("method", "contains")
+                    .with_metadata("expected", 1)
+                    .with_metadata("got", ctx.args.len()),
+            );
         }
 
         let arg = match &ctx.args[0] {
             Value::Str(s) => s,
             _ => {
-                return Err(Error::Internal("argument is not a string".to_string()));
+                return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
+                    .with_metadata("method", "contains")
+                    .with_metadata("index", 0)
+                    .with_metadata("expected", ValueType::Str)
+                    .with_metadata("got", ctx.args[0].typ()));
             }
         };
 
@@ -87,22 +103,30 @@ impl Method for MethodStrStartsWith {
         let s = match ctx.obj {
             Value::Str(s) => s,
             _ => {
-                return Err(Error::Internal("object is not a string".to_string()));
+                return Err(Error::new(ErrorKind::Internal, "object is not a string")
+                    .with_metadata("method", "starts_with")
+                    .with_metadata("expected", ValueType::Str)
+                    .with_metadata("got", ctx.obj.typ()));
             }
         };
 
         if ctx.args.len() != 1 {
-            return Err(Error::InvalidArgumentCountForMethod {
-                method: "starts_with".to_string(),
-                expected: 1,
-                got: ctx.args.len(),
-            });
+            return Err(
+                Error::new(ErrorKind::TypeMismatch, "invalid argument count")
+                    .with_metadata("method", "starts_with")
+                    .with_metadata("expected", 1)
+                    .with_metadata("got", ctx.args.len()),
+            );
         }
 
         let arg = match &ctx.args[0] {
             Value::Str(s) => s,
             _ => {
-                return Err(Error::Internal("argument is not a string".to_string()));
+                return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
+                    .with_metadata("method", "starts_with")
+                    .with_metadata("index", 0)
+                    .with_metadata("expected", ValueType::Str)
+                    .with_metadata("got", ctx.args[0].typ()));
             }
         };
 
@@ -118,22 +142,30 @@ impl Method for MethodStrEndsWith {
         let s = match ctx.obj {
             Value::Str(s) => s,
             _ => {
-                return Err(Error::Internal("object is not a string".to_string()));
+                return Err(Error::new(ErrorKind::Internal, "object is not a string")
+                    .with_metadata("method", "ends_with")
+                    .with_metadata("expected", ValueType::Str)
+                    .with_metadata("got", ctx.obj.typ()));
             }
         };
 
         if ctx.args.len() != 1 {
-            return Err(Error::InvalidArgumentCountForMethod {
-                method: "ends_with".to_string(),
-                expected: 1,
-                got: ctx.args.len(),
-            });
+            return Err(
+                Error::new(ErrorKind::TypeMismatch, "invalid argument count")
+                    .with_metadata("method", "ends_with")
+                    .with_metadata("expected", 1)
+                    .with_metadata("got", ctx.args.len()),
+            );
         }
 
         let arg = match &ctx.args[0] {
             Value::Str(s) => s,
             _ => {
-                return Err(Error::Internal("argument is not a string".to_string()));
+                return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
+                    .with_metadata("method", "ends_with")
+                    .with_metadata("index", 0)
+                    .with_metadata("expected", ValueType::Str)
+                    .with_metadata("got", ctx.args[0].typ()));
             }
         };
 

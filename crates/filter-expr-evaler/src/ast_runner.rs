@@ -1,6 +1,8 @@
 use filter_expr::Expr;
 
-use crate::{Context, Error, FilterExprEvalerEnv, FunctionContext, MethodContext, Value};
+use crate::{
+    Context, Error, ErrorKind, FilterExprEvalerEnv, FunctionContext, MethodContext, Value,
+};
 
 /// A runner for executing AST.
 pub(crate) struct AstRunner<'a> {
@@ -24,21 +26,18 @@ impl<'a> AstRunner<'a> {
     async fn eval_expr(&self, expr: &Expr, ctx: &dyn Context) -> Result<Value, Error> {
         match expr {
             Expr::Field(field) => {
-                let value = ctx
-                    .get_var(field)
-                    .await
-                    .map_err(|e| Error::FailedToGetVar {
-                        var: field.to_string(),
-                        error: e.to_string(),
-                    })?;
+                let value = ctx.get_var(field).await.map_err(|e| {
+                    Error::new(ErrorKind::FailedToGet, "failed to get variable")
+                        .with_metadata("var", field)
+                        .with_metadata("error", format!("{e:?}"))
+                })?;
                 match value {
                     Some(value) => Ok(value),
-                    None => Err(Error::NoSuchVar {
-                        var: field.to_string(),
-                    }),
+                    None => Err(Error::new(ErrorKind::FailedToGet, "no such variable")
+                        .with_metadata("var", field)),
                 }
             }
-            Expr::FieldAccess(obj, field) => {
+            Expr::FieldAccess(_obj, _field) => {
                 todo!()
             }
 
@@ -58,72 +57,89 @@ impl<'a> AstRunner<'a> {
             Expr::Gt(left, right) => {
                 let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
                 let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
-                match left_value.partial_cmp(&right_value) {
+                match left_value.partial_cmp(&right_value)? {
                     Some(ordering) => Ok(Value::Bool(ordering == std::cmp::Ordering::Greater)),
-                    None => Err(Error::TypeMismatch(
-                        format!("{left_value:?}"),
-                        format!("{right_value:?}"),
-                    )),
+                    None => Err(Error::new(
+                        ErrorKind::TypeMismatch,
+                        "compare two uncomparable values",
+                    )
+                    .with_metadata("left", left_value.typ())
+                    .with_metadata("right", right_value.typ())),
                 }
             }
             Expr::Lt(left, right) => {
                 let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
                 let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
-                match left_value.partial_cmp(&right_value) {
+                match left_value.partial_cmp(&right_value)? {
                     Some(ordering) => Ok(Value::Bool(ordering == std::cmp::Ordering::Less)),
-                    None => Err(Error::TypeMismatch(
-                        format!("{left_value:?}"),
-                        format!("{right_value:?}"),
-                    )),
+                    None => Err(Error::new(
+                        ErrorKind::TypeMismatch,
+                        "compare two uncomparable values",
+                    )
+                    .with_metadata("left", left_value.typ())
+                    .with_metadata("right", right_value.typ())),
                 }
             }
             Expr::Ge(left, right) => {
                 let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
                 let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
-                match left_value.partial_cmp(&right_value) {
+                match left_value.partial_cmp(&right_value)? {
                     Some(ordering) => Ok(Value::Bool(
                         ordering == std::cmp::Ordering::Greater
                             || ordering == std::cmp::Ordering::Equal,
                     )),
-                    None => Err(Error::TypeMismatch(
-                        format!("{left_value:?}"),
-                        format!("{right_value:?}"),
-                    )),
+                    None => Err(Error::new(
+                        ErrorKind::TypeMismatch,
+                        "compare two uncomparable values",
+                    )
+                    .with_metadata("left", left_value.typ())
+                    .with_metadata("right", right_value.typ())),
                 }
             }
             Expr::Le(left, right) => {
                 let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
                 let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
-                match left_value.partial_cmp(&right_value) {
+                match left_value.partial_cmp(&right_value)? {
                     Some(ordering) => Ok(Value::Bool(
                         ordering == std::cmp::Ordering::Less
                             || ordering == std::cmp::Ordering::Equal,
                     )),
-                    None => Err(Error::TypeMismatch(
-                        format!("{left_value:?}"),
-                        format!("{right_value:?}"),
-                    )),
+                    None => Err(Error::new(
+                        ErrorKind::TypeMismatch,
+                        "compare two uncomparable values",
+                    )
+                    .with_metadata("left", left_value.typ())
+                    .with_metadata("right", right_value.typ())),
                 }
             }
             Expr::Eq(left, right) => {
                 let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
                 let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
-                Ok(Value::Bool(left_value == right_value))
+                Ok(Value::Bool(left_value.partial_eq(&right_value)?))
             }
             Expr::Ne(left, right) => {
                 let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
                 let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
-                Ok(Value::Bool(left_value != right_value))
+                Ok(Value::Bool(!left_value.partial_eq(&right_value)?))
             }
             Expr::In(left, right) => {
                 let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
                 let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
                 match right_value {
-                    Value::Array(array) => Ok(Value::Bool(array.contains(&left_value))),
-                    _ => Err(Error::TypeMismatch(
-                        format!("{right_value:?}"),
-                        format!("{left_value:?}"),
-                    )),
+                    Value::Array(array) => {
+                        for item in array.iter() {
+                            if item.partial_eq(&left_value)? {
+                                return Ok(Value::Bool(true));
+                            }
+                        }
+
+                        Ok(Value::Bool(false))
+                    }
+                    _ => Err(
+                        Error::new(ErrorKind::TypeMismatch, "right value is not an array")
+                            .with_metadata("expected", "array")
+                            .with_metadata("got", right_value.typ()),
+                    ),
                 }
             }
 
@@ -134,9 +150,8 @@ impl<'a> AstRunner<'a> {
                     match value {
                         Value::Bool(b) => result = result && b,
                         _ => {
-                            return Err(Error::InvalidValue(format!(
-                                "expected bool, got {value:?}"
-                            )));
+                            return Err(Error::new(ErrorKind::InvalidValue, "expected bool")
+                                .with_metadata("got", value.typ()));
                         }
                     }
                 }
@@ -149,9 +164,8 @@ impl<'a> AstRunner<'a> {
                     match value {
                         Value::Bool(b) => result = result || b,
                         _ => {
-                            return Err(Error::InvalidValue(format!(
-                                "expected bool, got {value:?}"
-                            )));
+                            return Err(Error::new(ErrorKind::InvalidValue, "expected bool")
+                                .with_metadata("got", value.typ()));
                         }
                     }
                 }
@@ -161,10 +175,9 @@ impl<'a> AstRunner<'a> {
                 let value = Box::pin(self.eval_expr(expr, ctx)).await?;
                 match value {
                     Value::Bool(b) => Ok(Value::Bool(!b)),
-                    _ => Err(Error::TypeMismatch(
-                        format!("{value:?}"),
-                        "bool".to_string(),
-                    )),
+                    _ => Err(Error::new(ErrorKind::TypeMismatch, "value is not a bool")
+                        .with_metadata("expected", "bool")
+                        .with_metadata("got", value.typ())),
                 }
             }
         }

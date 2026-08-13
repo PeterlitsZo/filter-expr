@@ -4,7 +4,7 @@ use crate::{
     FilterExprEvalerEnv, FunctionContext, MethodContext,
     bc::{self, Bytecode},
     ctx::Context,
-    error::Error,
+    error::{Error, ErrorKind},
     value::Value,
 };
 
@@ -68,9 +68,8 @@ impl<'a> BytecodeRunner<'a> {
                         None => {
                             let local = &self.bytecode.locals[index];
                             let value = ctx.get_var(&local.name).await?.ok_or_else(|| {
-                                Error::NoSuchVar {
-                                    var: local.name.clone(),
-                                }
+                                Error::new(ErrorKind::FailedToGet, "no such variable")
+                                    .with_metadata("var", &local.name)
                             })?;
                             self.local_slot[index] = Some(value.clone());
                             value
@@ -102,9 +101,7 @@ impl<'a> BytecodeRunner<'a> {
 
                 bc::BUILD_ARRAY => {
                     let length = unsafe { self.read_u32() };
-                    let elements = self
-                        .stack
-                        .split_off(self.stack.len() - length as usize);
+                    let elements = self.stack.split_off(self.stack.len() - length as usize);
                     self.stack.push(Value::Array(Arc::new(elements)));
                 }
 
@@ -142,8 +139,9 @@ impl<'a> BytecodeRunner<'a> {
                 bc::JUMP_IF_TRUE => {
                     let offset = unsafe { self.read_u32() };
                     if self.stack.is_empty() {
-                        return Err(Error::Internal(
-                            "Stack underflow: no value for DupAndJumpIfTrue".to_string(),
+                        return Err(Error::new(
+                            ErrorKind::Internal,
+                            "Stack underflow: no value for DupAndJumpIfTrue",
                         ));
                     }
                     unsafe {
@@ -164,55 +162,65 @@ impl<'a> BytecodeRunner<'a> {
 
                 bc::GT => {
                     let (left, right) = unsafe { self.pop_stack_top_two_unchecked() };
-                    let result = left
-                        .partial_cmp(&right)
-                        .map(|ord| ord == std::cmp::Ordering::Greater)
-                        .unwrap_or(false);
+                    let ordering =
+                        Self::require_ordering(&left, &right, left.partial_cmp(&right)?)?;
+                    let result = ordering == std::cmp::Ordering::Greater;
                     self.stack.push(Value::Bool(result));
                 }
                 bc::LT => {
                     let (left, right) = unsafe { self.pop_stack_top_two_unchecked() };
-                    let result = left
-                        .partial_cmp(&right)
-                        .map(|ord| ord == std::cmp::Ordering::Less)
-                        .unwrap_or(false);
+                    let ordering =
+                        Self::require_ordering(&left, &right, left.partial_cmp(&right)?)?;
+                    let result = ordering == std::cmp::Ordering::Less;
                     self.stack.push(Value::Bool(result));
                 }
                 bc::GE => {
                     let (left, right) = unsafe { self.pop_stack_top_two_unchecked() };
-                    let result = left
-                        .partial_cmp(&right)
-                        .map(|ord| {
-                            ord == std::cmp::Ordering::Greater || ord == std::cmp::Ordering::Equal
-                        })
-                        .unwrap_or(false);
+                    let ordering =
+                        Self::require_ordering(&left, &right, left.partial_cmp(&right)?)?;
+                    let result = ordering == std::cmp::Ordering::Greater
+                        || ordering == std::cmp::Ordering::Equal;
                     self.stack.push(Value::Bool(result));
                 }
                 bc::LE => {
                     let (left, right) = unsafe { self.pop_stack_top_two_unchecked() };
-                    let result = left
-                        .partial_cmp(&right)
-                        .map(|ord| {
-                            ord == std::cmp::Ordering::Less || ord == std::cmp::Ordering::Equal
-                        })
-                        .unwrap_or(false);
+                    let ordering =
+                        Self::require_ordering(&left, &right, left.partial_cmp(&right)?)?;
+                    let result = ordering == std::cmp::Ordering::Less
+                        || ordering == std::cmp::Ordering::Equal;
                     self.stack.push(Value::Bool(result));
                 }
                 bc::EQ => {
                     let (left, right) = unsafe { self.pop_stack_top_two_unchecked() };
-                    self.stack.push(Value::Bool(left == right));
+                    self.stack.push(Value::Bool(left.partial_eq(&right)?));
                 }
                 bc::NE => {
                     let (left, right) = unsafe { self.pop_stack_top_two_unchecked() };
-                    self.stack.push(Value::Bool(left != right));
+                    self.stack.push(Value::Bool(!left.partial_eq(&right)?));
                 }
                 bc::IN => {
                     let right = unsafe { self.pop_stack_top_unchecked() };
                     let left = unsafe { self.pop_stack_top_unchecked() };
 
                     let result = match right {
-                        Value::Array(arr) => arr.contains(&left),
-                        _ => false,
+                        Value::Array(arr) => {
+                            let mut contains = false;
+                            for item in arr.iter() {
+                                if item.partial_eq(&left)? {
+                                    contains = true;
+                                    break;
+                                }
+                            }
+                            contains
+                        }
+                        _ => {
+                            return Err(Error::new(
+                                ErrorKind::TypeMismatch,
+                                "right value is not an array",
+                            )
+                            .with_metadata("expected", "array")
+                            .with_metadata("got", right.typ()));
+                        }
                     };
                     self.stack.push(Value::Bool(result));
                 }
@@ -395,6 +403,18 @@ impl<'a> BytecodeRunner<'a> {
         let top_second = unsafe { std::ptr::read(self.stack.get_unchecked(len - 2)) };
         unsafe { self.stack.set_len(len - 2) };
         (top_second, top_first)
+    }
+
+    fn require_ordering(
+        left: &Value,
+        right: &Value,
+        ordering: Option<std::cmp::Ordering>,
+    ) -> Result<std::cmp::Ordering, Error> {
+        ordering.ok_or_else(|| {
+            Error::new(ErrorKind::TypeMismatch, "compare two uncomparable values")
+                .with_metadata("left", left.typ())
+                .with_metadata("right", right.typ())
+        })
     }
 
     /// Pop n values from the stack without checking the bounds.
