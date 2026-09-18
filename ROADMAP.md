@@ -15,11 +15,11 @@
   - [x] `contains`
   - [x] `starts_with`
   - [x] `ends_with`
-  - [ ] `len`
-  - [ ] `is_empty`
-  - [ ] `trim`
-  - [ ] `trim_start`
-  - [ ] `trim_end`
+  - [x] `len`
+  - [x] `is_empty`
+  - [x] `trim`
+  - [x] `trim_start`
+  - [x] `trim_end`
   - [ ] `strip_prefix`
   - [ ] `strip_suffix`
 

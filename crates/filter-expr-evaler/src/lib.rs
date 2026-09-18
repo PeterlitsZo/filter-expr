@@ -66,6 +66,26 @@ impl FilterExprEvalerEnv {
             Arc::new(builtin::MethodStrToLowercase),
         );
         methods.insert(
+            ("len".to_string(), ValueType::Str),
+            Arc::new(builtin::MethodStrLen),
+        );
+        methods.insert(
+            ("is_empty".to_string(), ValueType::Str),
+            Arc::new(builtin::MethodStrIsEmpty),
+        );
+        methods.insert(
+            ("trim".to_string(), ValueType::Str),
+            Arc::new(builtin::MethodStrTrim),
+        );
+        methods.insert(
+            ("trim_start".to_string(), ValueType::Str),
+            Arc::new(builtin::MethodStrTrimStart),
+        );
+        methods.insert(
+            ("trim_end".to_string(), ValueType::Str),
+            Arc::new(builtin::MethodStrTrimEnd),
+        );
+        methods.insert(
             ("contains".to_string(), ValueType::Str),
             Arc::new(builtin::MethodStrContains),
         );
@@ -382,6 +402,69 @@ mod tests {
                 (simple_context! { "name": "Jane" }, false),
                 (simple_context! { "name": "John" }, true),
             ],
+        );
+
+        // Parse the filter-expr:
+        //
+        //     value.len() = expected
+        // =====================================================================
+        parse_and_do_test_cases!(
+            r#"value.len() = expected"#,
+            &[
+                (simple_context! { "value": "", "expected": 0 }, true),
+                (simple_context! { "value": "foobar", "expected": 6 }, true),
+                (simple_context! { "value": "你好", "expected": 6 }, true),
+                (simple_context! { "value": "你好", "expected": 2 }, false),
+            ],
+        );
+
+        // Parse the filter-expr:
+        //
+        //     value.is_empty()
+        // =====================================================================
+        parse_and_do_test_cases!(
+            r#"value.is_empty()"#,
+            &[
+                (simple_context! { "value": "" }, true),
+                (simple_context! { "value": " " }, false),
+                (simple_context! { "value": "foobar" }, false),
+            ],
+        );
+
+        // Parse the filter-expr:
+        //
+        //     value.trim() = expected
+        //     value.trim_start() = expected
+        //     value.trim_end() = expected
+        // =====================================================================
+        parse_and_do_test_cases!(
+            r#"value.trim() = expected"#,
+            &[
+                (
+                    simple_context! { "value": "  foobar\n", "expected": "foobar" },
+                    true
+                ),
+                (
+                    simple_context! { "value": "\u{2003}foobar\u{2003}", "expected": "foobar" },
+                    true
+                ),
+            ],
+        );
+
+        parse_and_do_test_cases!(
+            r#"value.trim_start() = expected"#,
+            &[(
+                simple_context! { "value": "  foobar  ", "expected": "foobar  " },
+                true,
+            )],
+        );
+
+        parse_and_do_test_cases!(
+            r#"value.trim_end() = expected"#,
+            &[(
+                simple_context! { "value": "  foobar  ", "expected": "  foobar" },
+                true,
+            )],
         );
 
         // Parse the filter-expr:
