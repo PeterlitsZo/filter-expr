@@ -1,5 +1,16 @@
 use crate::{Error, ErrorKind, Function, FunctionContext, Value, ValueType};
 
+/// Implements the built-in `matches(text, pattern) -> bool` function.
+///
+/// Both arguments must be strings. `pattern` is interpreted as a regular expression,
+/// and the function reports whether it matches anywhere in `text`.
+///
+/// # Examples
+///
+/// ```text
+/// matches("foobar", "^foo") // => true
+/// matches("foobar", "^bar") // => false
+/// ```
 pub(crate) struct FunctionMatches;
 
 #[async_trait::async_trait]
@@ -43,6 +54,18 @@ impl Function for FunctionMatches {
     }
 }
 
+/// Implements the built-in `type(value) -> str` function.
+///
+/// Returns the evaluator's canonical type name: `"str"`, `"i64"`, `"f64"`,
+/// `"bool"`, `"null"`, `"array"`, or `"userdata"`.
+///
+/// # Examples
+///
+/// ```text
+/// type("foobar") // => "str"
+/// type(42)       // => "i64"
+/// type(null)     // => "null"
+/// ```
 pub(crate) struct FunctionType;
 
 #[async_trait::async_trait]

@@ -1,5 +1,14 @@
 use crate::{Error, ErrorKind, Method, MethodContext, Value, ValueType};
 
+/// Implements the built-in `str.to_uppercase() -> str` method.
+///
+/// Converts every cased character in the receiver to its Unicode uppercase form.
+///
+/// # Examples
+///
+/// ```text
+/// "Filter Expr".to_uppercase() // => "FILTER EXPR"
+/// ```
 pub(crate) struct MethodStrToUppercase;
 
 #[async_trait::async_trait]
@@ -28,6 +37,15 @@ impl Method for MethodStrToUppercase {
     }
 }
 
+/// Implements the built-in `str.to_lowercase() -> str` method.
+///
+/// Converts every cased character in the receiver to its Unicode lowercase form.
+///
+/// # Examples
+///
+/// ```text
+/// "Filter Expr".to_lowercase() // => "filter expr"
+/// ```
 pub(crate) struct MethodStrToLowercase;
 
 #[async_trait::async_trait]
@@ -56,6 +74,17 @@ impl Method for MethodStrToLowercase {
     }
 }
 
+/// Implements the built-in `str.contains(needle) -> bool` method.
+///
+/// Returns whether the receiver contains the string `needle`. The comparison is
+/// case-sensitive.
+///
+/// # Examples
+///
+/// ```text
+/// "foobar".contains("oba") // => true
+/// "foobar".contains("BA")  // => false
+/// ```
 pub(crate) struct MethodStrContains;
 
 #[async_trait::async_trait]
@@ -95,6 +124,17 @@ impl Method for MethodStrContains {
     }
 }
 
+/// Implements the built-in `str.starts_with(prefix) -> bool` method.
+///
+/// Returns whether the receiver starts with the string `prefix`. The comparison is
+/// case-sensitive.
+///
+/// # Examples
+///
+/// ```text
+/// "foobar".starts_with("foo") // => true
+/// "foobar".starts_with("bar") // => false
+/// ```
 pub(crate) struct MethodStrStartsWith;
 
 #[async_trait::async_trait]
@@ -134,6 +174,17 @@ impl Method for MethodStrStartsWith {
     }
 }
 
+/// Implements the built-in `str.ends_with(suffix) -> bool` method.
+///
+/// Returns whether the receiver ends with the string `suffix`. The comparison is
+/// case-sensitive.
+///
+/// # Examples
+///
+/// ```text
+/// "foobar".ends_with("bar") // => true
+/// "foobar".ends_with("foo") // => false
+/// ```
 pub(crate) struct MethodStrEndsWith;
 
 #[async_trait::async_trait]

@@ -78,3 +78,4 @@
       (I think maybe we can use the syntax `/foobar/` or `r"foobar"` to create
       the regex value -- but maybe not a good idea.)
 - [ ] Support the field-access syntax. Like `foo.bar.baz`.
+- [ ] Support comment.
