@@ -97,6 +97,14 @@ impl FilterExprEvalerEnv {
             ("ends_with".to_string(), ValueType::Str),
             Arc::new(builtin::MethodStrEndsWith),
         );
+        methods.insert(
+            ("strip_prefix".to_string(), ValueType::Str),
+            Arc::new(builtin::MethodStrStripPrefix),
+        );
+        methods.insert(
+            ("strip_suffix".to_string(), ValueType::Str),
+            Arc::new(builtin::MethodStrStripSuffix),
+        );
 
         let inner = Arc::new(RwLock::new(FilterExprEvalerEnvInner {
             cached_regex: Cache::new(128),

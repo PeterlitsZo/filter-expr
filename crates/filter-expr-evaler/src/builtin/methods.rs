@@ -413,3 +413,103 @@ impl Method for MethodStrEndsWith {
         Ok(Value::bool(s.ends_with(arg.as_str())))
     }
 }
+
+/// Implements the built-in `str.strip_prefix(prefix) -> str | null` method.
+///
+/// Removes the string `prefix` once if it matches, otherwise returns `null`.
+/// The comparison is case-sensitive. An empty `prefix` leaves the string unchanged.
+///
+/// # Examples
+///
+/// ```text
+/// "foobar".strip_prefix("foo") // => "bar"
+/// "foobar".strip_prefix("baz") // => null
+/// ```
+pub(crate) struct MethodStrStripPrefix;
+
+#[async_trait::async_trait]
+impl Method for MethodStrStripPrefix {
+    async fn call(&self, ctx: MethodContext<'_, '_>) -> Result<Value, Error> {
+        let s = match ctx.obj {
+            Value::Str(s) => s,
+            _ => {
+                return Err(Error::new(ErrorKind::Internal, "object is not a string")
+                    .with_metadata("method", "strip_prefix")
+                    .with_metadata("expected", ValueType::Str)
+                    .with_metadata("got", ctx.obj.typ()));
+            }
+        };
+
+        if ctx.args.len() != 1 {
+            return Err(
+                Error::new(ErrorKind::TypeMismatch, "invalid argument count")
+                    .with_metadata("method", "strip_prefix")
+                    .with_metadata("expected", 1)
+                    .with_metadata("got", ctx.args.len()),
+            );
+        }
+
+        let arg = match &ctx.args[0] {
+            Value::Str(s) => s,
+            _ => {
+                return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
+                    .with_metadata("method", "strip_prefix")
+                    .with_metadata("index", 0)
+                    .with_metadata("expected", ValueType::Str)
+                    .with_metadata("got", ctx.args[0].typ()));
+            }
+        };
+
+        Ok(s.strip_prefix(arg.as_str()).map_or(Value::Null, Value::str))
+    }
+}
+
+/// Implements the built-in `str.strip_suffix(suffix) -> str | null` method.
+///
+/// Removes the string `suffix` once if it matches, otherwise returns `null`.
+/// The comparison is case-sensitive. An empty `suffix` leaves the string unchanged.
+///
+/// # Examples
+///
+/// ```text
+/// "foobar".strip_suffix("bar") // => "foo"
+/// "foobar".strip_suffix("baz") // => null
+/// ```
+pub(crate) struct MethodStrStripSuffix;
+
+#[async_trait::async_trait]
+impl Method for MethodStrStripSuffix {
+    async fn call(&self, ctx: MethodContext<'_, '_>) -> Result<Value, Error> {
+        let s = match ctx.obj {
+            Value::Str(s) => s,
+            _ => {
+                return Err(Error::new(ErrorKind::Internal, "object is not a string")
+                    .with_metadata("method", "strip_suffix")
+                    .with_metadata("expected", ValueType::Str)
+                    .with_metadata("got", ctx.obj.typ()));
+            }
+        };
+
+        if ctx.args.len() != 1 {
+            return Err(
+                Error::new(ErrorKind::TypeMismatch, "invalid argument count")
+                    .with_metadata("method", "strip_suffix")
+                    .with_metadata("expected", 1)
+                    .with_metadata("got", ctx.args.len()),
+            );
+        }
+
+        let arg = match &ctx.args[0] {
+            Value::Str(s) => s,
+            _ => {
+                return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
+                    .with_metadata("method", "strip_suffix")
+                    .with_metadata("index", 0)
+                    .with_metadata("expected", ValueType::Str)
+                    .with_metadata("got", ctx.args[0].typ()));
+            }
+        };
+
+        Ok(s.strip_suffix(arg.as_str()).map_or(Value::Null, Value::str))
+    }
+}

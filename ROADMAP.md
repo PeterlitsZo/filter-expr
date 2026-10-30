@@ -20,8 +20,8 @@
   - [x] `trim`
   - [x] `trim_start`
   - [x] `trim_end`
-  - [ ] `strip_prefix`
-  - [ ] `strip_suffix`
+  - [x] `strip_prefix`
+  - [x] `strip_suffix`
 
 - [ ] Support the `DateTime` type.
 - [ ] Support the `DateTime::from_rfc3339` function to create a `DateTime` value
