@@ -1,28 +1,10 @@
-# 2026-01
+# ROADMAP
 
-- [x] Support the `Evaler` struct to evaluate the expression and move the
-      evaluation logic to a separate crate (it should be useful if some project
-      want to evaluate the expression by itself).
-- [x] Let the `tokio` dependency be optional.
-- [ ] More documentation.
+## 2026-11
+
+- [ ] Enhance the README document.
 - [ ] Add fuzzing tests and more tests.
-- [ ] Rename the `field` to `var` in source code.
 - [ ] Support custom method.
-- [ ] Support those methods for string:
-
-  - [x] `to_uppercase`
-  - [x] `to_lowercase`
-  - [x] `contains`
-  - [x] `starts_with`
-  - [x] `ends_with`
-  - [x] `len`
-  - [x] `is_empty`
-  - [x] `trim`
-  - [x] `trim_start`
-  - [x] `trim_end`
-  - [x] `strip_prefix`
-  - [x] `strip_suffix`
-
 - [ ] Support the `DateTime` type.
 - [ ] Support the `DateTime::from_rfc3339` function to create a `DateTime` value
       by given RFC 3339 string. Like
@@ -44,15 +26,16 @@
   - [ ] `get_microsecond`
   - [ ] `get_nanosecond`
 
-- [x] Support the `type` function to get the type of the value. Like
-      `type(foobar) = 'i64'`.
+## 2026-10
+
 - [ ] Support the `Object` type -- just like the JSON object.
 - [ ] Support get the item of the `Array` and `Object` by index or key. Like
       `array[0] = "John"` or `object.name = "John"`.
 - [ ] Support `==` as the alias of `=` for the equality comparison.
 - [ ] Support escape the special characters in the string. Like `\'` to escape
       the single quote.
-- [ ] Support `+`, `-`, `*`, `/` operators for the arithmetic operations.
+- [ ] Support `+`, `-`, `*`, `/` and `%` operators for the arithmetic
+      operations.
 - [ ] Support `&&`, `||` and `!` operators for the logical operations.
       Support `and`, `or` and `not` as the aliases of `&&`, `||` and `!`.
 - [ ] Use tool `prek` for pre-commit hooks.
@@ -74,8 +57,30 @@
   - [ ] `log2`
   - [ ] `log10`
 
-- [ ] Support the regex! Like `regex("foobar")` to create a regex value.
-      (I think maybe we can use the syntax `/foobar/` or `r"foobar"` to create
-      the regex value -- but maybe not a good idea.)
 - [ ] Support the field-access syntax. Like `foo.bar.baz`.
 - [ ] Support comment.
+
+## 2026-01
+
+- [x] Support the `Evaler` struct to evaluate the expression and move the
+      evaluation logic to a separate crate (it should be useful if some project
+      want to evaluate the expression by itself).
+- [x] Let the `tokio` dependency be optional.
+- [x] Rename the `field` to `var` in source code.
+- [x] Support those methods for string:
+
+  - [x] `to_uppercase`
+  - [x] `to_lowercase`
+  - [x] `contains`
+  - [x] `starts_with`
+  - [x] `ends_with`
+  - [x] `len`
+  - [x] `is_empty`
+  - [x] `trim`
+  - [x] `trim_start`
+  - [x] `trim_end`
+  - [x] `strip_prefix`
+  - [x] `strip_suffix`
+
+- [x] Support the `type` function to get the type of the value. Like
+      `type(foobar) = 'i64'`.
