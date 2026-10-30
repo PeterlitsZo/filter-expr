@@ -1,11 +1,9 @@
 # filter-expr
 
-> NOTE: This library is still under development.
-
-A library for parsing the filter expression.
+A library for parsing the filter expression as an AST.
 
 ```rust
-use filter_expr::{FilterExpr, SimpleContext};
+use filter_expr::FilterExpr;
 
 let f = FilterExpr::parse("name = 'John' AND age > 18").unwrap();
 
@@ -17,7 +15,52 @@ assert_eq!(f.expr(), Some(Expr::and_([
 
 You can evaluate it by yourself or use the `filter-expr-evaler` crate.
 
-## Syntax
+## Examples
+
+You can compare values with `=`, `!=`, `>`, `>=`, `<`, and `<=`:
+
+```text
+age >= 18 AND rating > 4.5
+```
+
+You can combine conditions with `AND`, `OR`, `NOT`, and parentheses:
+
+```text
+active AND (admin OR NOT banned)
+```
+
+You can check whether a value belongs to an array with `IN`:
+
+```text
+status IN [200, 201, 204]
+```
+
+You can quote strings with single or double quotes and escape quotes with a
+backslash:
+
+```text
+first_name = "John" AND last_name = 'O\'Brien'
+```
+
+You can use boolean and `null` literals:
+
+```text
+active = true AND deleted_at = null
+```
+
+You can call functions and chain methods provided by your evaluator:
+
+```text
+matches(name.trim().to_lowercase(), '^john')
+```
+
+You can parse nested field access with dot notation:
+
+```text
+user.address.city = 'London'
+```
+
+## Syntax Reference
 
 ### Filter
 

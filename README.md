@@ -1,7 +1,5 @@
 # filter-expr
 
-> NOTE: This library is still under development.
-
 Crates:
 
 - The core crate's README: [filter-expr](crates/filter-expr/README.md)
@@ -14,3 +12,28 @@ crate.
 
 This project is inspired by CEL and the filter syntax in AIP-160 -- but has
 different syntax.
+
+## Quick Start
+
+```rust
+use filter_expr::FilterExpr;
+use filter_expr_evaler::{FilterExprEvaler, simple_context};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Parse the filter expression.
+    let filter = FilterExpr::parse("name = 'John' AND age > 18")?;
+
+    // Provide values for the variables in the expression.
+    let ctx = simple_context! {
+        "name": "John",
+        "age": 19,
+    };
+
+    // Evaluate the expression against the context.
+    let evaler = FilterExprEvaler::new();
+    assert!(evaler.eval(&filter, &ctx).await?);
+
+    Ok(())
+}
+```
