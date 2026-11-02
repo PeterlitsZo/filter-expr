@@ -8,4 +8,7 @@ pub enum Error {
 
     #[error("unsupported character: {0}")]
     UnsupportedCharacter(char),
+
+    #[error("unexpected EOF")]
+    UnexpectedEOF,
 }

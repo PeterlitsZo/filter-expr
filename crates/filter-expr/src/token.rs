@@ -66,6 +66,57 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
                 chars.next();
             }
 
+            // Comments.
+            '/' => {
+                chars.next();
+
+                #[derive(Clone, Copy, PartialEq)]
+                enum CommentState {
+                    NeedStar,
+                    ReadingComment,
+                    NeedSlash,
+                    Done,
+                }
+                let mut s = CommentState::NeedStar;
+
+                while let Some(c) = chars.next() {
+                    match (s, c) {
+                        (CommentState::NeedStar, '*') => {
+                            s = CommentState::ReadingComment;
+                            continue;
+                        }
+                        (CommentState::NeedStar, _) => {
+                            return Err(Error::UnsupportedCharacter('/'));
+                        }
+                        (CommentState::ReadingComment, '*') => {
+                            s = CommentState::NeedSlash;
+                            continue;
+                        }
+                        (CommentState::ReadingComment, _) => {
+                            continue;
+                        }
+                        (CommentState::NeedSlash, '/') => {
+                            s = CommentState::Done;
+                            break;
+                        }
+                        (CommentState::NeedSlash, '*') => {
+                            continue;
+                        }
+                        (CommentState::NeedSlash, _) => {
+                            s = CommentState::ReadingComment;
+                            continue;
+                        }
+                        (CommentState::Done, _) => {
+                            unreachable!("s cannot be Done");
+                        }
+                    }
+                }
+
+                if s != CommentState::Done {
+                    return Err(Error::UnexpectedEOF);
+                }
+            }
+
             // String literal.
             '\'' => {
                 chars.next();
@@ -480,6 +531,24 @@ mod tests {
         );
 
         let input = r#"!(a IN ['foo', 'bar'])"#;
+        let tokens = parse_token(input).unwrap();
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Bang,
+                Token::LParen,
+                Token::Ident("a".to_string()),
+                Token::In,
+                Token::LBracket,
+                Token::Str("foo".to_string()),
+                Token::Comma,
+                Token::Str("bar".to_string()),
+                Token::RBracket,
+                Token::RParen,
+            ]
+        );
+
+        let input = r#"!(a IN /* the strings Peterlits like */ ['foo', 'bar'])"#;
         let tokens = parse_token(input).unwrap();
         assert_eq!(
             tokens,
