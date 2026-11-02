@@ -63,12 +63,12 @@ impl Parser {
     }
 
     /// ```text
-    /// <and_test> = ['NOT'] <comparison>
+    /// <and_test> = ('NOT' | '!') <and_test> | <comparison>
     /// ```
     fn parse_and_test(&mut self) -> Result<Expr, Error> {
-        // Handle NOT operator (unary)
-        if self.peek() == Some(&Token::Not) {
-            self.advance(); // consume NOT
+        // Handle either spelling of unary negation.
+        if matches!(self.peek(), Some(Token::Not | Token::Bang)) {
+            self.advance(); // consume NOT or !
             let expr = self.parse_and_test()?;
             return Ok(Expr::Not(Box::new(expr)));
         }
@@ -89,10 +89,13 @@ impl Parser {
         match operator {
             Some(Token::Eq) | Some(Token::Gt) | Some(Token::Lt) | Some(Token::Ge)
             | Some(Token::Le) | Some(Token::Ne) | Some(Token::In) => {
-                // Parse <operator> <comparison> (recursive)
-                self.advance(); // consume operator
+                // Parse <operator> <comparison> (recursive).
 
-                let right = self.parse_comparison()?; // Recursive call
+                // Consume the operator.
+                self.advance();
+
+                // Recursive call.
+                let right = self.parse_comparison()?;
 
                 Ok(match operator {
                     Some(Token::Eq) => Expr::Eq(Box::new(primary), Box::new(right)),
@@ -107,6 +110,30 @@ impl Parser {
                         return Err(Error::Parse(err_msg));
                     }
                 })
+            }
+            Some(Token::Not) => {
+                // Parse <operator> <comparison> (recursive). But the operator
+                // is 'NOT' 'IN'.
+
+                // consume the 'NOT'.
+                self.advance();
+
+                // consume the 'IN'.
+                let should_be_in = self.peek().cloned();
+                if should_be_in != Some(Token::In) {
+                    let err_msg = format!("unexpected operator: {should_be_in:?} after NOT");
+                    return Err(Error::Parse(err_msg));
+                }
+                self.advance();
+
+                // Recursive call.
+                let right = self.parse_comparison()?;
+
+                // Return the result.
+                Ok(Expr::Not(Box::new(Expr::In(
+                    Box::new(primary),
+                    Box::new(right),
+                ))))
             }
             _ => {
                 // Just <primary>
@@ -535,6 +562,30 @@ mod tests {
                 Expr::field_access_(Expr::field_access_(Expr::field_("foo"), "bar"), "baz"),
                 Expr::i64_(5),
             )
-        )
+        );
+
+        let input = r#"a NOT IN ['foo', 'bar']"#;
+        let tokens = parse_token(input).unwrap();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse_expr().unwrap();
+        assert_eq!(
+            expr,
+            Expr::not_(Expr::in_(
+                Expr::field_("a"),
+                Expr::array_([Expr::str_("foo"), Expr::str_("bar"),])
+            ))
+        );
+
+        let input = r#"!(a IN ['foo', 'bar'])"#;
+        let tokens = parse_token(input).unwrap();
+        let mut parser = Parser::new(tokens);
+        let expr = parser.parse_expr().unwrap();
+        assert_eq!(
+            expr,
+            Expr::not_(Expr::in_(
+                Expr::field_("a"),
+                Expr::array_([Expr::str_("foo"), Expr::str_("bar"),])
+            ))
+        );
     }
 }

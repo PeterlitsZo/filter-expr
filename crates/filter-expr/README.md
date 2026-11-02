@@ -76,7 +76,7 @@ user.address.city = 'London'
 <expr> = <or_test> ('OR' <or_test>)*
 
 <or_test> = <and_test> ('AND' <and_test>)*
-<and_test> = ['NOT'] <comparison>
+<and_test> = ('NOT' | '!') <and_test> | <comparison>
 ```
 
 ### Comparison
@@ -90,7 +90,7 @@ user.address.city = 'London'
           | <field-access>
           | <value>
 
-<operator> = '=' | '>' | '<' | '>=' | '<=' | '!=' | 'IN'
+<operator> = '=' | '>' | '<' | '>=' | '<=' | '!=' | 'IN' | 'NOT' 'IN'
 
 <func-call> = <ident> '(' [<value> (',' <value>)* ','?] ')'
 <method-call> = <value> '.' <ident> '(' [<value> (',' <value>)* ','?] ')'

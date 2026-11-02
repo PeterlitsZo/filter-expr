@@ -49,8 +49,10 @@ pub(crate) enum Token {
     And,
     /// The or operator (`||` or `OR`).
     Or,
-    /// The not operator (`!` or `NOT`).
+    /// The not keyword (`NOT`).
     Not,
+    /// The symbolic not operator (`!`).
+    Bang,
 }
 
 pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
@@ -183,7 +185,7 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
                     chars.next();
                     tokens.push(Token::Ne);
                 } else {
-                    tokens.push(Token::Not);
+                    tokens.push(Token::Bang);
                 }
             }
 
@@ -249,6 +251,7 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
                 match text.as_str() {
                     "AND" => tokens.push(Token::And),
                     "OR" => tokens.push(Token::Or),
+                    "NOT" => tokens.push(Token::Not),
                     "IN" => tokens.push(Token::In),
 
                     "true" => tokens.push(Token::Bool(true)),
@@ -457,6 +460,40 @@ mod tests {
                 Token::Ident("magic".to_string()),
                 Token::Eq,
                 Token::Str("'\n\r\t\\".to_string()),
+            ]
+        );
+
+        let input = r#"a NOT IN ['foo', 'bar']"#;
+        let tokens = parse_token(input).unwrap();
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Ident("a".to_string()),
+                Token::Not,
+                Token::In,
+                Token::LBracket,
+                Token::Str("foo".to_string()),
+                Token::Comma,
+                Token::Str("bar".to_string()),
+                Token::RBracket,
+            ]
+        );
+
+        let input = r#"!(a IN ['foo', 'bar'])"#;
+        let tokens = parse_token(input).unwrap();
+        assert_eq!(
+            tokens,
+            vec![
+                Token::Bang,
+                Token::LParen,
+                Token::Ident("a".to_string()),
+                Token::In,
+                Token::LBracket,
+                Token::Str("foo".to_string()),
+                Token::Comma,
+                Token::Str("bar".to_string()),
+                Token::RBracket,
+                Token::RParen,
             ]
         );
     }
