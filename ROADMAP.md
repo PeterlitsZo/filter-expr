@@ -1,5 +1,11 @@
 # ROADMAP
 
+## 2026-12
+
+- [ ] Support `obj[name]`.
+- [ ] Fix `transform_children` skipping recursive transformation of `Array`
+      elements.
+
 ## 2026-11
 
 - [ ] Support version comment.

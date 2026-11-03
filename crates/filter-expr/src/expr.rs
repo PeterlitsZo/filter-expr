@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 
 use crate::{Error, Transform, TransformContext, TransformResult};
@@ -18,6 +19,7 @@ pub enum Expr {
     Null,
 
     Array(Vec<Expr>),
+    Object(BTreeMap<String, Expr>),
 
     FuncCall(String, Vec<Expr>),
     MethodCall(String, Box<Expr>, Vec<Expr>),
@@ -60,6 +62,7 @@ impl Ord for Expr {
                 Null => 204,
 
                 Array(..) => 300,
+                Object(..) => 301,
 
                 FuncCall(..) => 400,
                 MethodCall(..) => 401,
@@ -96,6 +99,7 @@ impl Ord for Expr {
                     (Null, Null) => Ordering::Equal,
 
                     (Array(a), Array(b)) => a.cmp(b),
+                    (Object(a), Object(b)) => a.cmp(b),
 
                     (FuncCall(f1, a1), FuncCall(f2, a2)) => match f1.cmp(f2) {
                         Ordering::Equal => a1.cmp(a2),
@@ -180,6 +184,7 @@ impl Hash for Expr {
             Bool(b) => b.hash(state),
             Null => {},
             Array(v) => v.hash(state),
+            Object(v) => v.hash(state),
             FuncCall(name, args) => {
                 name.hash(state);
                 args.hash(state);
@@ -255,6 +260,10 @@ impl Expr {
 
     pub fn array_<T: Into<Vec<Expr>>>(value: T) -> Self {
         Self::Array(value.into())
+    }
+
+    pub fn object_<T: Into<BTreeMap<String, Expr>>>(value: T) -> Self {
+        Self::Object(value.into())
     }
 
     pub fn func_call_(func: impl Into<String>, args: Vec<Expr>) -> Self {
@@ -374,7 +383,15 @@ impl Expr {
             Expr::F64(value) => Expr::F64(value),
             Expr::Bool(value) => Expr::Bool(value),
             Expr::Null => Expr::Null,
+
             Expr::Array(value) => Expr::Array(value),
+            Expr::Object(fields) => {
+                let mut transformed_fields = BTreeMap::new();
+                for (key, value) in fields {
+                    transformed_fields.insert(key, Self::transform_expr(transformer, value, ctx.clone()).await?);
+                }
+                Expr::Object(transformed_fields)
+            }
 
             Expr::FuncCall(func, args) => {
                 let mut transformed_args = Vec::new();
@@ -454,7 +471,7 @@ impl Expr {
     /// rules.
     ///
     /// Examples:
-    /// 
+    ///
     /// - `true AND true` → `true`
     /// - `true AND false` → `false`
     /// - `NOT NOT expr` → `expr`
@@ -474,6 +491,11 @@ impl Expr {
             // Array - optimize all elements.
             Array(elements) => {
                 Array(elements.into_iter().map(|e| e.optimize()).collect())
+            }
+
+            // Object - optimize all field values.
+            Object(fields) => {
+                Object(fields.into_iter().map(|(key, value)| (key, value.optimize())).collect())
             }
 
             // Function call - optimize all arguments.

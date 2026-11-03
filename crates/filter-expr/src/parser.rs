@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use crate::{Error, expr::Expr, token::Token};
 
 pub(crate) struct Parser {
@@ -178,14 +180,21 @@ impl Parser {
     ///         | <null>
     ///         | <ident>
     ///         | <array>
+    ///         | <object>
     ///         | '(' <expr> ')'
     ///
     /// <array> = '[' [<value> (',' <value>)* ','?] ']'
+    /// <object> = '{' [<str> ':' <value> (',' <str> ':' <value>)* ','?] '}'
     /// ```
     fn parse_value(&mut self) -> Result<Expr, Error> {
         // Handle array.
         if self.peek() == Some(&Token::LBracket) {
             return self.parse_array();
+        }
+
+        // Handle object.
+        if self.peek() == Some(&Token::LBrace) {
+            return self.parse_object();
         }
 
         let token = self.peek().cloned();
@@ -338,6 +347,43 @@ impl Parser {
         Ok(Expr::array_(values))
     }
 
+    /// ```text
+    /// <object> = '{' [<str> ':' <value> (',' <str> ':' <value>)* ','?] '}'
+    /// ```
+    fn parse_object(&mut self) -> Result<Expr, Error> {
+        if self.peek() != Some(&Token::LBrace) {
+            return Err(Error::Parse("expected '{'".to_string()));
+        }
+        self.advance();
+
+        let mut fields = BTreeMap::new();
+        while self.peek() != Some(&Token::RBrace) {
+            let key = match self.peek().cloned() {
+                Some(Token::Str(key)) => key,
+                _ => return Err(Error::Parse("expected string key in object".to_string())),
+            };
+            self.advance();
+
+            if self.peek() != Some(&Token::Colon) {
+                return Err(Error::Parse("expected ':' after object key".to_string()));
+            }
+            self.advance();
+            fields.insert(key, self.parse_value()?);
+
+            if self.peek() != Some(&Token::Comma) {
+                break;
+            }
+            self.advance();
+        }
+
+        if self.peek() != Some(&Token::RBrace) {
+            return Err(Error::Parse("expected '}'".to_string()));
+        }
+        self.advance();
+
+        Ok(Expr::object_(fields))
+    }
+
     fn peek(&self) -> Option<&Token> {
         self.tokens.get(self.pos)
     }
@@ -355,27 +401,27 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_parse_expr() {
-        let input = "name = 'John' AND age > 18 AND 1 > 0";
+    #[track_caller]
+    fn parse_and_check(input: &str, expected: Expr) {
         let tokens = parse_token(input).unwrap();
         let mut parser = Parser::new(tokens);
         let expr = parser.parse_expr().unwrap();
-        assert_eq!(
-            expr,
+        assert_eq!(expr, expected);
+    }
+
+    #[test]
+    fn test_parse_expr() {
+        parse_and_check(
+            "name = 'John' AND age > 18 AND 1 > 0",
             Expr::and_([
                 Expr::eq_(Expr::field_("name"), Expr::str_("John")),
                 Expr::gt_(Expr::field_("age"), Expr::i64_(18)),
                 Expr::gt_(Expr::i64_(1), Expr::i64_(0)),
-            ])
+            ]),
         );
 
-        let input = r#"name = "John" AND age IN [18, 19, 20, 22] AND 1 > 0"#;
-        let tokens = parse_token(input).unwrap();
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse_expr().unwrap();
-        assert_eq!(
-            expr,
+        parse_and_check(
+            r#"name = "John" AND age IN [18, 19, 20, 22] AND 1 > 0"#,
             Expr::and_([
                 Expr::eq_(Expr::field_("name"), Expr::str_("John")),
                 Expr::in_(
@@ -384,208 +430,158 @@ mod tests {
                         Expr::i64_(18),
                         Expr::i64_(19),
                         Expr::i64_(20),
-                        Expr::i64_(22)
-                    ])
+                        Expr::i64_(22),
+                    ]),
                 ),
                 Expr::gt_(Expr::i64_(1), Expr::i64_(0)),
-            ])
+            ]),
         );
 
-        let input = r#"matches(name, "^J.*n$")"#;
-        let tokens = parse_token(input).unwrap();
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse_expr().unwrap();
-        assert_eq!(
-            expr,
+        parse_and_check(
+            r#"matches(name, "^J.*n$")"#,
             Expr::FuncCall(
                 "matches".to_string(),
-                vec![Expr::field_("name"), Expr::str_("^J.*n$"),]
-            )
+                vec![Expr::field_("name"), Expr::str_("^J.*n$")],
+            ),
         );
 
-        let input = r#"name != null"#;
-        let tokens = parse_token(input).unwrap();
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse_expr().unwrap();
-        assert_eq!(expr, Expr::ne_(Expr::field_("name"), Expr::null_()));
+        parse_and_check(
+            r#"name != null"#,
+            Expr::ne_(Expr::field_("name"), Expr::null_()),
+        );
 
-        let input = r#"name.to_uppercase() = 'JOHN'"#;
-        let tokens = parse_token(input).unwrap();
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse_expr().unwrap();
-        assert_eq!(
-            expr,
+        parse_and_check(
+            r#"name.to_uppercase() = 'JOHN'"#,
             Expr::eq_(
                 Expr::method_call_(Expr::field_("name"), "to_uppercase".to_string(), vec![]),
-                Expr::str_("JOHN")
-            )
+                Expr::str_("JOHN"),
+            ),
         );
 
-        let input = r#"name.to_uppercase().to_lowercase() = 'john'"#;
-        let tokens = parse_token(input).unwrap();
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse_expr().unwrap();
-        assert_eq!(
-            expr,
+        parse_and_check(
+            r#"name.to_uppercase().to_lowercase() = 'john'"#,
             Expr::eq_(
                 Expr::method_call_(
                     Expr::method_call_(Expr::field_("name"), "to_uppercase".to_string(), vec![]),
                     "to_lowercase".to_string(),
-                    vec![]
+                    vec![],
                 ),
-                Expr::str_("john")
-            )
+                Expr::str_("john"),
+            ),
         );
 
-        let input = r#"name.contains('John')"#;
-        let tokens = parse_token(input).unwrap();
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse_expr().unwrap();
-        assert_eq!(
-            expr,
+        parse_and_check(
+            r#"name.contains('John')"#,
             Expr::method_call_(
                 Expr::field_("name"),
                 "contains".to_string(),
-                vec![Expr::str_("John")]
-            )
+                vec![Expr::str_("John")],
+            ),
         );
 
-        let input = r#"true OR false"#;
-        let tokens = parse_token(input).unwrap();
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse_expr().unwrap();
-        assert_eq!(expr, Expr::or_(vec![Expr::bool_(true), Expr::bool_(false)]));
+        parse_and_check(
+            r#"true OR false"#,
+            Expr::or_(vec![Expr::bool_(true), Expr::bool_(false)]),
+        );
 
-        let input = r#"true AND false OR true"#;
-        let tokens = parse_token(input).unwrap();
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse_expr().unwrap();
-        assert_eq!(
-            expr,
+        parse_and_check(
+            r#"true AND false OR true"#,
             Expr::or_(vec![
                 Expr::and_(vec![Expr::bool_(true), Expr::bool_(false)]),
-                Expr::bool_(true)
-            ])
+                Expr::bool_(true),
+            ]),
         );
 
-        let input = r#"(true OR false) AND true"#;
-        let tokens = parse_token(input).unwrap();
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse_expr().unwrap();
-        assert_eq!(
-            expr,
+        parse_and_check(
+            r#"(true OR false) AND true"#,
             Expr::and_(vec![
                 Expr::or_(vec![Expr::bool_(true), Expr::bool_(false)]),
-                Expr::bool_(true)
-            ])
+                Expr::bool_(true),
+            ]),
         );
 
-        let input = r#"(name = 'John' AND age > 18) AND 1 > 0"#;
-        let tokens = parse_token(input).unwrap();
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse_expr().unwrap();
-        assert_eq!(
-            expr,
+        parse_and_check(
+            r#"(name = 'John' AND age > 18) AND 1 > 0"#,
             Expr::and_(vec![
                 Expr::eq_(Expr::field_("name"), Expr::str_("John")),
                 Expr::gt_(Expr::field_("age"), Expr::i64_(18)),
-                Expr::gt_(Expr::i64_(1), Expr::i64_(0))
-            ])
+                Expr::gt_(Expr::i64_(1), Expr::i64_(0)),
+            ]),
         );
 
-        let input = r#"name = 'John' AND (age > 18 AND 1 > 0)"#;
-        let tokens = parse_token(input).unwrap();
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse_expr().unwrap();
-        assert_eq!(
-            expr,
+        parse_and_check(
+            r#"name = 'John' AND (age > 18 AND 1 > 0)"#,
             Expr::and_(vec![
                 Expr::eq_(Expr::field_("name"), Expr::str_("John")),
                 Expr::gt_(Expr::field_("age"), Expr::i64_(18)),
-                Expr::gt_(Expr::i64_(1), Expr::i64_(0))
-            ])
+                Expr::gt_(Expr::i64_(1), Expr::i64_(0)),
+            ]),
         );
 
-        let input = r#"(name = 'John' AND age > 18) OR (1 > 0)"#;
-        let tokens = parse_token(input).unwrap();
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse_expr().unwrap();
-        assert_eq!(
-            expr,
+        parse_and_check(
+            r#"(name = 'John' AND age > 18) OR (1 > 0)"#,
             Expr::or_(vec![
                 Expr::and_(vec![
                     Expr::eq_(Expr::field_("name"), Expr::str_("John")),
                     Expr::gt_(Expr::field_("age"), Expr::i64_(18)),
                 ]),
-                Expr::gt_(Expr::i64_(1), Expr::i64_(0))
-            ])
+                Expr::gt_(Expr::i64_(1), Expr::i64_(0)),
+            ]),
         );
 
-        let input = r#"type(maybe_i64_or_f64) IN ['i64', 'f64']"#;
-        let tokens = parse_token(input).unwrap();
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse_expr().unwrap();
-        assert_eq!(
-            expr,
+        parse_and_check(
+            r#"type(maybe_i64_or_f64) IN ['i64', 'f64']"#,
             Expr::in_(
                 Expr::FuncCall("type".to_string(), vec![Expr::field_("maybe_i64_or_f64")]),
-                Expr::array_([Expr::str_("i64"), Expr::str_("f64")])
-            )
+                Expr::array_([Expr::str_("i64"), Expr::str_("f64")]),
+            ),
         );
 
-        let input = r#"type(foo.contains('bar')) = 'i64'"#;
-        let tokens = parse_token(input).unwrap();
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse_expr().unwrap();
-        assert_eq!(
-            expr,
+        parse_and_check(
+            r#"type(foo.contains('bar')) = 'i64'"#,
             Expr::eq_(
                 Expr::FuncCall(
                     "type".to_string(),
                     vec![Expr::method_call_(
                         Expr::field_("foo"),
                         "contains".to_string(),
-                        vec![Expr::str_("bar")]
-                    )]
+                        vec![Expr::str_("bar")],
+                    )],
                 ),
-                Expr::str_("i64")
-            )
+                Expr::str_("i64"),
+            ),
         );
 
-        let input = r#"foo.bar.baz = 5"#;
-        let tokens = parse_token(input).unwrap();
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse_expr().unwrap();
-        assert_eq!(
-            expr,
+        parse_and_check(
+            r#"foo.bar.baz = 5"#,
             Expr::eq_(
                 Expr::field_access_(Expr::field_access_(Expr::field_("foo"), "bar"), "baz"),
                 Expr::i64_(5),
-            )
+            ),
         );
 
-        let input = r#"a NOT IN ['foo', 'bar']"#;
-        let tokens = parse_token(input).unwrap();
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse_expr().unwrap();
-        assert_eq!(
-            expr,
+        parse_and_check(
+            r#"a NOT IN ['foo', 'bar']"#,
             Expr::not_(Expr::in_(
                 Expr::field_("a"),
-                Expr::array_([Expr::str_("foo"), Expr::str_("bar"),])
-            ))
+                Expr::array_([Expr::str_("foo"), Expr::str_("bar")]),
+            )),
         );
 
-        let input = r#"!(a IN ['foo', 'bar'])"#;
-        let tokens = parse_token(input).unwrap();
-        let mut parser = Parser::new(tokens);
-        let expr = parser.parse_expr().unwrap();
-        assert_eq!(
-            expr,
+        parse_and_check(
+            r#"!(a IN ['foo', 'bar'])"#,
             Expr::not_(Expr::in_(
                 Expr::field_("a"),
-                Expr::array_([Expr::str_("foo"), Expr::str_("bar"),])
-            ))
+                Expr::array_([Expr::str_("foo"), Expr::str_("bar")]),
+            )),
+        );
+
+        parse_and_check(
+            r#"{"a":"b",}.a = "b""#,
+            Expr::eq_(
+                Expr::field_access_(Expr::object_([("a".to_string(), Expr::str_("b"))]), "a"),
+                Expr::str_("b"),
+            ),
         );
     }
 }

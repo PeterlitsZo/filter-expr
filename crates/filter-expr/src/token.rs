@@ -34,10 +34,14 @@ pub(crate) enum Token {
     LParen,
     /// The right parenthesis (`)`).
     RParen,
-    /// The square bracket (`[`).
+    /// The left square bracket (`[`).
     LBracket,
-    /// The square bracket (`]`).
+    /// The right square bracket (`]`).
     RBracket,
+    /// The left brace (`{`).
+    LBrace,
+    /// The right brace (`}`).
+    RBrace,
     /// The comma (`,`).
     Comma,
     /// The colon (`:`).
@@ -240,7 +244,7 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
                 }
             }
 
-            // Brackets and punctuation.
+            // Brackets.
             '[' => {
                 chars.next();
                 tokens.push(Token::LBracket);
@@ -257,6 +261,16 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
                 chars.next();
                 tokens.push(Token::RParen);
             }
+            '{' => {
+                chars.next();
+                tokens.push(Token::LBrace);
+            }
+            '}' => {
+                chars.next();
+                tokens.push(Token::RBrace);
+            }
+
+            // Punctuations.
             ',' => {
                 chars.next();
                 tokens.push(Token::Comma);
@@ -327,243 +341,229 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
 mod tests {
     use super::*;
 
+    #[track_caller]
+    fn parse_and_check(input: &str, tokens: &[Token]) {
+        let inner = parse_token(input).unwrap();
+        assert_eq!(inner, tokens);
+    }
+
     #[test]
     fn test_parse_token() {
-        let input = "name = 'John' AND age > 18";
-        let tokens = parse_token(input).unwrap();
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Ident("name".to_string()),
-                Token::Eq,
-                Token::Str("John".to_string()),
-                Token::And,
-                Token::Ident("age".to_string()),
-                Token::Gt,
-                Token::I64(18),
-            ]
+        use Token::*;
+
+        parse_and_check(
+            r#"name = 'John' AND age > 18"#,
+            &[
+                Ident("name".to_string()),
+                Eq,
+                Str("John".to_string()),
+                And,
+                Ident("age".to_string()),
+                Gt,
+                I64(18),
+            ],
         );
 
-        let input = r#"name = "John" AND age IN [18, 19, 20, 21]"#;
-        let tokens = parse_token(input).unwrap();
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Ident("name".to_string()),
-                Token::Eq,
-                Token::Str("John".to_string()),
-                Token::And,
-                Token::Ident("age".to_string()),
-                Token::In,
-                Token::LBracket,
-                Token::I64(18),
-                Token::Comma,
-                Token::I64(19),
-                Token::Comma,
-                Token::I64(20),
-                Token::Comma,
-                Token::I64(21),
-                Token::RBracket,
-            ]
+        parse_and_check(
+            r#"name = "John" AND age IN [18, 19, 20, 21]"#,
+            &[
+                Ident("name".to_string()),
+                Eq,
+                Str("John".to_string()),
+                And,
+                Ident("age".to_string()),
+                In,
+                LBracket,
+                I64(18),
+                Comma,
+                I64(19),
+                Comma,
+                I64(20),
+                Comma,
+                I64(21),
+                RBracket,
+            ],
         );
 
-        let input = r#"matches(name, "^J.*n$")"#;
-        let tokens = parse_token(input).unwrap();
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Ident("matches".to_string()),
-                Token::LParen,
-                Token::Ident("name".to_string()),
-                Token::Comma,
-                Token::Str("^J.*n$".to_string()),
-                Token::RParen,
-            ]
+        parse_and_check(
+            r#"matches(name, "^J.*n$")"#,
+            &[
+                Ident("matches".to_string()),
+                LParen,
+                Ident("name".to_string()),
+                Comma,
+                Str("^J.*n$".to_string()),
+                RParen,
+            ],
         );
 
-        let input = r#"name != null"#;
-        let tokens = parse_token(input).unwrap();
-        assert_eq!(
-            tokens,
-            vec![Token::Ident("name".to_string()), Token::Ne, Token::Null,]
+        parse_and_check(r#"name != null"#, &[Ident("name".to_string()), Ne, Null]);
+
+        parse_and_check(
+            r#"open = 1.5 AND age = 18 AND is_peter = true"#,
+            &[
+                Ident("open".to_string()),
+                Eq,
+                F64(1.5),
+                And,
+                Ident("age".to_string()),
+                Eq,
+                I64(18),
+                And,
+                Ident("is_peter".to_string()),
+                Eq,
+                Bool(true),
+            ],
         );
 
-        let input = r#"open = 1.5 AND age = 18 AND is_peter = true"#;
-        let tokens = parse_token(input).unwrap();
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Ident("open".to_string()),
-                Token::Eq,
-                Token::F64(1.5),
-                Token::And,
-                Token::Ident("age".to_string()),
-                Token::Eq,
-                Token::I64(18),
-                Token::And,
-                Token::Ident("is_peter".to_string()),
-                Token::Eq,
-                Token::Bool(true),
-            ]
+        parse_and_check(
+            r#"name.to_uppercase() = 'JOHN'"#,
+            &[
+                Ident("name".to_string()),
+                Dot,
+                Ident("to_uppercase".to_string()),
+                LParen,
+                RParen,
+                Eq,
+                Str("JOHN".to_string()),
+            ],
         );
 
-        let input = r#"name.to_uppercase() = 'JOHN'"#;
-        let tokens = parse_token(input).unwrap();
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Ident("name".to_string()),
-                Token::Dot,
-                Token::Ident("to_uppercase".to_string()),
-                Token::LParen,
-                Token::RParen,
-                Token::Eq,
-                Token::Str("JOHN".to_string()),
-            ]
+        parse_and_check(
+            r#"name.contains('John')"#,
+            &[
+                Ident("name".to_string()),
+                Dot,
+                Ident("contains".to_string()),
+                LParen,
+                Str("John".to_string()),
+                RParen,
+            ],
         );
 
-        let input = r#"name.contains('John')"#;
-        let tokens = parse_token(input).unwrap();
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Ident("name".to_string()),
-                Token::Dot,
-                Token::Ident("contains".to_string()),
-                Token::LParen,
-                Token::Str("John".to_string()),
-                Token::RParen,
-            ]
+        parse_and_check(
+            r#"type(maybe_i64_or_f64) IN ['i64', 'f64']"#,
+            &[
+                Ident("type".to_string()),
+                LParen,
+                Ident("maybe_i64_or_f64".to_string()),
+                RParen,
+                In,
+                LBracket,
+                Str("i64".to_string()),
+                Comma,
+                Str("f64".to_string()),
+                RBracket,
+            ],
         );
 
-        let input = r#"type(maybe_i64_or_f64) IN ['i64', 'f64']"#;
-        let tokens = parse_token(input).unwrap();
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Ident("type".to_string()),
-                Token::LParen,
-                Token::Ident("maybe_i64_or_f64".to_string()),
-                Token::RParen,
-                Token::In,
-                Token::LBracket,
-                Token::Str("i64".to_string()),
-                Token::Comma,
-                Token::Str("f64".to_string()),
-                Token::RBracket,
-            ]
+        parse_and_check(
+            r#"type(foo.contains('bar')) = 'i64'"#,
+            &[
+                Ident("type".to_string()),
+                LParen,
+                Ident("foo".to_string()),
+                Dot,
+                Ident("contains".to_string()),
+                LParen,
+                Str("bar".to_string()),
+                RParen,
+                RParen,
+                Eq,
+                Str("i64".to_string()),
+            ],
         );
 
-        let input = r#"type(foo.contains('bar')) = 'i64'"#;
-        let tokens = parse_token(input).unwrap();
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Ident("type".to_string()),
-                Token::LParen,
-                Token::Ident("foo".to_string()),
-                Token::Dot,
-                Token::Ident("contains".to_string()),
-                Token::LParen,
-                Token::Str("bar".to_string()),
-                Token::RParen,
-                Token::RParen,
-                Token::Eq,
-                Token::Str("i64".to_string()),
-            ]
+        parse_and_check(
+            r#"name = 'John\nDoe' OR name = "John\tDoe""#,
+            &[
+                Ident("name".to_string()),
+                Eq,
+                Str("John\nDoe".to_string()),
+                Or,
+                Ident("name".to_string()),
+                Eq,
+                Str("John\tDoe".to_string()),
+            ],
         );
 
-        let input = r#"name = 'John\nDoe' OR name = "John\tDoe""#;
-        let tokens = parse_token(input).unwrap();
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Ident("name".to_string()),
-                Token::Eq,
-                Token::Str("John\nDoe".to_string()),
-                Token::Or,
-                Token::Ident("name".to_string()),
-                Token::Eq,
-                Token::Str("John\tDoe".to_string()),
-            ]
+        parse_and_check(
+            r#"name = 'John\\Doe'"#,
+            &[Ident("name".to_string()), Eq, Str("John\\Doe".to_string())],
         );
 
-        let input = r#"name = 'John\\Doe'"#;
-        let tokens = parse_token(input).unwrap();
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Ident("name".to_string()),
-                Token::Eq,
-                Token::Str("John\\Doe".to_string()),
-            ]
+        parse_and_check(
+            r#"magic = "\"\n\r\t\\" AND magic = '\'\n\r\t\\'"#,
+            &[
+                Ident("magic".to_string()),
+                Eq,
+                Str("\"\n\r\t\\".to_string()),
+                And,
+                Ident("magic".to_string()),
+                Eq,
+                Str("'\n\r\t\\".to_string()),
+            ],
         );
 
-        let input = r#"magic = "\"\n\r\t\\" AND magic = '\'\n\r\t\\'"#;
-        let tokens = parse_token(input).unwrap();
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Ident("magic".to_string()),
-                Token::Eq,
-                Token::Str("\"\n\r\t\\".to_string()),
-                Token::And,
-                Token::Ident("magic".to_string()),
-                Token::Eq,
-                Token::Str("'\n\r\t\\".to_string()),
-            ]
+        parse_and_check(
+            r#"a NOT IN ['foo', 'bar']"#,
+            &[
+                Ident("a".to_string()),
+                Not,
+                In,
+                LBracket,
+                Str("foo".to_string()),
+                Comma,
+                Str("bar".to_string()),
+                RBracket,
+            ],
         );
 
-        let input = r#"a NOT IN ['foo', 'bar']"#;
-        let tokens = parse_token(input).unwrap();
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Ident("a".to_string()),
-                Token::Not,
-                Token::In,
-                Token::LBracket,
-                Token::Str("foo".to_string()),
-                Token::Comma,
-                Token::Str("bar".to_string()),
-                Token::RBracket,
-            ]
+        parse_and_check(
+            r#"!(a IN ['foo', 'bar'])"#,
+            &[
+                Bang,
+                LParen,
+                Ident("a".to_string()),
+                In,
+                LBracket,
+                Str("foo".to_string()),
+                Comma,
+                Str("bar".to_string()),
+                RBracket,
+                RParen,
+            ],
         );
 
-        let input = r#"!(a IN ['foo', 'bar'])"#;
-        let tokens = parse_token(input).unwrap();
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Bang,
-                Token::LParen,
-                Token::Ident("a".to_string()),
-                Token::In,
-                Token::LBracket,
-                Token::Str("foo".to_string()),
-                Token::Comma,
-                Token::Str("bar".to_string()),
-                Token::RBracket,
-                Token::RParen,
-            ]
+        parse_and_check(
+            r#"!(a IN /* the strings Peterlits like */ ['foo', 'bar'])"#,
+            &[
+                Bang,
+                LParen,
+                Ident("a".to_string()),
+                In,
+                LBracket,
+                Str("foo".to_string()),
+                Comma,
+                Str("bar".to_string()),
+                RBracket,
+                RParen,
+            ],
         );
 
-        let input = r#"!(a IN /* the strings Peterlits like */ ['foo', 'bar'])"#;
-        let tokens = parse_token(input).unwrap();
-        assert_eq!(
-            tokens,
-            vec![
-                Token::Bang,
-                Token::LParen,
-                Token::Ident("a".to_string()),
-                Token::In,
-                Token::LBracket,
-                Token::Str("foo".to_string()),
-                Token::Comma,
-                Token::Str("bar".to_string()),
-                Token::RBracket,
-                Token::RParen,
-            ]
+        parse_and_check(
+            r#"{"a":"b"}.a = "b""#,
+            &[
+                LBrace,
+                Str("a".to_string()),
+                Colon,
+                Str("b".to_string()),
+                RBrace,
+                Dot,
+                Ident("a".to_string()),
+                Eq,
+                Str("b".to_string()),
+            ],
         );
     }
 }

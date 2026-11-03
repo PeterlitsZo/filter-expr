@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-*Empty*
+- Support object literals and object AST construction in `filter-expr`.
 
 ## v0.3.0
 

@@ -103,7 +103,9 @@ user.address.city = 'London'
         | <null>
         | <ident>
         | <array>
+        | <object>
         | '(' <expr> ')'
 
 <array> = '[' [<value> (',' <value>)* ','?] ']'
+<object> = '{' [<str> ':' <value> (',' <str> ':' <value>)* ','?] '}'
 ```
