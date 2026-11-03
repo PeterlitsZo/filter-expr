@@ -51,60 +51,10 @@ impl FilterExprEvalerEnv {
     /// Create a new environment.
     pub(crate) fn new() -> Self {
         // Initialize the builtin functions.
-        let mut functions: BTreeMap<String, ArcFunction> = BTreeMap::new();
-        functions.insert("matches".to_string(), Arc::new(builtin::FunctionMatches));
-        functions.insert("type".to_string(), Arc::new(builtin::FunctionType));
+        let functions = Self::default_functions();
 
         // Initialize the builtin methods.
-        let mut methods: BTreeMap<(String, ValueType), ArcMethod> = BTreeMap::new();
-        methods.insert(
-            ("to_uppercase".to_string(), ValueType::Str),
-            Arc::new(builtin::MethodStrToUppercase),
-        );
-        methods.insert(
-            ("to_lowercase".to_string(), ValueType::Str),
-            Arc::new(builtin::MethodStrToLowercase),
-        );
-        methods.insert(
-            ("len".to_string(), ValueType::Str),
-            Arc::new(builtin::MethodStrLen),
-        );
-        methods.insert(
-            ("is_empty".to_string(), ValueType::Str),
-            Arc::new(builtin::MethodStrIsEmpty),
-        );
-        methods.insert(
-            ("trim".to_string(), ValueType::Str),
-            Arc::new(builtin::MethodStrTrim),
-        );
-        methods.insert(
-            ("trim_start".to_string(), ValueType::Str),
-            Arc::new(builtin::MethodStrTrimStart),
-        );
-        methods.insert(
-            ("trim_end".to_string(), ValueType::Str),
-            Arc::new(builtin::MethodStrTrimEnd),
-        );
-        methods.insert(
-            ("contains".to_string(), ValueType::Str),
-            Arc::new(builtin::MethodStrContains),
-        );
-        methods.insert(
-            ("starts_with".to_string(), ValueType::Str),
-            Arc::new(builtin::MethodStrStartsWith),
-        );
-        methods.insert(
-            ("ends_with".to_string(), ValueType::Str),
-            Arc::new(builtin::MethodStrEndsWith),
-        );
-        methods.insert(
-            ("strip_prefix".to_string(), ValueType::Str),
-            Arc::new(builtin::MethodStrStripPrefix),
-        );
-        methods.insert(
-            ("strip_suffix".to_string(), ValueType::Str),
-            Arc::new(builtin::MethodStrStripSuffix),
-        );
+        let methods = Self::default_methods();
 
         let inner = Arc::new(RwLock::new(FilterExprEvalerEnvInner {
             cached_regex: Cache::new(128),
@@ -199,6 +149,66 @@ impl FilterExprEvalerEnv {
                 .insert(pattern.to_string(), regex_arc.clone());
             Ok(regex_arc)
         }
+    }
+}
+
+impl FilterExprEvalerEnv {
+    fn default_functions() -> BTreeMap<String, ArcFunction> {
+        use builtin::*;
+
+        let mut functions: BTreeMap<String, ArcFunction> = BTreeMap::new();
+
+        macro_rules! insert_function {
+            ($name:literal, $func:expr) => {
+                functions.insert($name.to_string(), Arc::new($func));
+            };
+        }
+
+        insert_function!("matches", FunctionMatches);
+
+        insert_function!("type", FunctionType);
+
+        insert_function!("abs", FunctionAbs);
+        insert_function!("ceil", FunctionCeil);
+        insert_function!("floor", FunctionFloor);
+        insert_function!("round", FunctionRound);
+        insert_function!("pow", FunctionPow);
+        insert_function!("sqrt", FunctionSqrt);
+        insert_function!("exp", FunctionExp);
+        insert_function!("ln", FunctionLn);
+        insert_function!("log", FunctionLog);
+        insert_function!("log2", FunctionLog2);
+        insert_function!("log10", FunctionLog10);
+
+        functions
+    }
+
+    fn default_methods() -> BTreeMap<(String, ValueType), ArcMethod> {
+        use ValueType::*;
+        use builtin::*;
+
+        let mut methods: BTreeMap<(String, ValueType), ArcMethod> = BTreeMap::new();
+
+        macro_rules! insert_method {
+            ($name:literal, $obj_type:expr, $method:expr) => {
+                methods.insert(($name.to_string(), $obj_type), Arc::new($method));
+            };
+        }
+
+        insert_method!("to_uppercase", Str, MethodStrToUppercase);
+        insert_method!("to_lowercase", Str, MethodStrToLowercase);
+        insert_method!("len", Str, MethodStrLen);
+        insert_method!("is_empty", Str, MethodStrIsEmpty);
+        insert_method!("trim", Str, MethodStrTrim);
+        insert_method!("trim_start", Str, MethodStrTrimStart);
+        insert_method!("trim_end", Str, MethodStrTrimEnd);
+        insert_method!("contains", Str, MethodStrContains);
+        insert_method!("starts_with", Str, MethodStrStartsWith);
+        insert_method!("ends_with", Str, MethodStrEndsWith);
+        insert_method!("strip_prefix", Str, MethodStrStripPrefix);
+        insert_method!("strip_suffix", Str, MethodStrStripSuffix);
+
+        methods
     }
 }
 

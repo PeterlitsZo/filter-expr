@@ -29,6 +29,32 @@ assert_eq!(result, true);
 - **`type(value) -> str`**. Returns the type name of a value. For example,
   `type(42)` returns `'i64'`.
 
+### Math
+
+All math functions accept `i64` and `f64` arguments. `abs`, `ceil`, `floor`,
+and `round` preserve the input type; the other functions return `f64` and
+convert integer arguments to floating point (which may lose precision).
+
+| Function | Description |
+| --- | --- |
+| `abs(x)` | Absolute value. Returns an error for `i64::MIN`. |
+| `ceil(x)` | Smallest integer value greater than or equal to `x`. |
+| `floor(x)` | Largest integer value less than or equal to `x`. |
+| `round(x)` | Nearest integer value, with halfway cases rounded away from zero. |
+| `pow(x, exponent)` | Raises `x` to the given power. |
+| `sqrt(x)` | Square root. |
+| `exp(x)` | Raises Euler's number e to the power `x`. |
+| `ln(x)` | Natural logarithm. |
+| `log(x, base)` | Logarithm in the given base. |
+| `log2(x)` | Base-2 logarithm. |
+| `log10(x)` | Base-10 logarithm. |
+
+For example, `sqrt(9) = 3 AND pow(2, 3) = 8` evaluates to `true`.
+Incorrect argument counts or nonnumeric arguments produce `TypeMismatch` errors.
+Floating-point operations follow Rust's `f64` semantics, including NaN and
+infinity for domain errors and overflow (for example, `sqrt` of a negative
+value produces NaN and `ln(0)` produces negative infinity).
+
 ## Builtin Methods
 
 ### str

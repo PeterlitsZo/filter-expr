@@ -2,20 +2,21 @@
 
 ## 2026-11
 
+- [ ] Support version comment.
 - [ ] Add benchmark tests and ensure the performance is not too bad.
-- [ ] Support the math functions:
+- [x] Support the math functions:
 
-  - [ ] `abs`
-  - [ ] `ceil`
-  - [ ] `floor`
-  - [ ] `round`
-  - [ ] `pow`
-  - [ ] `sqrt`
-  - [ ] `exp`
-  - [ ] `ln`
-  - [ ] `log`
-  - [ ] `log2`
-  - [ ] `log10`
+  - [x] `abs`
+  - [x] `ceil`
+  - [x] `floor`
+  - [x] `round`
+  - [x] `pow`
+  - [x] `sqrt`
+  - [x] `exp`
+  - [x] `ln`
+  - [x] `log`
+  - [x] `log2`
+  - [x] `log10`
 
 - [ ] Support the field-access syntax. Like `foo.bar.baz`.
 - [ ] Support the `Object` type -- just like the JSON object.
