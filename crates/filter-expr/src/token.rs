@@ -15,6 +15,12 @@ pub(crate) enum Token {
     /// A null literal.
     Null,
 
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+
     /// The equal operator (`=` or `==`).
     Eq,
     /// The greater than operator (`>`).
@@ -70,9 +76,13 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
                 chars.next();
             }
 
-            // Comments.
+            // Division or block comments.
             '/' => {
                 chars.next();
+                if chars.peek() != Some(&'*') {
+                    tokens.push(Token::Div);
+                    continue;
+                }
 
                 #[derive(Clone, Copy, PartialEq)]
                 enum CommentState {
@@ -212,6 +222,23 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
             }
 
             // Operators.
+            '+' => {
+                chars.next();
+                tokens.push(Token::Add);
+            }
+            '-' => {
+                chars.next();
+                tokens.push(Token::Sub);
+            }
+            '*' => {
+                chars.next();
+                tokens.push(Token::Mul);
+            }
+            '%' => {
+                chars.next();
+                tokens.push(Token::Rem);
+            }
+
             '=' => {
                 chars.next();
                 if let Some(&'=') = chars.peek() {

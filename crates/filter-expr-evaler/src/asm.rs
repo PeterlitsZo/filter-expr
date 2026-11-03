@@ -123,6 +123,23 @@ pub(crate) enum AsmInstruction {
     #[allow(unused)]
     Dup,
 
+    /// Pop the right operand, then the left operand, and push their numeric sum.
+    Add,
+    /// Pop the right operand, then the left operand, and push left minus right.
+    Sub,
+    /// Pop the right operand, then the left operand, and push their numeric product.
+    Mul,
+    /// Pop the right operand, then the left operand, and push left divided by right.
+    /// Integer division truncates toward zero.
+    Div,
+    /// Pop the right operand, then the left operand, and push left modulo right.
+    /// The remainder has the dividend's sign.
+    Rem,
+    /// Pop the top value, require a numeric type, and push it unchanged.
+    Pos,
+    /// Pop the top numeric value and push its negation.
+    Neg,
+
     /// Pop the two top values from the stack, and push true if the first is
     /// greater than the second, false otherwise.
     Gt,
@@ -192,6 +209,13 @@ impl fmt::Debug for AsmInstruction {
             }
             AsmInstruction::Jump(label_index) => write!(f, "JUMP label_index={label_index}"),
             AsmInstruction::Dup => write!(f, "DUP"),
+            AsmInstruction::Add => write!(f, "ADD"),
+            AsmInstruction::Sub => write!(f, "SUB"),
+            AsmInstruction::Mul => write!(f, "MUL"),
+            AsmInstruction::Div => write!(f, "DIV"),
+            AsmInstruction::Rem => write!(f, "REM"),
+            AsmInstruction::Pos => write!(f, "POS"),
+            AsmInstruction::Neg => write!(f, "NEG"),
             AsmInstruction::Gt => write!(f, "GT"),
             AsmInstruction::Lt => write!(f, "LT"),
             AsmInstruction::Ge => write!(f, "GE"),

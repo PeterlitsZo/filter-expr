@@ -24,6 +24,14 @@ pub enum Expr {
     FuncCall(String, Vec<Expr>),
     MethodCall(String, Box<Expr>, Vec<Expr>),
 
+    Add(Box<Expr>, Box<Expr>),
+    Sub(Box<Expr>, Box<Expr>),
+    Mul(Box<Expr>, Box<Expr>),
+    Div(Box<Expr>, Box<Expr>),
+    Rem(Box<Expr>, Box<Expr>),
+    Pos(Box<Expr>),
+    Neg(Box<Expr>),
+
     Gt(Box<Expr>, Box<Expr>),
     Lt(Box<Expr>, Box<Expr>),
     Ge(Box<Expr>, Box<Expr>),
@@ -67,17 +75,25 @@ impl Ord for Expr {
                 FuncCall(..) => 400,
                 MethodCall(..) => 401,
 
-                Gt(..) => 500,
-                Lt(..) => 501,
-                Ge(..) => 502,
-                Le(..) => 503,
-                Eq(..) => 504,
-                Ne(..) => 505,
-                In(..) => 506,
+                Add(..) => 500,
+                Sub(..) => 501,
+                Mul(..) => 502,
+                Div(..) => 503,
+                Rem(..) => 504,
+                Pos(..) => 505,
+                Neg(..) => 506,
 
-                And(..) => 600,
-                Or(..) => 601,
-                Not(..) => 602,
+                Gt(..) => 600,
+                Lt(..) => 601,
+                Ge(..) => 602,
+                Le(..) => 603,
+                Eq(..) => 604,
+                Ne(..) => 605,
+                In(..) => 606,
+
+                And(..) => 700,
+                Or(..) => 701,
+                Not(..) => 702,
             }
         }
 
@@ -112,6 +128,14 @@ impl Ord for Expr {
                         },
                         other => other,
                     },
+
+                    (Add(l1, r1), Add(l2, r2)) => (l1, r1).cmp(&(l2, r2)),
+                    (Sub(l1, r1), Sub(l2, r2)) => (l1, r1).cmp(&(l2, r2)),
+                    (Mul(l1, r1), Mul(l2, r2)) => (l1, r1).cmp(&(l2, r2)),
+                    (Div(l1, r1), Div(l2, r2)) => (l1, r1).cmp(&(l2, r2)),
+                    (Rem(l1, r1), Rem(l2, r2)) => (l1, r1).cmp(&(l2, r2)),
+                    (Pos(a), Pos(b)) => a.cmp(b),
+                    (Neg(a), Neg(b)) => a.cmp(b),
 
                     (Gt(l1, r1), Gt(l2, r2)) => match l1.cmp(l2) {
                         Ordering::Equal => r1.cmp(r2),
@@ -194,6 +218,11 @@ impl Hash for Expr {
                 obj.hash(state);
                 args.hash(state);
             }
+            Add(l, r) | Sub(l, r) | Mul(l, r) | Div(l, r) | Rem(l, r) => {
+                l.hash(state);
+                r.hash(state);
+            }
+            Pos(e) | Neg(e) => e.hash(state),
             Gt(l, r) => {
                 l.hash(state);
                 r.hash(state);
@@ -272,6 +301,34 @@ impl Expr {
 
     pub fn method_call_(obj: Expr, method: impl Into<String>, args: Vec<Expr>) -> Self {
         Self::MethodCall(method.into(), Box::new(obj), args)
+    }
+
+    pub fn add_(left: Expr, right: Expr) -> Self {
+        Self::Add(Box::new(left), Box::new(right))
+    }
+
+    pub fn sub_(left: Expr, right: Expr) -> Self {
+        Self::Sub(Box::new(left), Box::new(right))
+    }
+
+    pub fn mul_(left: Expr, right: Expr) -> Self {
+        Self::Mul(Box::new(left), Box::new(right))
+    }
+
+    pub fn div_(left: Expr, right: Expr) -> Self {
+        Self::Div(Box::new(left), Box::new(right))
+    }
+
+    pub fn rem_(left: Expr, right: Expr) -> Self {
+        Self::Rem(Box::new(left), Box::new(right))
+    }
+
+    pub fn pos_(expr: Expr) -> Self {
+        Self::Pos(Box::new(expr))
+    }
+
+    pub fn neg_(expr: Expr) -> Self {
+        Self::Neg(Box::new(expr))
     }
 
     pub fn gt_(left: Expr, right: Expr) -> Self {
@@ -409,6 +466,37 @@ impl Expr {
                 Expr::MethodCall(method, obj, transformed_args)
             }
 
+            Expr::Add(left, right) => {
+                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
+                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
+                Expr::Add(left, right)
+            }
+            Expr::Sub(left, right) => {
+                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
+                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
+                Expr::Sub(left, right)
+            }
+            Expr::Mul(left, right) => {
+                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
+                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
+                Expr::Mul(left, right)
+            }
+            Expr::Div(left, right) => {
+                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
+                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
+                Expr::Div(left, right)
+            }
+            Expr::Rem(left, right) => {
+                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
+                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
+                Expr::Rem(left, right)
+            }
+            Expr::Pos(expr) => Expr::Pos(Box::new(
+                Self::transform_expr(transformer, *expr, ctx).await?,
+            )),
+            Expr::Neg(expr) => Expr::Neg(Box::new(
+                Self::transform_expr(transformer, *expr, ctx).await?,
+            )),
             Expr::Gt(left, right) => {
                 let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
                 let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
@@ -507,6 +595,14 @@ impl Expr {
             MethodCall(method, obj, args) => {
                 MethodCall(method, Box::new(obj.optimize()), args.into_iter().map(|a| a.optimize()).collect())
             }
+
+            Add(left, right) => Add(Box::new(left.optimize()), Box::new(right.optimize())),
+            Sub(left, right) => Sub(Box::new(left.optimize()), Box::new(right.optimize())),
+            Mul(left, right) => Mul(Box::new(left.optimize()), Box::new(right.optimize())),
+            Div(left, right) => Div(Box::new(left.optimize()), Box::new(right.optimize())),
+            Rem(left, right) => Rem(Box::new(left.optimize()), Box::new(right.optimize())),
+            Pos(expr) => Pos(Box::new(expr.optimize())),
+            Neg(expr) => Neg(Box::new(expr.optimize())),
 
             // Comparison operators - optimize and fold constants.
             Gt(left, right) => {

@@ -79,12 +79,12 @@ impl Parser {
     }
 
     /// ```text
-    /// <comparison> = <primary> <operator> <comparison>
-    ///              | <primary>
+    /// <comparison> = <additive> <operator> <comparison>
+    ///              | <additive>
     /// ```
     fn parse_comparison(&mut self) -> Result<Expr, Error> {
-        // Parse <primary>
-        let primary = self.parse_primary()?;
+        // Parse the arithmetic operand.
+        let primary = self.parse_additive()?;
 
         // Check if there's an operator
         let operator = self.peek().cloned();
@@ -138,9 +138,61 @@ impl Parser {
                 ))))
             }
             _ => {
-                // Just <primary>
+                // No comparison operator follows.
                 Ok(primary)
             }
+        }
+    }
+
+    /// ```text
+    /// <additive> = <multiplicative> (('+' | '-') <multiplicative>)*
+    /// ```
+    fn parse_additive(&mut self) -> Result<Expr, Error> {
+        let mut left = self.parse_multiplicative()?;
+        while let Some(operator @ (Token::Add | Token::Sub)) = self.peek().cloned() {
+            self.advance();
+            let right = self.parse_multiplicative()?;
+            left = match operator {
+                Token::Add => Expr::Add(Box::new(left), Box::new(right)),
+                Token::Sub => Expr::Sub(Box::new(left), Box::new(right)),
+                _ => unreachable!(),
+            };
+        }
+        Ok(left)
+    }
+
+    /// ```text
+    /// <multiplicative> = <unary> (('*' | '/' | '%') <unary>)*
+    /// ```
+    fn parse_multiplicative(&mut self) -> Result<Expr, Error> {
+        let mut left = self.parse_unary()?;
+        while let Some(operator @ (Token::Mul | Token::Div | Token::Rem)) = self.peek().cloned() {
+            self.advance();
+            let right = self.parse_unary()?;
+            left = match operator {
+                Token::Mul => Expr::Mul(Box::new(left), Box::new(right)),
+                Token::Div => Expr::Div(Box::new(left), Box::new(right)),
+                Token::Rem => Expr::Rem(Box::new(left), Box::new(right)),
+                _ => unreachable!(),
+            };
+        }
+        Ok(left)
+    }
+
+    /// ```text
+    /// <unary> = ('+' | '-') <unary> | <primary>
+    /// ```
+    fn parse_unary(&mut self) -> Result<Expr, Error> {
+        match self.peek().cloned() {
+            Some(Token::Add) => {
+                self.advance();
+                Ok(Expr::Pos(Box::new(self.parse_unary()?)))
+            }
+            Some(Token::Sub) => {
+                self.advance();
+                Ok(Expr::Neg(Box::new(self.parse_unary()?)))
+            }
+            _ => self.parse_primary(),
         }
     }
 
@@ -158,7 +210,8 @@ impl Parser {
 
             if self.peek() == Some(&Token::LParen) {
                 // It's a function call
-                return self.parse_func_call(name);
+                let value = self.parse_func_call(name)?;
+                return self.parse_method_call_chain_or_field_access(value);
             } else {
                 // It's a field name (value)
                 // We need to check if it's followed by a method call
@@ -183,8 +236,8 @@ impl Parser {
     ///         | <object>
     ///         | '(' <expr> ')'
     ///
-    /// <array> = '[' [<value> (',' <value>)* ','?] ']'
-    /// <object> = '{' [<str> ':' <value> (',' <str> ':' <value>)* ','?] '}'
+    /// <array> = '[' [<expr> (',' <expr>)* ','?] ']'
+    /// <object> = '{' [<str> ':' <expr> (',' <str> ':' <expr>)* ','?] '}'
     /// ```
     fn parse_value(&mut self) -> Result<Expr, Error> {
         // Handle array.
@@ -294,12 +347,12 @@ impl Parser {
             }
 
             // Parse first argument
-            args.push(self.parse_value()?);
+            args.push(self.parse_expr()?);
 
             // Parse remaining arguments separated by commas
             while self.peek() == Some(&Token::Comma) {
                 self.advance(); // consume comma
-                args.push(self.parse_value()?);
+                args.push(self.parse_expr()?);
             }
 
             // Consume the ')' token
@@ -330,12 +383,12 @@ impl Parser {
         }
 
         // Parse first element
-        values.push(self.parse_value()?);
+        values.push(self.parse_expr()?);
 
         // Parse remaining elements separated by commas
         while self.peek() == Some(&Token::Comma) {
             self.advance(); // consume comma
-            values.push(self.parse_value()?);
+            values.push(self.parse_expr()?);
         }
 
         // Consume ]
@@ -348,7 +401,7 @@ impl Parser {
     }
 
     /// ```text
-    /// <object> = '{' [<str> ':' <value> (',' <str> ':' <value>)* ','?] '}'
+    /// <object> = '{' [<str> ':' <expr> (',' <str> ':' <expr>)* ','?] '}'
     /// ```
     fn parse_object(&mut self) -> Result<Expr, Error> {
         if self.peek() != Some(&Token::LBrace) {
@@ -368,7 +421,7 @@ impl Parser {
                 return Err(Error::Parse("expected ':' after object key".to_string()));
             }
             self.advance();
-            fields.insert(key, self.parse_value()?);
+            fields.insert(key, self.parse_expr()?);
 
             if self.peek() != Some(&Token::Comma) {
                 break;

@@ -72,6 +72,13 @@ impl BytecodeCodegen {
                 Ins::JumpIfFalse(..) => ins_offset += Op::JumpIfFalse.op_len(),
                 Ins::JumpIfTrue(..) => ins_offset += Op::JumpIfTrue.op_len(),
 
+                Ins::Add => ins_offset += Op::Add.op_len(),
+                Ins::Sub => ins_offset += Op::Sub.op_len(),
+                Ins::Mul => ins_offset += Op::Mul.op_len(),
+                Ins::Div => ins_offset += Op::Div.op_len(),
+                Ins::Rem => ins_offset += Op::Rem.op_len(),
+                Ins::Pos => ins_offset += Op::Pos.op_len(),
+                Ins::Neg => ins_offset += Op::Neg.op_len(),
                 Ins::Gt => ins_offset += Op::Gt.op_len(),
                 Ins::Lt => ins_offset += Op::Lt.op_len(),
                 Ins::Ge => ins_offset += Op::Ge.op_len(),
@@ -204,6 +211,27 @@ impl BytecodeCodegen {
                 self.push_u8(BytecodeOpcode::Dup.into_u8());
             }
 
+            AsmInstruction::Add => {
+                self.push_u8(BytecodeOpcode::Add.into_u8());
+            }
+            AsmInstruction::Sub => {
+                self.push_u8(BytecodeOpcode::Sub.into_u8());
+            }
+            AsmInstruction::Mul => {
+                self.push_u8(BytecodeOpcode::Mul.into_u8());
+            }
+            AsmInstruction::Div => {
+                self.push_u8(BytecodeOpcode::Div.into_u8());
+            }
+            AsmInstruction::Rem => {
+                self.push_u8(BytecodeOpcode::Rem.into_u8());
+            }
+            AsmInstruction::Pos => {
+                self.push_u8(BytecodeOpcode::Pos.into_u8());
+            }
+            AsmInstruction::Neg => {
+                self.push_u8(BytecodeOpcode::Neg.into_u8());
+            }
             AsmInstruction::Gt => {
                 self.push_u8(BytecodeOpcode::Gt.into_u8());
             }

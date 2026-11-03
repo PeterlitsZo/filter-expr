@@ -188,6 +188,39 @@ impl<'a> BytecodeRunner<'a> {
                     self.stack.push(value);
                 }
 
+                bc::ADD => {
+                    let (left, right) = unsafe { self.pop_stack_top_two_unchecked() };
+                    self.stack
+                        .push(left.arithmetic(&right, crate::value::ArithmeticOp::Add)?);
+                }
+                bc::SUB => {
+                    let (left, right) = unsafe { self.pop_stack_top_two_unchecked() };
+                    self.stack
+                        .push(left.arithmetic(&right, crate::value::ArithmeticOp::Sub)?);
+                }
+                bc::MUL => {
+                    let (left, right) = unsafe { self.pop_stack_top_two_unchecked() };
+                    self.stack
+                        .push(left.arithmetic(&right, crate::value::ArithmeticOp::Mul)?);
+                }
+                bc::DIV => {
+                    let (left, right) = unsafe { self.pop_stack_top_two_unchecked() };
+                    self.stack
+                        .push(left.arithmetic(&right, crate::value::ArithmeticOp::Div)?);
+                }
+                bc::REM => {
+                    let (left, right) = unsafe { self.pop_stack_top_two_unchecked() };
+                    self.stack
+                        .push(left.arithmetic(&right, crate::value::ArithmeticOp::Rem)?);
+                }
+                bc::POS => {
+                    let value = unsafe { self.pop_stack_top_unchecked() };
+                    self.stack.push(value.numeric_sign(false)?);
+                }
+                bc::NEG => {
+                    let value = unsafe { self.pop_stack_top_unchecked() };
+                    self.stack.push(value.numeric_sign(true)?);
+                }
                 bc::GT => {
                     let (left, right) = unsafe { self.pop_stack_top_two_unchecked() };
                     let ordering =

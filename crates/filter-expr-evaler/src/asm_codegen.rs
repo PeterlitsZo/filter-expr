@@ -73,6 +73,39 @@ impl AsmCodegen {
             Expr::Null => self.codegen_null(),
             Expr::Array(elements) => self.codegen_array(elements),
             Expr::Object(fields) => self.codegen_object(fields),
+            Expr::Add(left, right) => {
+                self.codegen_expr(left);
+                self.codegen_expr(right);
+                self.instructions.push(AsmInstruction::Add);
+            }
+            Expr::Sub(left, right) => {
+                self.codegen_expr(left);
+                self.codegen_expr(right);
+                self.instructions.push(AsmInstruction::Sub);
+            }
+            Expr::Mul(left, right) => {
+                self.codegen_expr(left);
+                self.codegen_expr(right);
+                self.instructions.push(AsmInstruction::Mul);
+            }
+            Expr::Div(left, right) => {
+                self.codegen_expr(left);
+                self.codegen_expr(right);
+                self.instructions.push(AsmInstruction::Div);
+            }
+            Expr::Rem(left, right) => {
+                self.codegen_expr(left);
+                self.codegen_expr(right);
+                self.instructions.push(AsmInstruction::Rem);
+            }
+            Expr::Pos(expr) => {
+                self.codegen_expr(expr);
+                self.instructions.push(AsmInstruction::Pos);
+            }
+            Expr::Neg(expr) => {
+                self.codegen_expr(expr);
+                self.instructions.push(AsmInstruction::Neg);
+            }
             Expr::Gt(left, right) => self.codegen_gt(left, right),
             Expr::Lt(left, right) => self.codegen_lt(left, right),
             Expr::Ge(left, right) => self.codegen_ge(left, right),

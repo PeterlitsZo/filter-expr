@@ -55,7 +55,7 @@
 - [x] Support `==` as the alias of `=` for the equality comparison.
 - [x] Support escape the special characters in the string. Like `\'` to escape
       the single quote.
-- [ ] Support `+`, `-`, `*`, `/` and `%` operators for the arithmetic
+- [x] Support `+`, `-`, `*`, `/` and `%` operators for the arithmetic
       operations.
 - [ ] Support `&&`, `||` and `!` operators for the logical operations.
       Support `and`, `or` and `not` as the aliases of `&&`, `||` and `!`.

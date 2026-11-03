@@ -55,6 +55,14 @@ pub(crate) enum BytecodeOpcode {
 
     Dup,
 
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+    Pos,
+    Neg,
+
     Gt,
     Lt,
     Ge,
@@ -88,6 +96,13 @@ impl BytecodeOpcode {
             BytecodeOpcode::JumpIfTrue => JUMP_IF_TRUE,
             BytecodeOpcode::Jump => JUMP,
             BytecodeOpcode::Dup => DUP,
+            BytecodeOpcode::Add => ADD,
+            BytecodeOpcode::Sub => SUB,
+            BytecodeOpcode::Mul => MUL,
+            BytecodeOpcode::Div => DIV,
+            BytecodeOpcode::Rem => REM,
+            BytecodeOpcode::Pos => POS,
+            BytecodeOpcode::Neg => NEG,
             BytecodeOpcode::Gt => GT,
             BytecodeOpcode::Lt => LT,
             BytecodeOpcode::Ge => GE,
@@ -120,6 +135,13 @@ impl BytecodeOpcode {
             JUMP_IF_TRUE => Some(BytecodeOpcode::JumpIfTrue),
             JUMP => Some(BytecodeOpcode::Jump),
             DUP => Some(BytecodeOpcode::Dup),
+            ADD => Some(BytecodeOpcode::Add),
+            SUB => Some(BytecodeOpcode::Sub),
+            MUL => Some(BytecodeOpcode::Mul),
+            DIV => Some(BytecodeOpcode::Div),
+            REM => Some(BytecodeOpcode::Rem),
+            POS => Some(BytecodeOpcode::Pos),
+            NEG => Some(BytecodeOpcode::Neg),
             GT => Some(BytecodeOpcode::Gt),
             LT => Some(BytecodeOpcode::Lt),
             GE => Some(BytecodeOpcode::Ge),
@@ -157,6 +179,13 @@ impl BytecodeOpcode {
             BytecodeOpcode::Jump => 5,
 
             BytecodeOpcode::Dup => 1,
+            BytecodeOpcode::Add => 1,
+            BytecodeOpcode::Sub => 1,
+            BytecodeOpcode::Mul => 1,
+            BytecodeOpcode::Div => 1,
+            BytecodeOpcode::Rem => 1,
+            BytecodeOpcode::Pos => 1,
+            BytecodeOpcode::Neg => 1,
             BytecodeOpcode::Gt => 1,
             BytecodeOpcode::Lt => 1,
             BytecodeOpcode::Ge => 1,
@@ -198,3 +227,10 @@ pub(crate) const NOT: u8 = 22;
 pub(crate) const RETURN: u8 = 23;
 pub(crate) const GET_FIELD: u8 = 24;
 pub(crate) const BUILD_OBJECT: u8 = 25;
+pub(crate) const ADD: u8 = 26;
+pub(crate) const SUB: u8 = 27;
+pub(crate) const MUL: u8 = 28;
+pub(crate) const DIV: u8 = 29;
+pub(crate) const REM: u8 = 30;
+pub(crate) const POS: u8 = 31;
+pub(crate) const NEG: u8 = 32;

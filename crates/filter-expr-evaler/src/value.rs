@@ -4,6 +4,15 @@ use std::{
 
 use crate::{Error, ErrorKind, Result};
 
+#[derive(Clone, Copy)]
+pub(crate) enum ArithmeticOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+}
+
 #[derive(Debug, Clone)]
 pub enum Value {
     /// The string value.
@@ -69,6 +78,62 @@ impl<T: Into<Value>> From<BTreeMap<String, T>> for Value {
 }
 
 impl Value {
+    pub(crate) fn numeric_sign(&self, negative: bool) -> Result<Self> {
+        match self {
+            Self::I64(value) if negative => value
+                .checked_neg()
+                .map(Self::I64)
+                .ok_or_else(|| Error::new(ErrorKind::InvalidValue, "integer overflow")),
+            Self::F64(value) if negative => Ok(Self::F64(-value)),
+            Self::I64(_) | Self::F64(_) => Ok(self.clone()),
+            _ => Err(Error::new(ErrorKind::TypeMismatch, "expected number")
+                .with_metadata("got", self.typ())),
+        }
+    }
+
+    pub(crate) fn arithmetic(&self, other: &Self, op: ArithmeticOp) -> Result<Self> {
+        use ArithmeticOp::*;
+
+        if let (Self::I64(left), Self::I64(right)) = (self, other) {
+            if matches!(op, Div | Rem) && *right == 0 {
+                return Err(Error::new(ErrorKind::InvalidValue, "division by zero"));
+            }
+            let result = match op {
+                Add => left.checked_add(*right),
+                Sub => left.checked_sub(*right),
+                Mul => left.checked_mul(*right),
+                Div => left.checked_div(*right),
+                Rem => left.checked_rem(*right),
+            };
+            return result
+                .map(Self::I64)
+                .ok_or_else(|| Error::new(ErrorKind::InvalidValue, "integer overflow"));
+        }
+
+        let (left, right) = match (self, other) {
+            (Self::I64(left), Self::F64(right)) => (*left as f64, *right),
+            (Self::F64(left), Self::I64(right)) => (*left, *right as f64),
+            (Self::F64(left), Self::F64(right)) => (*left, *right),
+            _ => {
+                return Err(
+                    Error::new(ErrorKind::TypeMismatch, "expected numeric operands")
+                        .with_metadata("left", self.typ())
+                        .with_metadata("right", other.typ()),
+                );
+            }
+        };
+        if matches!(op, Div | Rem) && right == 0.0 {
+            return Err(Error::new(ErrorKind::InvalidValue, "division by zero"));
+        }
+        Ok(Self::F64(match op {
+            Add => left + right,
+            Sub => left - right,
+            Mul => left * right,
+            Div => left / right,
+            Rem => left % right,
+        }))
+    }
+
     pub fn str(s: impl Into<String>) -> Self {
         Value::Str(Arc::new(s.into()))
     }

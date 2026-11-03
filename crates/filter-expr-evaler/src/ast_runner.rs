@@ -63,6 +63,37 @@ impl<'a> AstRunner<'a> {
                 self.eval_method_call(obj, method, args, ctx).await
             }
 
+            Expr::Add(left, right) => {
+                let left = Box::pin(self.eval_expr(left, ctx)).await?;
+                let right = Box::pin(self.eval_expr(right, ctx)).await?;
+                left.arithmetic(&right, crate::value::ArithmeticOp::Add)
+            }
+            Expr::Sub(left, right) => {
+                let left = Box::pin(self.eval_expr(left, ctx)).await?;
+                let right = Box::pin(self.eval_expr(right, ctx)).await?;
+                left.arithmetic(&right, crate::value::ArithmeticOp::Sub)
+            }
+            Expr::Mul(left, right) => {
+                let left = Box::pin(self.eval_expr(left, ctx)).await?;
+                let right = Box::pin(self.eval_expr(right, ctx)).await?;
+                left.arithmetic(&right, crate::value::ArithmeticOp::Mul)
+            }
+            Expr::Div(left, right) => {
+                let left = Box::pin(self.eval_expr(left, ctx)).await?;
+                let right = Box::pin(self.eval_expr(right, ctx)).await?;
+                left.arithmetic(&right, crate::value::ArithmeticOp::Div)
+            }
+            Expr::Rem(left, right) => {
+                let left = Box::pin(self.eval_expr(left, ctx)).await?;
+                let right = Box::pin(self.eval_expr(right, ctx)).await?;
+                left.arithmetic(&right, crate::value::ArithmeticOp::Rem)
+            }
+            Expr::Pos(expr) => Box::pin(self.eval_expr(expr, ctx))
+                .await?
+                .numeric_sign(false),
+            Expr::Neg(expr) => Box::pin(self.eval_expr(expr, ctx))
+                .await?
+                .numeric_sign(true),
             Expr::Gt(left, right) => {
                 let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
                 let right_value = Box::pin(self.eval_expr(right, ctx)).await?;

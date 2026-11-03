@@ -17,10 +17,17 @@ You can evaluate it by yourself or use the `filter-expr-evaler` crate.
 
 ## Examples
 
-You can compare values with `=`, `!=`, `>`, `>=`, `<`, and `<=`:
+You can compare values with `=`, `==`, `!=`, `>`, `>=`, `<`, and `<=`:
 
 ```text
 age >= 18 AND rating > 4.5
+```
+
+You can use arithmetic operators `+ - * / %` and unary `+` / `-`:
+
+```text
+price * quantity - discount >= 100
+(count + 1) % 2 = 0
 ```
 
 You can combine conditions with `AND`, `OR`, `NOT`, and parentheses:
@@ -82,18 +89,22 @@ user.address.city = 'London'
 ### Comparison
 
 ```
-<comparison> = <primary> <operator> <comparison>
-             | <primary>
+<comparison> = <additive> <operator> <comparison>
+             | <additive>
+
+<additive> = <multiplicative> (('+' | '-') <multiplicative>)*
+<multiplicative> = <unary> (('*' | '/' | '%') <unary>)*
+<unary> = ('+' | '-') <unary> | <primary>
 
 <primary> = <func-call>
           | <method-call>
           | <field-access>
           | <value>
 
-<operator> = '=' | '>' | '<' | '>=' | '<=' | '!=' | 'IN' | 'NOT' 'IN'
+<operator> = '=' | '==' | '>' | '<' | '>=' | '<=' | '!=' | 'IN' | 'NOT' 'IN'
 
-<func-call> = <ident> '(' [<value> (',' <value>)* ','?] ')'
-<method-call> = <value> '.' <ident> '(' [<value> (',' <value>)* ','?] ')'
+<func-call> = <ident> '(' [<expr> (',' <expr>)* ','?] ')'
+<method-call> = <value> '.' <ident> '(' [<expr> (',' <expr>)* ','?] ')'
 <field-access> = <value> '.' <ident>
 
 <value> = <str>
@@ -106,6 +117,6 @@ user.address.city = 'London'
         | <object>
         | '(' <expr> ')'
 
-<array> = '[' [<value> (',' <value>)* ','?] ']'
-<object> = '{' [<str> ':' <value> (',' <str> ':' <value>)* ','?] '}'
+<array> = '[' [<expr> (',' <expr>)* ','?] ']'
+<object> = '{' [<str> ':' <expr> (',' <str> ':' <expr>)* ','?] '}'
 ```
