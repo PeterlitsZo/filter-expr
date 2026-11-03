@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Support `==` as an alias for `=` in equality comparisons.
 - Support object literals, construction, evaluation, equality, and field access.
 
 ## v0.3.0

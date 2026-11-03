@@ -15,7 +15,7 @@ pub(crate) enum Token {
     /// A null literal.
     Null,
 
-    /// The equal operator (`=`).
+    /// The equal operator (`=` or `==`).
     Eq,
     /// The greater than operator (`>`).
     Gt,
@@ -214,6 +214,9 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
             // Operators.
             '=' => {
                 chars.next();
+                if let Some(&'=') = chars.peek() {
+                    chars.next();
+                }
                 tokens.push(Token::Eq);
             }
             '>' => {

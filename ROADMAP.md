@@ -6,39 +6,6 @@
 - [ ] Fix `transform_children` skipping recursive transformation of `Array`
       elements.
 - [ ] Support `some_userdata.foo.bar`.
-
-## 2026-11
-
-- [ ] Support version comment.
-- [ ] Add benchmark tests and ensure the performance is not too bad.
-- [x] Support the math functions:
-
-  - [x] `abs`
-  - [x] `ceil`
-  - [x] `floor`
-  - [x] `round`
-  - [x] `pow`
-  - [x] `sqrt`
-  - [x] `exp`
-  - [x] `ln`
-  - [x] `log`
-  - [x] `log2`
-  - [x] `log10`
-
-- [ ] Support the field-access syntax. Like `foo.bar.baz`.
-- [ ] Support the `Object` type -- just like the JSON object.
-- [ ] Support get the item of the `Array` and `Object` by index or key. Like
-      `array[0] = "John"` or `object.name = "John"`.
-- [ ] Support `==` as the alias of `=` for the equality comparison.
-- [ ] Support escape the special characters in the string. Like `\'` to escape
-      the single quote.
-- [ ] Support `+`, `-`, `*`, `/` and `%` operators for the arithmetic
-      operations.
-- [ ] Support `&&`, `||` and `!` operators for the logical operations.
-      Support `and`, `or` and `not` as the aliases of `&&`, `||` and `!`.
-- [ ] Use tool `prek` for pre-commit hooks.
-- [ ] Add fuzzing tests and more tests.
-- [ ] Support custom method.
 - [ ] Support the `DateTime` type.
 - [ ] Support the `DateTime::from_rfc3339` function to create a `DateTime` value
       by given RFC 3339 string. Like
@@ -62,6 +29,39 @@
 
 - [ ] Handle missing EOF checks during tokenization, such as unterminated
       string literals.
+
+## 2026-11
+
+- [ ] Support version comment.
+- [ ] Add benchmark tests and ensure the performance is not too bad.
+- [x] Support the math functions:
+
+  - [x] `abs`
+  - [x] `ceil`
+  - [x] `floor`
+  - [x] `round`
+  - [x] `pow`
+  - [x] `sqrt`
+  - [x] `exp`
+  - [x] `ln`
+  - [x] `log`
+  - [x] `log2`
+  - [x] `log10`
+
+- [x] Support the field-access syntax. Like `foo.bar.baz`.
+- [x] Support the `Object` type -- just like the JSON object.
+- [ ] Support get the item of the `Array` and `Object` by index or key. Like
+      `array[0] = "John"` or `object.name = "John"`.
+- [x] Support `==` as the alias of `=` for the equality comparison.
+- [x] Support escape the special characters in the string. Like `\'` to escape
+      the single quote.
+- [ ] Support `+`, `-`, `*`, `/` and `%` operators for the arithmetic
+      operations.
+- [ ] Support `&&`, `||` and `!` operators for the logical operations.
+      Support `and`, `or` and `not` as the aliases of `&&`, `||` and `!`.
+- [ ] Use tool `prek` for pre-commit hooks.
+- [ ] Add fuzzing tests and more tests.
+- [ ] Support custom method.
 
 ## 2026-10
 
