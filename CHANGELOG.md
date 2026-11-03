@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+*Empty*
+
+## v0.4.0
+
 - Support arithmetic operators `+`, `-`, `*`, `/`, `%`, and unary `+` / `-`.
 - Support `==` as an alias for `=` in equality comparisons.
 - Support object literals, construction, evaluation, equality, and field access.
