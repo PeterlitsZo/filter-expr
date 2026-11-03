@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Support object literals and object AST construction in `filter-expr`.
+- Support object literals, construction, evaluation, equality, and field access.
 
 ## v0.3.0
 

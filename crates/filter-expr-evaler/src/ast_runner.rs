@@ -37,8 +37,9 @@ impl<'a> AstRunner<'a> {
                         .with_metadata("var", field)),
                 }
             }
-            Expr::FieldAccess(_obj, _field) => {
-                todo!()
+            Expr::FieldAccess(obj, field) => {
+                let value = Box::pin(self.eval_expr(obj, ctx)).await?;
+                value.get_field(field)
             }
 
             Expr::Str(value) => Ok(Value::str(value.clone())),
@@ -48,6 +49,14 @@ impl<'a> AstRunner<'a> {
             Expr::Null => Ok(Value::null()),
 
             Expr::Array(value) => self.eval_array(value, ctx).await,
+            Expr::Object(fields) => {
+                let mut values = std::collections::BTreeMap::new();
+                for (key, expr) in fields {
+                    let value = Box::pin(self.eval_expr(expr, ctx)).await?;
+                    values.insert(key.clone(), value);
+                }
+                Ok(Value::object(values))
+            }
 
             Expr::FuncCall(func, args) => self.eval_func_call(func, args, ctx).await,
             Expr::MethodCall(method, obj, args) => {

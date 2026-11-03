@@ -67,6 +67,10 @@ pub(crate) enum AsmInstruction {
     /// variables table.
     LoadLocal(u32),
 
+    /// Pop an object and push its field value. The argument is the field name's
+    /// index in the string pool.
+    GetField(u32),
+
     /// Load a string value from the string pool, and push it onto the stack.
     /// The argument is the index of the constant in the string pool.
     LoadString(u32),
@@ -85,6 +89,9 @@ pub(crate) enum AsmInstruction {
     /// Build an array from the top of the stack, and push it onto the stack.
     /// The argument is the number of elements in the array.
     BuildArray(u32),
+    /// Build an object from string key/value pairs on the stack, pushing the
+    /// resulting object. The argument is the number of pairs.
+    BuildObject(u32),
 
     /// Call a function. The first argument is the index of the function in the
     /// functions table. The second argument is the number of arguments.
@@ -97,15 +104,15 @@ pub(crate) enum AsmInstruction {
     /// label to jump to. The top of the stack is popped.
     #[allow(unused)]
     PopJumpIfFalse(u32),
-    /// Duplicate the top of the stack, then jump if it is false. The argument is
-    /// the index of the label to jump to. The top of the stack is not popped.
+    /// Jump if the top of the stack is false, retaining the value; otherwise pop it.
+    /// The argument is the index of the label to jump to.
     JumpIfFalse(u32),
     /// Jump if the top of the stack is true. The argument is the index of the
     /// label to jump to. The top of the stack is popped.
     #[allow(unused)]
     PopJumpIfTrue(u32),
-    /// Duplicate the top of the stack, then jump if it is true. The argument is
-    /// the index of the label to jump to. The top of the stack is not popped.
+    /// Jump if the top of the stack is true, retaining the value; otherwise pop it.
+    /// The argument is the index of the label to jump to.
     JumpIfTrue(u32),
     /// Jump to the label. The argument is the index of the label to jump to.
     /// The stack is not changed.
@@ -151,12 +158,14 @@ impl fmt::Debug for AsmInstruction {
         match self {
             AsmInstruction::Label(index) => write!(f, "LABEL label_index={index}"),
             AsmInstruction::LoadLocal(index) => write!(f, "LOAD_LOCAL local_index={index}"),
+            AsmInstruction::GetField(index) => write!(f, "GET_FIELD str_index={index}"),
             AsmInstruction::LoadString(index) => write!(f, "LOAD_STR str_index={index}"),
             AsmInstruction::LoadI64(value) => write!(f, "LOAD_I64 value={value}"),
             AsmInstruction::LoadF64(value) => write!(f, "LOAD_F64 value={value}"),
             AsmInstruction::LoadBool(value) => write!(f, "LOAD_BOOL value={value}"),
             AsmInstruction::LoadNull => write!(f, "LOAD_NULL"),
             AsmInstruction::BuildArray(length) => write!(f, "BUILD_ARRAY length={length}"),
+            AsmInstruction::BuildObject(length) => write!(f, "BUILD_OBJECT length={length}"),
             AsmInstruction::CallFunction(function_index, argument_count) => {
                 write!(
                     f,

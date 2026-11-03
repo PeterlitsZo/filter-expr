@@ -78,6 +78,13 @@ impl<'a> BytecodeRunner<'a> {
                     self.stack.push(value);
                 }
 
+                bc::GET_FIELD => {
+                    let index = unsafe { self.read_u32() };
+                    let object = unsafe { self.pop_stack_top_unchecked() };
+                    let field = &self.bytecode.str_pool[index as usize];
+                    self.stack.push(object.get_field(field)?);
+                }
+
                 bc::LOAD_STRING => {
                     let index = unsafe { self.read_u32() };
                     let value = Arc::clone(&self.bytecode.str_pool[index as usize]);
@@ -97,6 +104,23 @@ impl<'a> BytecodeRunner<'a> {
                 }
                 bc::LOAD_NULL => {
                     self.stack.push(Value::Null);
+                }
+
+                bc::BUILD_OBJECT => {
+                    let length = unsafe { self.read_u32() };
+                    let mut fields = std::collections::BTreeMap::new();
+                    for _ in 0..length {
+                        let value = unsafe { self.pop_stack_top_unchecked() };
+                        let key = unsafe { self.pop_stack_top_unchecked() };
+                        let Value::Str(key) = key else {
+                            return Err(Error::new(
+                                ErrorKind::Internal,
+                                "object key is not a string",
+                            ));
+                        };
+                        fields.insert((*key).clone(), value);
+                    }
+                    self.stack.push(Value::object(fields));
                 }
 
                 bc::BUILD_ARRAY => {
@@ -125,6 +149,8 @@ impl<'a> BytecodeRunner<'a> {
                     unsafe {
                         if matches!(self.get_stack_top_unchecked(), Value::Bool(false)) {
                             self.pc = offset as usize;
+                        } else {
+                            self.pop_stack_top_unchecked();
                         }
                     }
                 }
@@ -147,6 +173,8 @@ impl<'a> BytecodeRunner<'a> {
                     unsafe {
                         if matches!(self.get_stack_top_unchecked(), Value::Bool(true)) {
                             self.pc = offset as usize;
+                        } else {
+                            self.pop_stack_top_unchecked();
                         }
                     }
                 }

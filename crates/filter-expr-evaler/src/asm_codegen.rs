@@ -1,4 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
 use filter_expr::Expr;
 
@@ -62,13 +65,14 @@ impl AsmCodegen {
     fn codegen_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Field(field) => self.codegen_field(field),
-            Expr::FieldAccess(_obj, _field) => todo!(),
+            Expr::FieldAccess(obj, field) => self.codegen_field_access(obj, field),
             Expr::Str(value) => self.codegen_str(value),
             Expr::I64(value) => self.codegen_i64(*value),
             Expr::F64(value) => self.codegen_f64(*value),
             Expr::Bool(value) => self.codegen_bool(*value),
             Expr::Null => self.codegen_null(),
             Expr::Array(elements) => self.codegen_array(elements),
+            Expr::Object(fields) => self.codegen_object(fields),
             Expr::Gt(left, right) => self.codegen_gt(left, right),
             Expr::Lt(left, right) => self.codegen_lt(left, right),
             Expr::Ge(left, right) => self.codegen_ge(left, right),
@@ -97,6 +101,19 @@ impl AsmCodegen {
                 .push(AsmInstruction::LoadLocal(self.locals.len() as u32));
             self.locals.push(local);
         }
+    }
+
+    pub(crate) fn codegen_field_access(&mut self, obj: &Expr, field: &str) {
+        self.codegen_expr(obj);
+        let index = if let Some(index) = self.str_pool_map.get(field) {
+            *index
+        } else {
+            let index = self.str_pool.len() as u32;
+            self.str_pool_map.insert(field.to_string(), index);
+            self.str_pool.push(Arc::new(field.to_string()));
+            index
+        };
+        self.instructions.push(AsmInstruction::GetField(index));
     }
 
     pub(crate) fn codegen_str(&mut self, value: &str) {
@@ -137,6 +154,15 @@ impl AsmCodegen {
         // Then build the array
         self.instructions
             .push(AsmInstruction::BuildArray(elements.len() as u32));
+    }
+
+    pub(crate) fn codegen_object(&mut self, fields: &BTreeMap<String, Expr>) {
+        for (key, value) in fields {
+            self.codegen_str(key);
+            self.codegen_expr(value);
+        }
+        self.instructions
+            .push(AsmInstruction::BuildObject(fields.len() as u32));
     }
 
     pub(crate) fn codegen_gt(&mut self, left: &Expr, right: &Expr) {

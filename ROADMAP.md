@@ -5,6 +5,7 @@
 - [ ] Support `obj[name]`.
 - [ ] Fix `transform_children` skipping recursive transformation of `Array`
       elements.
+- [ ] Support `some_userdata.foo.bar`.
 
 ## 2026-11
 

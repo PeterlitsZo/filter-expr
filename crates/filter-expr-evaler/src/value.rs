@@ -1,8 +1,5 @@
 use std::{
-    any::Any,
-    cmp::Ordering,
-    fmt::{Debug, Display},
-    sync::Arc,
+    any::Any, cmp::Ordering, collections::BTreeMap, fmt::{Debug, Display}, sync::Arc,
 };
 
 use crate::{Error, ErrorKind, Result};
@@ -22,6 +19,8 @@ pub enum Value {
 
     /// The array value.
     Array(Arc<Vec<Value>>),
+    /// The object value.
+    Object(Arc<BTreeMap<String, Value>>),
 
     /// The userdata value.
     Userdata(Arc<dyn Userdata>),
@@ -63,6 +62,12 @@ impl<T: Into<Value>> From<Vec<T>> for Value {
     }
 }
 
+impl<T: Into<Value>> From<BTreeMap<String, T>> for Value {
+    fn from(val: BTreeMap<String, T>) -> Self {
+        Value::Object(Arc::new(val.into_iter().map(|(k, v)| (k, v.into())).collect()))
+    }
+}
+
 impl Value {
     pub fn str(s: impl Into<String>) -> Self {
         Value::Str(Arc::new(s.into()))
@@ -85,7 +90,26 @@ impl Value {
     }
 
     pub fn array(items: impl Into<Vec<Value>>) -> Self {
-        Value::Array(Arc::new(items.into().into_iter().collect()))
+        Value::Array(Arc::new(items.into()))
+    }
+
+    pub fn object(items: impl Into<BTreeMap<String, Value>>) -> Self {
+        Value::Object(Arc::new(items.into()))
+    }
+
+    pub(crate) fn get_field(&self, field: &str) -> Result<Value> {
+        match self {
+            Value::Object(object) => object.get(field).cloned().ok_or_else(|| {
+                Error::new(ErrorKind::FailedToGet, "no such field")
+                    .with_metadata("field", field)
+            }),
+            _ => Err(
+                Error::new(ErrorKind::TypeMismatch, "expected object for field access")
+                    .with_metadata("field", field)
+                    .with_metadata("expected", ValueType::Object)
+                    .with_metadata("got", self.typ()),
+            ),
+        }
     }
 
     pub fn typ(&self) -> ValueType {
@@ -96,6 +120,7 @@ impl Value {
             Value::Bool(_) => ValueType::Bool,
             Value::Null => ValueType::Null,
             Value::Array(_) => ValueType::Array,
+            Value::Object(_) => ValueType::Object,
             Value::Userdata(_) => ValueType::Userdata,
         }
     }
@@ -118,6 +143,22 @@ impl Value {
 
                 for (a, b) in a.iter().zip(b.iter()) {
                     if !a.partial_eq(b)? {
+                        return Ok(false);
+                    }
+                }
+
+                Ok(true)
+            }
+            (Value::Object(a), Value::Object(b)) => {
+                if a.len() != b.len() {
+                    return Ok(false);
+                }
+
+                for ((ak, av), (bk, bv)) in a.iter().zip(b.iter()) {
+                    if ak != bk {
+                        return Ok(false);
+                    }
+                    if !av.partial_eq(bv)? {
                         return Ok(false);
                     }
                 }
@@ -186,6 +227,7 @@ pub enum ValueType {
     Null,
 
     Array,
+    Object,
 
     Userdata,
 }

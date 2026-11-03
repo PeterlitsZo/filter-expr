@@ -33,6 +33,7 @@ pub(crate) struct Bytecode {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum BytecodeOpcode {
     LoadLocal,
+    GetField,
 
     LoadString,
     LoadI64,
@@ -41,6 +42,7 @@ pub(crate) enum BytecodeOpcode {
     LoadNull,
 
     BuildArray,
+    BuildObject,
 
     CallFunction,
     CallMethod,
@@ -70,12 +72,14 @@ impl BytecodeOpcode {
     pub(crate) const fn into_u8(self) -> u8 {
         match self {
             BytecodeOpcode::LoadLocal => LOAD_LOCAL,
+            BytecodeOpcode::GetField => GET_FIELD,
             BytecodeOpcode::LoadString => LOAD_STRING,
             BytecodeOpcode::LoadI64 => LOAD_I64,
             BytecodeOpcode::LoadF64 => LOAD_F64,
             BytecodeOpcode::LoadBool => LOAD_BOOL,
             BytecodeOpcode::LoadNull => LOAD_NULL,
             BytecodeOpcode::BuildArray => BUILD_ARRAY,
+            BytecodeOpcode::BuildObject => BUILD_OBJECT,
             BytecodeOpcode::CallFunction => CALL_FUNCTION,
             BytecodeOpcode::CallMethod => CALL_METHOD,
             BytecodeOpcode::PopJumpIfFalse => POP_JUMP_IF_FALSE,
@@ -100,12 +104,14 @@ impl BytecodeOpcode {
     pub(crate) const fn from_u8(value: u8) -> Option<Self> {
         match value {
             LOAD_LOCAL => Some(BytecodeOpcode::LoadLocal),
+            GET_FIELD => Some(BytecodeOpcode::GetField),
             LOAD_STRING => Some(BytecodeOpcode::LoadString),
             LOAD_I64 => Some(BytecodeOpcode::LoadI64),
             LOAD_F64 => Some(BytecodeOpcode::LoadF64),
             LOAD_BOOL => Some(BytecodeOpcode::LoadBool),
             LOAD_NULL => Some(BytecodeOpcode::LoadNull),
             BUILD_ARRAY => Some(BytecodeOpcode::BuildArray),
+            BUILD_OBJECT => Some(BytecodeOpcode::BuildObject),
             CALL_FUNCTION => Some(BytecodeOpcode::CallFunction),
             CALL_METHOD => Some(BytecodeOpcode::CallMethod),
             POP_JUMP_IF_FALSE => Some(BytecodeOpcode::PopJumpIfFalse),
@@ -130,6 +136,7 @@ impl BytecodeOpcode {
     pub fn op_len(self) -> usize {
         match self {
             BytecodeOpcode::LoadLocal => 5,
+            BytecodeOpcode::GetField => 5,
 
             BytecodeOpcode::LoadString => 5,
             BytecodeOpcode::LoadI64 => 9,
@@ -138,6 +145,7 @@ impl BytecodeOpcode {
             BytecodeOpcode::LoadNull => 1,
 
             BytecodeOpcode::BuildArray => 5,
+            BytecodeOpcode::BuildObject => 5,
 
             BytecodeOpcode::CallFunction => 9,
             BytecodeOpcode::CallMethod => 9,
@@ -188,3 +196,5 @@ pub(crate) const NE: u8 = 20;
 pub(crate) const IN: u8 = 21;
 pub(crate) const NOT: u8 = 22;
 pub(crate) const RETURN: u8 = 23;
+pub(crate) const GET_FIELD: u8 = 24;
+pub(crate) const BUILD_OBJECT: u8 = 25;

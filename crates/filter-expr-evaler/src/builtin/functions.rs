@@ -87,6 +87,7 @@ impl Function for FunctionType {
             ValueType::Bool => "bool",
             ValueType::Null => "null",
             ValueType::Array => "array",
+            ValueType::Object => "object",
             ValueType::Userdata => "userdata",
         }))
     }

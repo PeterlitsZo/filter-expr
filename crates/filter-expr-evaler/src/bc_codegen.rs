@@ -51,6 +51,7 @@ impl BytecodeCodegen {
 
                 Ins::LoadString(..) => ins_offset += Op::LoadString.op_len(),
                 Ins::LoadLocal(..) => ins_offset += Op::LoadLocal.op_len(),
+                Ins::GetField(..) => ins_offset += Op::GetField.op_len(),
 
                 Ins::LoadI64(..) => ins_offset += Op::LoadI64.op_len(),
                 Ins::LoadF64(..) => ins_offset += Op::LoadF64.op_len(),
@@ -58,6 +59,7 @@ impl BytecodeCodegen {
                 Ins::LoadNull => ins_offset += Op::LoadNull.op_len(),
 
                 Ins::BuildArray(..) => ins_offset += Op::BuildArray.op_len(),
+                Ins::BuildObject(..) => ins_offset += Op::BuildObject.op_len(),
 
                 Ins::CallFunction(..) => ins_offset += Op::CallFunction.op_len(),
                 Ins::CallMethod(..) => ins_offset += Op::CallMethod.op_len(),
@@ -123,6 +125,10 @@ impl BytecodeCodegen {
                 // Do nothing - label offset already recorded in first pass
             }
 
+            AsmInstruction::GetField(index) => {
+                self.push_u8(BytecodeOpcode::GetField.into_u8());
+                self.push_u32(index);
+            }
             AsmInstruction::LoadString(index) => {
                 self.push_u8(BytecodeOpcode::LoadString.into_u8());
                 self.push_u32(index);
@@ -148,6 +154,10 @@ impl BytecodeCodegen {
                 self.push_u8(BytecodeOpcode::LoadNull.into_u8());
             }
 
+            AsmInstruction::BuildObject(length) => {
+                self.push_u8(BytecodeOpcode::BuildObject.into_u8());
+                self.push_u32(length);
+            }
             AsmInstruction::BuildArray(length) => {
                 self.push_u8(BytecodeOpcode::BuildArray.into_u8());
                 self.push_u32(length);
