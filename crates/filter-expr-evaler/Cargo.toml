@@ -8,7 +8,7 @@ repository.workspace = true
 documentation = "https://docs.rs/filter-expr"
 
 [dependencies]
-filter-expr = { path = "../filter-expr", version = "0.2.0" }
+filter-expr = { path = "../filter-expr", version = "0.3.0" }
 
 async-trait.workspace = true
 thiserror.workspace = true

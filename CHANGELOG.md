@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+*Empty*
+
+## v0.3.0
+
 - Support `NOT IN`.
 - Support block comments.
 - Support built-in math functions.
