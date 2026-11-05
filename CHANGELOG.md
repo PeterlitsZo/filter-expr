@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+*Empty*
+
+## v0.4.1
+
 - Support Wasm caching with LRU.
 - Reject trailing tokens and unterminated strings.
 
