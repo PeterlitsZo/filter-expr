@@ -12,6 +12,10 @@ mod ctx;
 mod error;
 mod value;
 
+#[cfg(feature = "bench-internals")]
+#[doc(hidden)]
+pub mod benchmark;
+
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 
