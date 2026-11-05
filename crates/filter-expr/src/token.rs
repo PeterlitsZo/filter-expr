@@ -136,9 +136,11 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
                 chars.next();
                 let mut s = String::new();
                 let mut escaped = false;
+                let mut closed = false;
                 while let Some(c) = chars.next() {
                     match (escaped, c) {
                         (false, '\'') => {
+                            closed = true;
                             break;
                         }
                         (false, '\\') => {
@@ -174,15 +176,20 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
                         }
                     }
                 }
+                if !closed {
+                    return Err(Error::UnexpectedEOF);
+                }
                 tokens.push(Token::Str(s));
             }
             '"' => {
                 chars.next();
                 let mut s = String::new();
                 let mut escaped = false;
+                let mut closed = false;
                 while let Some(c) = chars.next() {
                     match (escaped, c) {
                         (false, '"') => {
+                            closed = true;
                             break;
                         }
                         (false, '\\') => {
@@ -217,6 +224,9 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
                             escaped = false;
                         }
                     }
+                }
+                if !closed {
+                    return Err(Error::UnexpectedEOF);
                 }
                 tokens.push(Token::Str(s));
             }

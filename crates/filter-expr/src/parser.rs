@@ -12,10 +12,21 @@ impl Parser {
         Self { tokens, pos: 0 }
     }
 
+    /// Parse a complete expression, rejecting trailing tokens.
+    pub(crate) fn parse(&mut self) -> Result<Expr, Error> {
+        let expr = self.parse_expr()?;
+        if let Some(token) = self.peek() {
+            return Err(Error::Parse(format!(
+                "unexpected trailing token: {token:?}"
+            )));
+        }
+        Ok(expr)
+    }
+
     /// ```text
     /// <expr> = <or_test> ('OR' <or_test>)*
     /// ```
-    pub(crate) fn parse_expr(&mut self) -> Result<Expr, Error> {
+    fn parse_expr(&mut self) -> Result<Expr, Error> {
         let item = self.parse_or_test()?;
         let mut exprs = match item {
             Expr::Or(exprs) => exprs,

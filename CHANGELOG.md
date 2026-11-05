@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-*Empty*
+- Reject trailing tokens and unterminated strings.
 
 ## v0.4.0
 

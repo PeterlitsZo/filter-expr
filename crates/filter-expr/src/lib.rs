@@ -74,5 +74,5 @@ impl FilterExpr {
 fn parse_expr(input: &str) -> Result<Expr, Error> {
     let tokens = token::parse_token(input)?;
     let mut parser = parser::Parser::new(tokens);
-    parser.parse_expr()
+    parser.parse()
 }
