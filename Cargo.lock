@@ -115,6 +115,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "filter-expr",
+ "lru",
  "moka",
  "regex",
  "thiserror",
@@ -181,6 +182,12 @@ checksum = "224399e74b87b5f3557511d98dff8b14089b3dadafcab6bb93eab67d3aace965"
 dependencies = [
  "scopeguard",
 ]
+
+[[package]]
+name = "lru"
+version = "0.18.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef9ac18847474e638e3702b76c65d4eb93428471a74778ef0f1be711717f89b5"
 
 [[package]]
 name = "memchr"

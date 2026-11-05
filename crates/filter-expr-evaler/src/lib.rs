@@ -7,6 +7,7 @@ mod bc;
 mod bc_codegen;
 mod bc_runner;
 mod builtin;
+mod cache;
 mod callable;
 mod ctx;
 mod error;
@@ -20,11 +21,11 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 
 use filter_expr::{Expr, FilterExpr};
-use moka::sync::Cache;
 use regex::Regex;
 
 use crate::ast_runner::AstRunner;
 use crate::bc::Bytecode;
+use crate::cache::Cache;
 
 pub use crate::callable::{ArcFunction, Function, FunctionContext};
 pub use crate::callable::{ArcMethod, Method, MethodContext};
@@ -35,15 +36,16 @@ pub use crate::value::{Userdata, Value, ValueType};
 /// The environment for the filter expression evaluator.
 #[derive(Clone)]
 pub struct FilterExprEvalerEnv {
-    inner: Arc<RwLock<FilterExprEvalerEnvInner>>,
+    inner: Arc<FilterExprEvalerEnvInner>,
 }
 
 struct FilterExprEvalerEnvInner {
-    /// The cached compiled regex.
-    ///
-    /// It is useful to avoid compiling the same regex multiple times.
-    cached_regex: Cache<String, Arc<Regex>>,
+    /// Compiled regexes shared by both runners.
+    cached_regex: Cache<String, Regex>,
+    registry: RwLock<FilterExprEvalerRegistry>,
+}
 
+struct FilterExprEvalerRegistry {
     /// The functions.
     functions: BTreeMap<String, ArcFunction>,
 
@@ -60,11 +62,10 @@ impl FilterExprEvalerEnv {
         // Initialize the builtin methods.
         let methods = Self::default_methods();
 
-        let inner = Arc::new(RwLock::new(FilterExprEvalerEnvInner {
+        let inner = Arc::new(FilterExprEvalerEnvInner {
             cached_regex: Cache::new(128),
-            functions,
-            methods,
-        }));
+            registry: RwLock::new(FilterExprEvalerRegistry { functions, methods }),
+        });
 
         Self { inner }
     }
@@ -72,6 +73,7 @@ impl FilterExprEvalerEnv {
     /// Add a function to the environment.
     pub(crate) fn add_function(&self, name: String, function: ArcFunction) -> Result<()> {
         self.inner
+            .registry
             .write()
             .map_err(|e| {
                 Error::new(ErrorKind::Internal, "failed to lock env")
@@ -90,6 +92,7 @@ impl FilterExprEvalerEnv {
         method: ArcMethod,
     ) -> Result<()> {
         self.inner
+            .registry
             .write()
             .map_err(|e| {
                 Error::new(ErrorKind::Internal, "failed to lock env")
@@ -102,7 +105,7 @@ impl FilterExprEvalerEnv {
 
     /// Get a function from the environment.
     pub(crate) fn get_function(&self, name: &str) -> Result<ArcFunction> {
-        let inner = self.inner.read().map_err(|e| {
+        let inner = self.inner.registry.read().map_err(|e| {
             Error::new(ErrorKind::Internal, "failed to lock env")
                 .with_metadata("error", e.to_string())
         })?;
@@ -114,7 +117,7 @@ impl FilterExprEvalerEnv {
 
     /// Get a method from the environment.
     pub(crate) fn get_method(&self, name: &str, obj_type: ValueType) -> Result<ArcMethod> {
-        let inner = self.inner.read().map_err(|e| {
+        let inner = self.inner.registry.read().map_err(|e| {
             Error::new(ErrorKind::Internal, "failed to lock env")
                 .with_metadata("error", e.to_string())
         })?;
@@ -134,11 +137,7 @@ impl FilterExprEvalerEnv {
     /// Get a regex (if cached, return the cached one; otherwise, compile and
     /// cache it).
     pub(crate) fn get_regex(&self, pattern: &str) -> Result<Arc<Regex>> {
-        let inner = self.inner.read().map_err(|e| {
-            Error::new(ErrorKind::Internal, "failed to lock env")
-                .with_metadata("error", e.to_string())
-        })?;
-        let cached_regex = inner.cached_regex.get(pattern);
+        let cached_regex = self.inner.cached_regex.get(pattern)?;
         if let Some(cached) = cached_regex {
             Ok(cached)
         } else {
@@ -148,9 +147,9 @@ impl FilterExprEvalerEnv {
                     .with_source(e)
             })?;
             let regex_arc = Arc::new(regex);
-            inner
+            self.inner
                 .cached_regex
-                .insert(pattern.to_string(), regex_arc.clone());
+                .insert(pattern.to_string(), regex_arc.clone())?;
             Ok(regex_arc)
         }
     }
@@ -220,7 +219,7 @@ pub struct FilterExprEvaler {
     /// The cached compiled bytecode.
     ///
     /// Used to avoid compiling the same expression multiple times.
-    cached_bytecode: Cache<Expr, Arc<Bytecode>>,
+    cached_bytecode: Cache<Expr, Bytecode>,
 
     /// The global environment shared by runners.
     env: FilterExprEvalerEnv,
@@ -274,7 +273,7 @@ impl FilterExprEvaler {
     ) -> Result<bool> {
         if let Some(expr) = filter_expr.expr() {
             let bytecode = {
-                let cached_bytecode = self.cached_bytecode.get(expr);
+                let cached_bytecode = self.cached_bytecode.get(expr)?;
 
                 // Check if bytecode is cached, generate if not.
                 if let Some(cached) = cached_bytecode {
@@ -286,7 +285,7 @@ impl FilterExprEvaler {
                     let bytecode_arc = Arc::new(bytecode);
 
                     self.cached_bytecode
-                        .insert(expr.clone(), bytecode_arc.clone());
+                        .insert(expr.clone(), bytecode_arc.clone())?;
                     bytecode_arc
                 }
             };
