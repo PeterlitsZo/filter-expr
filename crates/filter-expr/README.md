@@ -30,16 +30,22 @@ price * quantity - discount >= 100
 (count + 1) % 2 = 0
 ```
 
-You can combine conditions with `AND`, `OR`, `NOT`, and parentheses:
+You can combine conditions with `AND` / `and` / `&&`, `OR` / `or` / `||`,
+and `NOT` / `not` / `!`, plus parentheses:
 
 ```text
 active AND (admin OR NOT banned)
+active and (admin or not banned)
+active && (admin || !banned)
 ```
 
-You can check whether a value belongs to an array with `IN`:
+You can check whether a value belongs to an array with `IN` / `in`, or exclude
+values with `NOT IN` / `not in`:
 
 ```text
 status IN [200, 201, 204]
+status in [200, 201, 204]
+status not in [400, 404, 500]
 ```
 
 You can quote strings with single or double quotes and escape quotes with a
@@ -80,10 +86,14 @@ user.address.city = 'London'
 ### Expression
 
 ```
-<expr> = <or_test> ('OR' <or_test>)*
+<expr> = <or_test> (<or> <or_test>)*
 
-<or_test> = <and_test> ('AND' <and_test>)*
-<and_test> = ('NOT' | '!') <and_test> | <comparison>
+<or_test> = <and_test> (<and> <and_test>)*
+<and_test> = <not> <and_test> | <comparison>
+
+<or> = 'OR' | 'or' | '||'
+<and> = 'AND' | 'and' | '&&'
+<not> = 'NOT' | 'not' | '!'
 ```
 
 ### Comparison
@@ -101,7 +111,8 @@ user.address.city = 'London'
           | <field-access>
           | <value>
 
-<operator> = '=' | '==' | '>' | '<' | '>=' | '<=' | '!=' | 'IN' | 'NOT' 'IN'
+<operator> = '=' | '==' | '>' | '<' | '>=' | '<=' | '!=' | <in> | ('NOT' | 'not') <in>
+<in> = 'IN' | 'in'
 
 <func-call> = <ident> '(' [<expr> (',' <expr>)* ','?] ')'
 <method-call> = <value> '.' <ident> '(' [<expr> (',' <expr>)* ','?] ')'

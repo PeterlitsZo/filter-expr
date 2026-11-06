@@ -24,7 +24,7 @@ impl Parser {
     }
 
     /// ```text
-    /// <expr> = <or_test> ('OR' <or_test>)*
+    /// <expr> = <or_test> (<or> <or_test>)*
     /// ```
     fn parse_expr(&mut self) -> Result<Expr, Error> {
         let item = self.parse_or_test()?;
@@ -50,7 +50,7 @@ impl Parser {
     }
 
     /// ```text
-    /// <or_test> = <and_test> ('AND' <and_test>)*
+    /// <or_test> = <and_test> (<and> <and_test>)*
     /// ```
     fn parse_or_test(&mut self) -> Result<Expr, Error> {
         let item = self.parse_and_test()?;
@@ -76,7 +76,7 @@ impl Parser {
     }
 
     /// ```text
-    /// <and_test> = ('NOT' | '!') <and_test> | <comparison>
+    /// <and_test> = <not> <and_test> | <comparison>
     /// ```
     fn parse_and_test(&mut self) -> Result<Expr, Error> {
         // Handle either spelling of unary negation.

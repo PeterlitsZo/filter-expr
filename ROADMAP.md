@@ -33,7 +33,7 @@
 ## 2026-11
 
 - [ ] Support version comment.
-- [ ] Add benchmark tests and ensure the performance is not too bad.
+- [x] Add benchmark tests and ensure the performance is not too bad.
 - [x] Support the math functions:
 
   - [x] `abs`
@@ -57,7 +57,7 @@
       the single quote.
 - [x] Support `+`, `-`, `*`, `/` and `%` operators for the arithmetic
       operations.
-- [ ] Support `&&`, `||` and `!` operators for the logical operations.
+- [x] Support `&&`, `||` and `!` operators for the logical operations.
       Support `and`, `or` and `not` as the aliases of `&&`, `||` and `!`.
 - [ ] Use tool `prek` for pre-commit hooks.
 - [ ] Add fuzzing tests and more tests.

@@ -33,7 +33,7 @@ pub(crate) enum Token {
     Le,
     /// The not equal to operator (`!=`).
     Ne,
-    /// The in operator (`IN`).
+    /// The in operator (`IN` or `in`).
     In,
 
     /// The left parenthesis (`(`).
@@ -55,11 +55,11 @@ pub(crate) enum Token {
     /// The dot (`.`).
     Dot,
 
-    /// The and operator (`&&` or `AND`).
+    /// The and operator (`&&`, `AND`, or `and`).
     And,
-    /// The or operator (`||` or `OR`).
+    /// The or operator (`||`, `OR`, or `or`).
     Or,
-    /// The not keyword (`NOT`).
+    /// The not keyword (`NOT` or `not`).
     Not,
     /// The symbolic not operator (`!`).
     Bang,
@@ -249,6 +249,14 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
                 tokens.push(Token::Rem);
             }
 
+            '&' | '|' => {
+                chars.next();
+                if chars.peek() != Some(&ch) {
+                    return Err(Error::UnsupportedCharacter(ch));
+                }
+                chars.next();
+                tokens.push(if ch == '&' { Token::And } else { Token::Or });
+            }
             '=' => {
                 chars.next();
                 if let Some(&'=') = chars.peek() {
@@ -354,10 +362,10 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
 
                 // Check if it's a keyword or literal
                 match text.as_str() {
-                    "AND" => tokens.push(Token::And),
-                    "OR" => tokens.push(Token::Or),
-                    "NOT" => tokens.push(Token::Not),
-                    "IN" => tokens.push(Token::In),
+                    "AND" | "and" => tokens.push(Token::And),
+                    "OR" | "or" => tokens.push(Token::Or),
+                    "NOT" | "not" => tokens.push(Token::Not),
+                    "IN" | "in" => tokens.push(Token::In),
 
                     "true" => tokens.push(Token::Bool(true)),
                     "false" => tokens.push(Token::Bool(false)),
