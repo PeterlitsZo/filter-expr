@@ -4,7 +4,7 @@ A library for evaluating filter expressions.
 
 ```rust
 use filter_expr::FilterExpr;
-use filter_expr_evaler::{FilterExprEvaler, simple_context};
+use filter_expr_evaler::{CompiledFilterExpr, FilterExprEvaler, simple_context};
 
 // Parse the filter expression.
 let filter_expr = FilterExpr::parse("name = 'John' AND age > 18").unwrap();
@@ -12,12 +12,13 @@ let filter_expr = FilterExpr::parse("name = 'John' AND age > 18").unwrap();
 // Build the evaler.
 let filter_expr_evaler = FilterExprEvaler::new();
 
-// Do the evaluation.
+// Compile once and reuse the handle for evaluation.
+let compiled = CompiledFilterExpr::compile(&filter_expr);
 let ctx = simple_context! {
     "name": "John",
     "age": 19,
 };
-let result = filter_expr_evaler.eval(&filter_expr, &ctx).await.unwrap();
+let result = filter_expr_evaler.run(&compiled, &ctx).await.unwrap();
 assert_eq!(result, true);
 ```
 

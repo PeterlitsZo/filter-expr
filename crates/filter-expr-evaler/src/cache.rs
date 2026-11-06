@@ -1,4 +1,4 @@
-//! Target-specific caches for compiled expressions and regular expressions.
+//! Target-specific cache.
 
 use std::{borrow::Borrow, hash::Hash, sync::Arc};
 

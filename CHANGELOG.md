@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-*Empty*
+- [BREAKING] Replace evaluator `eval` and `eval_by_bytecode_runner` with
+  `CompiledFilterExpr::compile` and evaluator `run`.
 
 ## v0.4.1
 
