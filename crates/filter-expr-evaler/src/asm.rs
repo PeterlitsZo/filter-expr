@@ -6,7 +6,6 @@ pub(crate) struct Asm {
     pub(crate) locals: Vec<AsmLocal>,
     pub(crate) functions: Vec<AsmFunction>,
     pub(crate) methods: Vec<AsmMethod>,
-    pub(crate) labels: Vec<AsmLabel>,
     pub(crate) str_pool: Vec<Arc<String>>,
 
     pub(crate) instructions: Vec<AsmInstruction>,
@@ -45,21 +44,10 @@ impl AsmMethod {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct AsmLabel {
-    pub(crate) name: String,
-}
-
-impl AsmLabel {
-    pub(crate) fn new(name: impl Into<String>) -> Self {
-        Self { name: name.into() }
-    }
-}
-
 /// An instruction in the assembly code.
 #[derive(Clone, PartialEq)]
 pub(crate) enum AsmInstruction {
-    /// Define a label. The argument is the index of the label to define.
+    /// Define a label. The argument is its numeric ID.
     Label(u32),
 
     /// Load a local variable from the local variables table, and push it onto
@@ -100,21 +88,21 @@ pub(crate) enum AsmInstruction {
     /// methods table. The second argument is the number of arguments.
     CallMethod(u32, u32),
 
-    /// Jump if the top of the stack is false. The argument is the index of the
+    /// Jump if the top of the stack is false. The argument is the numeric ID of the
     /// label to jump to. The top of the stack is popped.
     #[allow(unused)]
     PopJumpIfFalse(u32),
     /// Jump if the top of the stack is false, retaining the value; otherwise pop it.
-    /// The argument is the index of the label to jump to.
+    /// The argument is the numeric ID of the label to jump to.
     JumpIfFalse(u32),
-    /// Jump if the top of the stack is true. The argument is the index of the
+    /// Jump if the top of the stack is true. The argument is the numeric ID of the
     /// label to jump to. The top of the stack is popped.
     #[allow(unused)]
     PopJumpIfTrue(u32),
     /// Jump if the top of the stack is true, retaining the value; otherwise pop it.
-    /// The argument is the index of the label to jump to.
+    /// The argument is the numeric ID of the label to jump to.
     JumpIfTrue(u32),
-    /// Jump to the label. The argument is the index of the label to jump to.
+    /// Jump to the label. The argument is the numeric ID of the label to jump to.
     /// The stack is not changed.
     #[allow(unused)]
     Jump(u32),

@@ -5,30 +5,28 @@ use std::{
 
 use filter_expr::Expr;
 
-use crate::asm::{Asm, AsmFunction, AsmInstruction, AsmLabel, AsmLocal, AsmMethod};
+use crate::asm::{Asm, AsmFunction, AsmInstruction, AsmLocal, AsmMethod};
 
-pub(crate) struct AsmCodegen {
+pub(crate) struct AsmCodegen<'a> {
     locals: Vec<AsmLocal>,
     functions: Vec<AsmFunction>,
     methods: Vec<AsmMethod>,
-    labels: Vec<AsmLabel>,
     str_pool: Vec<Arc<String>>,
     instructions: Vec<AsmInstruction>,
 
-    locals_map: HashMap<String, u32>,
-    str_pool_map: HashMap<String, u32>,
-    functions_map: HashMap<String, u32>,
-    methods_map: HashMap<String, u32>,
+    locals_map: HashMap<&'a str, u32>,
+    str_pool_map: HashMap<&'a str, u32>,
+    functions_map: HashMap<&'a str, u32>,
+    methods_map: HashMap<&'a str, u32>,
     label_counter: u32,
 }
 
-impl AsmCodegen {
+impl<'a> AsmCodegen<'a> {
     pub(crate) fn new() -> Self {
         Self {
             locals: Vec::new(),
             functions: Vec::new(),
             methods: Vec::new(),
-            labels: Vec::new(),
             str_pool: Vec::new(),
             instructions: Vec::new(),
 
@@ -43,11 +41,10 @@ impl AsmCodegen {
     fn new_label(&mut self) -> u32 {
         let label_id = self.label_counter;
         self.label_counter += 1;
-        self.labels.push(AsmLabel::new(format!("label_{label_id}")));
         label_id
     }
 
-    pub(crate) fn codegen(mut self, expr: &Expr) -> Asm {
+    pub(crate) fn codegen(mut self, expr: &'a Expr) -> Asm {
         self.codegen_expr(expr);
 
         self.instructions.push(AsmInstruction::Return);
@@ -56,13 +53,12 @@ impl AsmCodegen {
             locals: self.locals,
             functions: self.functions,
             methods: self.methods,
-            labels: self.labels,
             str_pool: self.str_pool,
             instructions: self.instructions,
         }
     }
 
-    fn codegen_expr(&mut self, expr: &Expr) {
+    fn codegen_expr(&mut self, expr: &'a Expr) {
         match expr {
             Expr::Field(field) => self.codegen_field(field),
             Expr::FieldAccess(obj, field) => self.codegen_field_access(obj, field),
@@ -123,44 +119,32 @@ impl AsmCodegen {
         }
     }
 
-    pub(crate) fn codegen_field(&mut self, field: &str) {
-        if let Some(local) = self.locals_map.get(field) {
-            self.instructions.push(AsmInstruction::LoadLocal(*local));
-        } else {
-            let local = AsmLocal::new(field.to_string());
-            self.locals_map
-                .insert(field.to_string(), self.locals.len() as u32);
-            self.instructions
-                .push(AsmInstruction::LoadLocal(self.locals.len() as u32));
-            self.locals.push(local);
-        }
+    pub(crate) fn codegen_field(&mut self, field: &'a str) {
+        let index = *self.locals_map.entry(field).or_insert_with(|| {
+            let index = self.locals.len() as u32;
+            self.locals.push(AsmLocal::new(field));
+            index
+        });
+        self.instructions.push(AsmInstruction::LoadLocal(index));
     }
 
-    pub(crate) fn codegen_field_access(&mut self, obj: &Expr, field: &str) {
+    pub(crate) fn codegen_field_access(&mut self, obj: &'a Expr, field: &'a str) {
         self.codegen_expr(obj);
-        let index = if let Some(index) = self.str_pool_map.get(field) {
-            *index
-        } else {
-            let index = self.str_pool.len() as u32;
-            self.str_pool_map.insert(field.to_string(), index);
-            self.str_pool.push(Arc::new(field.to_string()));
-            index
-        };
+        let index = self.intern_str(field);
         self.instructions.push(AsmInstruction::GetField(index));
     }
 
-    pub(crate) fn codegen_str(&mut self, value: &str) {
-        if let Some(constant) = self.str_pool_map.get(value) {
-            self.instructions
-                .push(AsmInstruction::LoadString(*constant));
-        } else {
-            let s = value.to_string();
-            self.str_pool_map
-                .insert(s.clone(), self.str_pool.len() as u32);
-            self.instructions
-                .push(AsmInstruction::LoadString(self.str_pool.len() as u32));
-            self.str_pool.push(Arc::new(s));
-        }
+    fn intern_str(&mut self, value: &'a str) -> u32 {
+        *self.str_pool_map.entry(value).or_insert_with(|| {
+            let index = self.str_pool.len() as u32;
+            self.str_pool.push(Arc::new(value.to_string()));
+            index
+        })
+    }
+
+    pub(crate) fn codegen_str(&mut self, value: &'a str) {
+        let index = self.intern_str(value);
+        self.instructions.push(AsmInstruction::LoadString(index));
     }
 
     pub(crate) fn codegen_i64(&mut self, value: i64) {
@@ -179,7 +163,7 @@ impl AsmCodegen {
         self.instructions.push(AsmInstruction::LoadNull);
     }
 
-    pub(crate) fn codegen_array(&mut self, elements: &[Expr]) {
+    pub(crate) fn codegen_array(&mut self, elements: &'a [Expr]) {
         // Codegen all elements first
         for element in elements {
             self.codegen_expr(element);
@@ -189,7 +173,7 @@ impl AsmCodegen {
             .push(AsmInstruction::BuildArray(elements.len() as u32));
     }
 
-    pub(crate) fn codegen_object(&mut self, fields: &BTreeMap<String, Expr>) {
+    pub(crate) fn codegen_object(&mut self, fields: &'a BTreeMap<String, Expr>) {
         for (key, value) in fields {
             self.codegen_str(key);
             self.codegen_expr(value);
@@ -198,49 +182,49 @@ impl AsmCodegen {
             .push(AsmInstruction::BuildObject(fields.len() as u32));
     }
 
-    pub(crate) fn codegen_gt(&mut self, left: &Expr, right: &Expr) {
+    pub(crate) fn codegen_gt(&mut self, left: &'a Expr, right: &'a Expr) {
         self.codegen_expr(left);
         self.codegen_expr(right);
         self.instructions.push(AsmInstruction::Gt);
     }
 
-    pub(crate) fn codegen_lt(&mut self, left: &Expr, right: &Expr) {
+    pub(crate) fn codegen_lt(&mut self, left: &'a Expr, right: &'a Expr) {
         self.codegen_expr(left);
         self.codegen_expr(right);
         self.instructions.push(AsmInstruction::Lt);
     }
 
-    pub(crate) fn codegen_ge(&mut self, left: &Expr, right: &Expr) {
+    pub(crate) fn codegen_ge(&mut self, left: &'a Expr, right: &'a Expr) {
         self.codegen_expr(left);
         self.codegen_expr(right);
         self.instructions.push(AsmInstruction::Ge);
     }
 
-    pub(crate) fn codegen_le(&mut self, left: &Expr, right: &Expr) {
+    pub(crate) fn codegen_le(&mut self, left: &'a Expr, right: &'a Expr) {
         self.codegen_expr(left);
         self.codegen_expr(right);
         self.instructions.push(AsmInstruction::Le);
     }
 
-    pub(crate) fn codegen_eq(&mut self, left: &Expr, right: &Expr) {
+    pub(crate) fn codegen_eq(&mut self, left: &'a Expr, right: &'a Expr) {
         self.codegen_expr(left);
         self.codegen_expr(right);
         self.instructions.push(AsmInstruction::Eq);
     }
 
-    pub(crate) fn codegen_ne(&mut self, left: &Expr, right: &Expr) {
+    pub(crate) fn codegen_ne(&mut self, left: &'a Expr, right: &'a Expr) {
         self.codegen_expr(left);
         self.codegen_expr(right);
         self.instructions.push(AsmInstruction::Ne);
     }
 
-    pub(crate) fn codegen_in(&mut self, left: &Expr, right: &Expr) {
+    pub(crate) fn codegen_in(&mut self, left: &'a Expr, right: &'a Expr) {
         self.codegen_expr(left);
         self.codegen_expr(right);
         self.instructions.push(AsmInstruction::In);
     }
 
-    pub(crate) fn codegen_and(&mut self, exprs: &[Expr]) {
+    pub(crate) fn codegen_and(&mut self, exprs: &'a [Expr]) {
         if exprs.is_empty() {
             self.codegen_bool(true);
             return;
@@ -268,7 +252,7 @@ impl AsmCodegen {
         self.instructions.push(AsmInstruction::Label(end_label));
     }
 
-    pub(crate) fn codegen_or(&mut self, exprs: &[Expr]) {
+    pub(crate) fn codegen_or(&mut self, exprs: &'a [Expr]) {
         if exprs.is_empty() {
             self.codegen_bool(false);
             return;
@@ -296,32 +280,34 @@ impl AsmCodegen {
         self.instructions.push(AsmInstruction::Label(end_label));
     }
 
-    pub(crate) fn codegen_not(&mut self, expr: &Expr) {
+    pub(crate) fn codegen_not(&mut self, expr: &'a Expr) {
         self.codegen_expr(expr);
         self.instructions.push(AsmInstruction::Not);
     }
 
-    pub(crate) fn codegen_func_call(&mut self, func_name: &str, args: &[Expr]) {
+    pub(crate) fn codegen_func_call(&mut self, func_name: &'a str, args: &'a [Expr]) {
         for arg in args {
             self.codegen_expr(arg);
         }
 
         // Get or create function index.
-        let func_index = if let Some(&index) = self.functions_map.get(func_name) {
-            index
-        } else {
+        let func_index = *self.functions_map.entry(func_name).or_insert_with(|| {
             let index = self.functions.len() as u32;
-            self.functions_map.insert(func_name.to_string(), index);
-            self.functions.push(AsmFunction::new(func_name.to_string()));
+            self.functions.push(AsmFunction::new(func_name));
             index
-        };
+        });
 
         // Call the function.
         self.instructions
             .push(AsmInstruction::CallFunction(func_index, args.len() as u32));
     }
 
-    pub(crate) fn codegen_method_call(&mut self, method_name: &str, obj: &Expr, args: &[Expr]) {
+    pub(crate) fn codegen_method_call(
+        &mut self,
+        method_name: &'a str,
+        obj: &'a Expr,
+        args: &'a [Expr],
+    ) {
         // Codegen the object first.
         self.codegen_expr(obj);
 
@@ -331,14 +317,11 @@ impl AsmCodegen {
         }
 
         // Get or create method index.
-        let method_index = if let Some(&index) = self.methods_map.get(method_name) {
-            index
-        } else {
+        let method_index = *self.methods_map.entry(method_name).or_insert_with(|| {
             let index = self.methods.len() as u32;
-            self.methods_map.insert(method_name.to_string(), index);
-            self.methods.push(AsmMethod::new(method_name.to_string()));
+            self.methods.push(AsmMethod::new(method_name));
             index
-        };
+        });
 
         // Call the method.
         self.instructions
@@ -648,7 +631,6 @@ mod tests {
         assert_eq!(
             asm,
             Asm {
-                labels: vec![AsmLabel::new("label_0")],
                 instructions: vec![
                     AsmInstruction::LoadBool(true),
                     AsmInstruction::JumpIfFalse(0),
@@ -700,7 +682,6 @@ mod tests {
         assert_eq!(
             asm,
             Asm {
-                labels: vec![AsmLabel::new("label_0")],
                 instructions: vec![
                     AsmInstruction::LoadBool(false),
                     AsmInstruction::JumpIfTrue(0),
@@ -768,7 +749,6 @@ mod tests {
         assert_eq!(
             asm,
             Asm {
-                labels: vec![AsmLabel::new("label_0")],
                 instructions: vec![
                     AsmInstruction::LoadI64(1),
                     AsmInstruction::LoadI64(0),
@@ -792,7 +772,6 @@ mod tests {
         assert_eq!(
             asm,
             Asm {
-                labels: vec![AsmLabel::new("label_0")],
                 instructions: vec![
                     AsmInstruction::LoadBool(false),
                     AsmInstruction::JumpIfFalse(0),
@@ -812,7 +791,6 @@ mod tests {
         assert_eq!(
             asm,
             Asm {
-                labels: vec![AsmLabel::new("label_0")],
                 instructions: vec![
                     AsmInstruction::LoadBool(true),
                     AsmInstruction::JumpIfTrue(0),

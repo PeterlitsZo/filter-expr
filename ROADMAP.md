@@ -29,6 +29,7 @@
 
 - [ ] Handle missing EOF checks during tokenization, such as unterminated
       string literals.
+- [ ] Remove the AST runner.
 
 ## 2026-11
 
