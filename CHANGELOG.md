@@ -2,10 +2,14 @@
 
 ## Unreleased
 
+*Empty*
+
+## v0.5.0
+
 - [BREAKING] Support `let name := value then body`. Now `let` and `then` are
   reserved keywords.
 - Fix AST transformations skipping array elements.
-- Require pure evaluation; optimizations may skip calls and their errors.
+- Require pure evaluation. Optimizations may skip calls and their errors.
 - Support field access on custom userdata.
 - [BREAKING] Remove the AST runner.
 - [BREAKING] Support DateTime and `DateTime::now()`.
