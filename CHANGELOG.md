@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Support field access on custom userdata.
 - [BREAKING] Remove the AST runner.
 - [BREAKING] Support DateTime and `DateTime::now()`.
 - Support `&&` / `||` and lowercase `and`, `or`, `not`, and `in` aliases,

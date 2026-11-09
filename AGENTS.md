@@ -2,7 +2,8 @@
 
 ## Behavior
 
-- DO NOT add unit tests until the user asks you to do.
+- DO NOT add unit tests until the user asks you to do so.
+- DO NOT change document until the user asks you to do so.
 
 ## When You Need to Commit
 

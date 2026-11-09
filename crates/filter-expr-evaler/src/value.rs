@@ -86,62 +86,6 @@ impl<T: Into<Value>> From<BTreeMap<String, T>> for Value {
 }
 
 impl Value {
-    pub(crate) fn numeric_sign(&self, negative: bool) -> Result<Self> {
-        match self {
-            Self::I64(value) if negative => value
-                .checked_neg()
-                .map(Self::I64)
-                .ok_or_else(|| Error::new(ErrorKind::InvalidValue, "integer overflow")),
-            Self::F64(value) if negative => Ok(Self::F64(-value)),
-            Self::I64(_) | Self::F64(_) => Ok(self.clone()),
-            _ => Err(Error::new(ErrorKind::TypeMismatch, "expected number")
-                .with_metadata("got", self.typ())),
-        }
-    }
-
-    pub(crate) fn arithmetic(&self, other: &Self, op: ArithmeticOp) -> Result<Self> {
-        use ArithmeticOp::*;
-
-        if let (Self::I64(left), Self::I64(right)) = (self, other) {
-            if matches!(op, Div | Rem) && *right == 0 {
-                return Err(Error::new(ErrorKind::InvalidValue, "division by zero"));
-            }
-            let result = match op {
-                Add => left.checked_add(*right),
-                Sub => left.checked_sub(*right),
-                Mul => left.checked_mul(*right),
-                Div => left.checked_div(*right),
-                Rem => left.checked_rem(*right),
-            };
-            return result
-                .map(Self::I64)
-                .ok_or_else(|| Error::new(ErrorKind::InvalidValue, "integer overflow"));
-        }
-
-        let (left, right) = match (self, other) {
-            (Self::I64(left), Self::F64(right)) => (*left as f64, *right),
-            (Self::F64(left), Self::I64(right)) => (*left, *right as f64),
-            (Self::F64(left), Self::F64(right)) => (*left, *right),
-            _ => {
-                return Err(
-                    Error::new(ErrorKind::TypeMismatch, "expected numeric operands")
-                        .with_metadata("left", self.typ())
-                        .with_metadata("right", other.typ()),
-                );
-            }
-        };
-        if matches!(op, Div | Rem) && right == 0.0 {
-            return Err(Error::new(ErrorKind::InvalidValue, "division by zero"));
-        }
-        Ok(Self::F64(match op {
-            Add => left + right,
-            Sub => left - right,
-            Mul => left * right,
-            Div => left / right,
-            Rem => left % right,
-        }))
-    }
-
     pub fn str(s: impl Into<String>) -> Self {
         Value::Str(Arc::new(s.into()))
     }
@@ -173,22 +117,9 @@ impl Value {
     pub fn object(items: impl Into<BTreeMap<String, Value>>) -> Self {
         Value::Object(Arc::new(items.into()))
     }
+}
 
-    pub(crate) fn get_field(&self, field: &str) -> Result<Value> {
-        match self {
-            Value::Object(object) => object.get(field).cloned().ok_or_else(|| {
-                Error::new(ErrorKind::FailedToGet, "no such field")
-                    .with_metadata("field", field)
-            }),
-            _ => Err(
-                Error::new(ErrorKind::TypeMismatch, "expected object for field access")
-                    .with_metadata("field", field)
-                    .with_metadata("expected", ValueType::Object)
-                    .with_metadata("got", self.typ()),
-            ),
-        }
-    }
-
+impl Value {
     pub fn typ(&self) -> ValueType {
         match self {
             Value::Str(_) => ValueType::Str,
@@ -202,7 +133,9 @@ impl Value {
             Value::Userdata(_) => ValueType::Userdata,
         }
     }
+}
 
+impl Value {
     pub fn partial_eq(&self, other: &Self) -> Result<bool> {
         match (self, other) {
             (Value::Str(a), Value::Str(b)) => Ok(a == b),
@@ -298,6 +231,86 @@ impl Value {
     }
 }
 
+
+impl Value {
+    pub(crate) fn numeric_sign(&self, negative: bool) -> Result<Self> {
+        match self {
+            Self::I64(value) if negative => value
+                .checked_neg()
+                .map(Self::I64)
+                .ok_or_else(|| Error::new(ErrorKind::InvalidValue, "integer overflow")),
+            Self::F64(value) if negative => Ok(Self::F64(-value)),
+            Self::I64(_) | Self::F64(_) => Ok(self.clone()),
+            _ => Err(Error::new(ErrorKind::TypeMismatch, "expected number")
+                .with_metadata("got", self.typ())),
+        }
+    }
+
+    pub(crate) fn arithmetic(&self, other: &Self, op: ArithmeticOp) -> Result<Self> {
+        use ArithmeticOp::*;
+
+        if let (Self::I64(left), Self::I64(right)) = (self, other) {
+            if matches!(op, Div | Rem) && *right == 0 {
+                return Err(Error::new(ErrorKind::InvalidValue, "division by zero"));
+            }
+            let result = match op {
+                Add => left.checked_add(*right),
+                Sub => left.checked_sub(*right),
+                Mul => left.checked_mul(*right),
+                Div => left.checked_div(*right),
+                Rem => left.checked_rem(*right),
+            };
+            return result
+                .map(Self::I64)
+                .ok_or_else(|| Error::new(ErrorKind::InvalidValue, "integer overflow"));
+        }
+
+        let (left, right) = match (self, other) {
+            (Self::I64(left), Self::F64(right)) => (*left as f64, *right),
+            (Self::F64(left), Self::I64(right)) => (*left, *right as f64),
+            (Self::F64(left), Self::F64(right)) => (*left, *right),
+            _ => {
+                return Err(
+                    Error::new(ErrorKind::TypeMismatch, "expected numeric operands")
+                        .with_metadata("left", self.typ())
+                        .with_metadata("right", other.typ()),
+                );
+            }
+        };
+        if matches!(op, Div | Rem) && right == 0.0 {
+            return Err(Error::new(ErrorKind::InvalidValue, "division by zero"));
+        }
+        Ok(Self::F64(match op {
+            Add => left + right,
+            Sub => left - right,
+            Mul => left * right,
+            Div => left / right,
+            Rem => left % right,
+        }))
+    }
+}
+
+impl Value {
+    pub(crate) fn get_field(&self, field: &str) -> Result<Value> {
+        let value = match self {
+            Value::Object(object) => object.get(field).cloned(),
+            Value::Userdata(userdata) => userdata.get_field(field)?,
+            _ => {
+                return Err(Error::new(
+                    ErrorKind::TypeMismatch,
+                    "expected object or userdata for field access",
+                )
+                .with_metadata("field", field)
+                .with_metadata("expected", "Object or Userdata")
+                .with_metadata("got", self.typ()));
+            }
+        };
+        value.ok_or_else(|| {
+            Error::new(ErrorKind::FailedToGet, "no such field").with_metadata("field", field)
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ValueType {
     Str,
@@ -323,11 +336,25 @@ pub trait Userdata: Debug + Send + Sync {
     /// Return the value as `Any` for implementer-side downcasting.
     fn as_any(&self) -> &dyn Any;
 
-    /// Compare with another value.
+    /// Compare for equality with another value.
+    ///
+    /// Return `Ok(true)` for equal values, `Ok(false)` for unequal values,
+    /// or `Err` when comparison fails.
     fn partial_eq(&self, other: &Value) -> Result<bool>;
 
-    /// Compare with another value.
+    /// Compare the ordering of this value relative to another value.
+    ///
+    /// Return `Ok(Some(ordering))` for an ordering, `Ok(None)` for unordered
+    /// values, or `Err` when comparison fails.
     fn partial_ord(&self, other: &Value) -> Result<Option<Ordering>>;
+
+    /// Read a field.
+    ///
+    /// Return `Ok(None)` for a missing field, `Ok(Some(Value::Null))` for an
+    /// explicit null, or `Err` when reading fails.
+    fn get_field(&self, _field: &str) -> Result<Option<Value>> {
+        Ok(None)
+    }
 }
 
 #[cfg(test)]
