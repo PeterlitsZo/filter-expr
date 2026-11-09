@@ -2,7 +2,6 @@
 
 mod asm;
 mod asm_codegen;
-mod ast_runner;
 mod bc;
 mod bc_codegen;
 mod bc_runner;
@@ -22,10 +21,8 @@ pub mod benchmark;
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 
-use filter_expr::FilterExpr;
 use regex::Regex;
 
-use crate::ast_runner::AstRunner;
 use crate::cache::Cache;
 
 pub use crate::callable::{ArcFunction, Function, FunctionContext};
@@ -43,7 +40,7 @@ pub struct FilterExprEvalerEnv {
 }
 
 struct FilterExprEvalerEnvInner {
-    /// Compiled regexes shared by both runners.
+    /// Compiled regexes shared across evaluations.
     cached_regex: Cache<String, Regex>,
     registry: RwLock<FilterExprEvalerRegistry>,
 }
@@ -221,7 +218,7 @@ impl FilterExprEvalerEnv {
 }
 
 pub struct FilterExprEvaler {
-    /// The global environment shared by runners.
+    /// The global environment shared across evaluations.
     env: FilterExprEvalerEnv,
 }
 
@@ -254,26 +251,6 @@ impl FilterExprEvaler {
         }
     }
 
-    /// Evaluate the filter expression using AST runner.
-    pub async fn eval_by_ast_runner(
-        &self,
-        filter_expr: &FilterExpr,
-        ctx: &dyn Context,
-    ) -> Result<bool> {
-        if let Some(expr) = filter_expr.expr() {
-            let ast_runner = AstRunner::new(expr, self.env.clone());
-            let value = ast_runner.run(ctx).await?;
-
-            match value {
-                Value::Bool(b) => Ok(b),
-                _ => Err(Error::new(ErrorKind::InvalidValue, "expected bool")
-                    .with_metadata("got", value.typ())),
-            }
-        } else {
-            Ok(true)
-        }
-    }
-
     pub fn add_function<N>(&self, name: N, function: ArcFunction) -> Result<()>
     where
         N: Into<String>,
@@ -291,6 +268,8 @@ impl FilterExprEvaler {
 
 #[cfg(test)]
 mod tests {
+    use filter_expr::FilterExpr;
+
     use crate::callable::Function;
 
     use super::*;
@@ -571,8 +550,14 @@ mod tests {
             &[
                 (simple_context! { "expected": "foo" }, true),
                 (simple_context! { "expected": "bar" }, false),
-                (simple_context! { "expected": Value::Userdata(Arc::new(MagicUserdata::Foo)) }, true),
-                (simple_context! { "expected": Value::Userdata(Arc::new(MagicUserdata::Bar)) }, false),
+                (
+                    simple_context! { "expected": Value::Userdata(Arc::new(MagicUserdata::Foo)) },
+                    true
+                ),
+                (
+                    simple_context! { "expected": Value::Userdata(Arc::new(MagicUserdata::Bar)) },
+                    false
+                ),
             ],
         );
     }
@@ -593,14 +578,6 @@ mod tests {
             assert_eq!(
                 result, *expected,
                 "{input} failed with context with bytecode runner {ctx:?}"
-            );
-            let result = evaler
-                .eval_by_ast_runner(&filter_expr, ctx)
-                .await
-                .unwrap_or_else(|e| panic!("failed to eval by ast runner (input={input}): {e}"));
-            assert_eq!(
-                result, *expected,
-                "{input} failed with context with ast runner {ctx:?}"
             );
         }
     }

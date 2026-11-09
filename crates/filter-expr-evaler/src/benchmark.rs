@@ -5,7 +5,7 @@ use std::{future::Future, hint::black_box, time::Instant};
 use filter_expr::FilterExpr;
 
 use crate::{
-    CompiledFilterExpr, FilterExprEvaler, Value, asm_codegen::AsmCodegen, ast_runner::AstRunner,
+    CompiledFilterExpr, FilterExprEvaler, Value, asm_codegen::AsmCodegen,
     bc_codegen::BytecodeCodegen, bc_runner::BytecodeRunner, simple_context,
 };
 
@@ -74,10 +74,6 @@ pub async fn run() {
         let compiled = CompiledFilterExpr::compile(&filter);
         let expected = name != "short_circuit";
         assert_eq!(evaler.run(&compiled, &ctx).await.unwrap(), expected);
-        assert_eq!(
-            evaler.eval_by_ast_runner(&filter, &ctx).await.unwrap(),
-            expected
-        );
         // SAFETY: bytecode was produced by the project's code generators.
         assert!(matches!(
             unsafe { BytecodeRunner::new(&bytecode, env.clone()).run(&ctx).await }.unwrap(),
@@ -129,21 +125,8 @@ pub async fn run() {
             |input| async { BytecodeCodegen::new().codegen(input) },
         )
         .await;
-        println!("   └─ execution");
         measure(
-            "      ├─ ast runner",
-            iterations,
-            || (),
-            |()| async {
-                AstRunner::new(black_box(expr), env.clone())
-                    .run(black_box(&ctx))
-                    .await
-                    .unwrap()
-            },
-        )
-        .await;
-        measure(
-            "      └─ bytecode runner",
+            "   └─ bytecode runner",
             iterations,
             || (),
             |()| async {

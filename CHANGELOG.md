@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- [BREAKING] Remove the AST runner.
 - [BREAKING] Support DateTime and `DateTime::now()`.
 - Support `&&` / `||` and lowercase `and`, `or`, `not`, and `in` aliases,
   including `not in`; lowercase operator words are now reserved keywords.

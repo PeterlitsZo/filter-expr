@@ -29,7 +29,7 @@
 
 - [ ] Handle missing EOF checks during tokenization, such as unterminated
       string literals.
-- [ ] Remove the AST runner.
+- [x] Remove the AST runner.
 - [ ] Support the `let now = DateTime::now() in foo.bar < now`.
 
 ## 2026-11
