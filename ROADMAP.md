@@ -6,7 +6,7 @@
 - [ ] Fix `transform_children` skipping recursive transformation of `Array`
       elements.
 - [ ] Support `some_userdata.foo.bar`.
-- [ ] Support the `DateTime` type.
+- [x] Support the `DateTime` type and `DateTime::now` function.
 - [ ] Support the `DateTime::from_rfc3339` function to create a `DateTime` value
       by given RFC 3339 string. Like
       `DateTime::from_rfc3339("2025-01-01T00:00:00Z")`.
@@ -30,6 +30,7 @@
 - [ ] Handle missing EOF checks during tokenization, such as unterminated
       string literals.
 - [ ] Remove the AST runner.
+- [ ] Support the `let now = DateTime::now() in foo.bar < now`.
 
 ## 2026-11
 

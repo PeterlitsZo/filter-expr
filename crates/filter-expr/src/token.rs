@@ -52,6 +52,8 @@ pub(crate) enum Token {
     Comma,
     /// The colon (`:`).
     Colon,
+    /// The namespace separator (`::`).
+    DoubleColon,
     /// The dot (`.`).
     Dot,
 
@@ -325,7 +327,12 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
             }
             ':' => {
                 chars.next();
-                tokens.push(Token::Colon);
+                if chars.peek() == Some(&':') {
+                    chars.next();
+                    tokens.push(Token::DoubleColon);
+                } else {
+                    tokens.push(Token::Colon);
+                }
             }
             '.' => {
                 chars.next();

@@ -57,7 +57,7 @@ impl Function for FunctionMatches {
 /// Implements the built-in `type(value) -> str` function.
 ///
 /// Returns the evaluator's canonical type name: `"str"`, `"i64"`, `"f64"`,
-/// `"bool"`, `"null"`, `"array"`, or `"userdata"`.
+/// `"bool"`, `"datetime"`, `"null"`, `"array"`, `"object"`, or `"userdata"`.
 ///
 /// # Examples
 ///
@@ -85,6 +85,7 @@ impl Function for FunctionType {
             ValueType::I64 => "i64",
             ValueType::F64 => "f64",
             ValueType::Bool => "bool",
+            ValueType::DateTime => "datetime",
             ValueType::Null => "null",
             ValueType::Array => "array",
             ValueType::Object => "object",
@@ -440,5 +441,23 @@ impl Function for FunctionLog10 {
         };
 
         Ok(Value::F64(x.log10()))
+    }
+}
+
+/// Returns the time of the first `now()` call in this evaluation.
+pub(crate) struct FunctionDateTimeNow;
+
+#[async_trait::async_trait]
+impl Function for FunctionDateTimeNow {
+    async fn call(&self, ctx: FunctionContext<'_, '_>) -> Result<Value, Error> {
+        if !ctx.args.is_empty() {
+            return Err(
+                Error::new(ErrorKind::TypeMismatch, "invalid argument count")
+                    .with_metadata("function", "DateTime::now")
+                    .with_metadata("expected", 0)
+                    .with_metadata("got", ctx.args.len()),
+            );
+        }
+        Ok(Value::datetime(ctx.state.now()))
     }
 }

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    FilterExprEvalerEnv, FunctionContext, MethodContext,
+    EvaluationState, FilterExprEvalerEnv, FunctionContext, MethodContext,
     bc::{self, Bytecode},
     ctx::Context,
     error::{Error, ErrorKind},
@@ -12,6 +12,7 @@ use crate::{
 pub(crate) struct BytecodeRunner<'a> {
     /// The evaler environment.
     env: FilterExprEvalerEnv,
+    state: EvaluationState,
 
     /// The bytecode to run.
     bytecode: &'a Bytecode,
@@ -33,6 +34,7 @@ impl<'a> BytecodeRunner<'a> {
     pub(crate) fn new(bytecode: &'a Bytecode, env: FilterExprEvalerEnv) -> Self {
         Self {
             env,
+            state: EvaluationState::default(),
 
             bytecode,
 
@@ -324,6 +326,7 @@ impl<'a> BytecodeRunner<'a> {
         let result = func
             .call(FunctionContext {
                 env: &self.env,
+                state: &self.state,
                 args: &args,
             })
             .await?;
@@ -357,6 +360,7 @@ impl<'a> BytecodeRunner<'a> {
         let result = method
             .call(MethodContext {
                 env: &self.env,
+                state: &self.state,
                 obj: &obj,
                 args: &args,
             })

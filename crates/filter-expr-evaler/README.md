@@ -24,6 +24,7 @@ assert_eq!(result, true);
 
 ## Builtin Functions
 
+- **`DateTime::now() -> datetime`**. Returns this evaluation’s time snapshot.
 - **`matches(text: str, pattern: str) -> bool`**. Checks whether a regular
   expression matches anywhere in the text. For example,
   `matches('foobar', '^foo')` returns `true`.

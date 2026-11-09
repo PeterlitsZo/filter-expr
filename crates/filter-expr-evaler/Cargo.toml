@@ -14,6 +14,7 @@ async-trait.workspace = true
 thiserror.workspace = true
 regex = "1.13.1"
 anyhow = "1.0.104"
+jiff = { version = "0.2", default-features = false, features = ["std"] }
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 moka = { version = "0.12.16", features = ["sync"] }
@@ -25,6 +26,7 @@ lru = { version = "0.18.5", default-features = false }
 tokio = { version = "1.53.1", features = ["full"] }
 
 [features]
+js = ["jiff/js"]
 bench-internals = []
 
 [[bench]]

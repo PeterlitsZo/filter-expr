@@ -114,7 +114,8 @@ user.address.city = 'London'
 <operator> = '=' | '==' | '>' | '<' | '>=' | '<=' | '!=' | <in> | ('NOT' | 'not') <in>
 <in> = 'IN' | 'in'
 
-<func-call> = <ident> '(' [<expr> (',' <expr>)* ','?] ')'
+<namespace-prefix> = (<ident> '::')+
+<func-call> = <namespace-prefix>? <ident> '(' [<expr> (',' <expr>)* ','?] ')'
 <method-call> = <value> '.' <ident> '(' [<expr> (',' <expr>)* ','?] ')'
 <field-access> = <value> '.' <ident>
 

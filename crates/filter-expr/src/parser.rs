@@ -214,10 +214,26 @@ impl Parser {
     ///           | <value>
     /// ```
     fn parse_primary(&mut self) -> Result<Expr, Error> {
-        // Try to parse as function call first (ident followed by '(')
+        // Parse a field or a possibly namespaced function call.
         if let Some(Token::Ident(name)) = self.peek() {
-            let name = name.clone();
+            let mut name = name.clone();
             self.advance();
+            let mut namespaced = false;
+            while self.peek() == Some(&Token::DoubleColon) {
+                namespaced = true;
+                self.advance();
+                let Some(Token::Ident(segment)) = self.peek() else {
+                    return Err(Error::Parse("expected identifier after '::'".into()));
+                };
+                name.push_str("::");
+                name.push_str(segment);
+                self.advance();
+            }
+            if namespaced && self.peek() != Some(&Token::LParen) {
+                return Err(Error::Parse(
+                    "expected '(' after namespaced function name".into(),
+                ));
+            }
 
             if self.peek() == Some(&Token::LParen) {
                 // It's a function call

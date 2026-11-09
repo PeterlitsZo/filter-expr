@@ -12,6 +12,7 @@ mod callable;
 mod compiled;
 mod ctx;
 mod error;
+mod state;
 mod value;
 
 #[cfg(feature = "bench-internals")]
@@ -32,6 +33,7 @@ pub use crate::callable::{ArcMethod, Method, MethodContext};
 pub use crate::compiled::CompiledFilterExpr;
 pub use crate::ctx::{Context, SimpleContext};
 pub use crate::error::{Error, ErrorKind, Result};
+pub use crate::state::EvaluationState;
 pub use crate::value::{Userdata, Value, ValueType};
 
 /// The environment for the filter expression evaluator.
@@ -167,6 +169,8 @@ impl FilterExprEvalerEnv {
                 functions.insert($name.to_string(), Arc::new($func));
             };
         }
+
+        insert_function!("DateTime::now", FunctionDateTimeNow);
 
         insert_function!("matches", FunctionMatches);
 

@@ -1,7 +1,8 @@
 use filter_expr::Expr;
 
 use crate::{
-    Context, Error, ErrorKind, FilterExprEvalerEnv, FunctionContext, MethodContext, Value,
+    Context, Error, ErrorKind, EvaluationState, FilterExprEvalerEnv, FunctionContext,
+    MethodContext, Value,
 };
 
 /// A runner for executing AST.
@@ -20,10 +21,16 @@ impl<'a> AstRunner<'a> {
 
     /// Run the expr and return the result.
     pub(crate) async fn run(&self, ctx: &dyn Context) -> Result<Value, Error> {
-        return self.eval_expr(self.expr, ctx).await;
+        let state = EvaluationState::default();
+        return self.eval_expr(self.expr, ctx, &state).await;
     }
 
-    async fn eval_expr(&self, expr: &Expr, ctx: &dyn Context) -> Result<Value, Error> {
+    async fn eval_expr(
+        &self,
+        expr: &Expr,
+        ctx: &dyn Context,
+        state: &EvaluationState,
+    ) -> Result<Value, Error> {
         match expr {
             Expr::Field(field) => {
                 let value = ctx.get_var(field).await.map_err(|e| {
@@ -38,7 +45,7 @@ impl<'a> AstRunner<'a> {
                 }
             }
             Expr::FieldAccess(obj, field) => {
-                let value = Box::pin(self.eval_expr(obj, ctx)).await?;
+                let value = Box::pin(self.eval_expr(obj, ctx, state)).await?;
                 value.get_field(field)
             }
 
@@ -48,55 +55,55 @@ impl<'a> AstRunner<'a> {
             Expr::Bool(value) => Ok(Value::bool(*value)),
             Expr::Null => Ok(Value::null()),
 
-            Expr::Array(value) => self.eval_array(value, ctx).await,
+            Expr::Array(value) => self.eval_array(value, ctx, state).await,
             Expr::Object(fields) => {
                 let mut values = std::collections::BTreeMap::new();
                 for (key, expr) in fields {
-                    let value = Box::pin(self.eval_expr(expr, ctx)).await?;
+                    let value = Box::pin(self.eval_expr(expr, ctx, state)).await?;
                     values.insert(key.clone(), value);
                 }
                 Ok(Value::object(values))
             }
 
-            Expr::FuncCall(func, args) => self.eval_func_call(func, args, ctx).await,
+            Expr::FuncCall(func, args) => self.eval_func_call(func, args, ctx, state).await,
             Expr::MethodCall(method, obj, args) => {
-                self.eval_method_call(obj, method, args, ctx).await
+                self.eval_method_call(obj, method, args, ctx, state).await
             }
 
             Expr::Add(left, right) => {
-                let left = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right = Box::pin(self.eval_expr(right, ctx)).await?;
+                let left = Box::pin(self.eval_expr(left, ctx, state)).await?;
+                let right = Box::pin(self.eval_expr(right, ctx, state)).await?;
                 left.arithmetic(&right, crate::value::ArithmeticOp::Add)
             }
             Expr::Sub(left, right) => {
-                let left = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right = Box::pin(self.eval_expr(right, ctx)).await?;
+                let left = Box::pin(self.eval_expr(left, ctx, state)).await?;
+                let right = Box::pin(self.eval_expr(right, ctx, state)).await?;
                 left.arithmetic(&right, crate::value::ArithmeticOp::Sub)
             }
             Expr::Mul(left, right) => {
-                let left = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right = Box::pin(self.eval_expr(right, ctx)).await?;
+                let left = Box::pin(self.eval_expr(left, ctx, state)).await?;
+                let right = Box::pin(self.eval_expr(right, ctx, state)).await?;
                 left.arithmetic(&right, crate::value::ArithmeticOp::Mul)
             }
             Expr::Div(left, right) => {
-                let left = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right = Box::pin(self.eval_expr(right, ctx)).await?;
+                let left = Box::pin(self.eval_expr(left, ctx, state)).await?;
+                let right = Box::pin(self.eval_expr(right, ctx, state)).await?;
                 left.arithmetic(&right, crate::value::ArithmeticOp::Div)
             }
             Expr::Rem(left, right) => {
-                let left = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right = Box::pin(self.eval_expr(right, ctx)).await?;
+                let left = Box::pin(self.eval_expr(left, ctx, state)).await?;
+                let right = Box::pin(self.eval_expr(right, ctx, state)).await?;
                 left.arithmetic(&right, crate::value::ArithmeticOp::Rem)
             }
-            Expr::Pos(expr) => Box::pin(self.eval_expr(expr, ctx))
+            Expr::Pos(expr) => Box::pin(self.eval_expr(expr, ctx, state))
                 .await?
                 .numeric_sign(false),
-            Expr::Neg(expr) => Box::pin(self.eval_expr(expr, ctx))
+            Expr::Neg(expr) => Box::pin(self.eval_expr(expr, ctx, state))
                 .await?
                 .numeric_sign(true),
             Expr::Gt(left, right) => {
-                let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
+                let left_value = Box::pin(self.eval_expr(left, ctx, state)).await?;
+                let right_value = Box::pin(self.eval_expr(right, ctx, state)).await?;
                 match left_value.partial_cmp(&right_value)? {
                     Some(ordering) => Ok(Value::Bool(ordering == std::cmp::Ordering::Greater)),
                     None => Err(Error::new(
@@ -108,8 +115,8 @@ impl<'a> AstRunner<'a> {
                 }
             }
             Expr::Lt(left, right) => {
-                let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
+                let left_value = Box::pin(self.eval_expr(left, ctx, state)).await?;
+                let right_value = Box::pin(self.eval_expr(right, ctx, state)).await?;
                 match left_value.partial_cmp(&right_value)? {
                     Some(ordering) => Ok(Value::Bool(ordering == std::cmp::Ordering::Less)),
                     None => Err(Error::new(
@@ -121,8 +128,8 @@ impl<'a> AstRunner<'a> {
                 }
             }
             Expr::Ge(left, right) => {
-                let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
+                let left_value = Box::pin(self.eval_expr(left, ctx, state)).await?;
+                let right_value = Box::pin(self.eval_expr(right, ctx, state)).await?;
                 match left_value.partial_cmp(&right_value)? {
                     Some(ordering) => Ok(Value::Bool(
                         ordering == std::cmp::Ordering::Greater
@@ -137,8 +144,8 @@ impl<'a> AstRunner<'a> {
                 }
             }
             Expr::Le(left, right) => {
-                let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
+                let left_value = Box::pin(self.eval_expr(left, ctx, state)).await?;
+                let right_value = Box::pin(self.eval_expr(right, ctx, state)).await?;
                 match left_value.partial_cmp(&right_value)? {
                     Some(ordering) => Ok(Value::Bool(
                         ordering == std::cmp::Ordering::Less
@@ -153,18 +160,18 @@ impl<'a> AstRunner<'a> {
                 }
             }
             Expr::Eq(left, right) => {
-                let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
+                let left_value = Box::pin(self.eval_expr(left, ctx, state)).await?;
+                let right_value = Box::pin(self.eval_expr(right, ctx, state)).await?;
                 Ok(Value::Bool(left_value.partial_eq(&right_value)?))
             }
             Expr::Ne(left, right) => {
-                let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
+                let left_value = Box::pin(self.eval_expr(left, ctx, state)).await?;
+                let right_value = Box::pin(self.eval_expr(right, ctx, state)).await?;
                 Ok(Value::Bool(!left_value.partial_eq(&right_value)?))
             }
             Expr::In(left, right) => {
-                let left_value = Box::pin(self.eval_expr(left, ctx)).await?;
-                let right_value = Box::pin(self.eval_expr(right, ctx)).await?;
+                let left_value = Box::pin(self.eval_expr(left, ctx, state)).await?;
+                let right_value = Box::pin(self.eval_expr(right, ctx, state)).await?;
                 match right_value {
                     Value::Array(array) => {
                         for item in array.iter() {
@@ -186,7 +193,7 @@ impl<'a> AstRunner<'a> {
             Expr::And(exprs) => {
                 let mut result = true;
                 for expr in exprs {
-                    let value = Box::pin(self.eval_expr(expr, ctx)).await?;
+                    let value = Box::pin(self.eval_expr(expr, ctx, state)).await?;
                     match value {
                         Value::Bool(b) => result = result && b,
                         _ => {
@@ -200,7 +207,7 @@ impl<'a> AstRunner<'a> {
             Expr::Or(exprs) => {
                 let mut result = false;
                 for expr in exprs {
-                    let value = Box::pin(self.eval_expr(expr, ctx)).await?;
+                    let value = Box::pin(self.eval_expr(expr, ctx, state)).await?;
                     match value {
                         Value::Bool(b) => result = result || b,
                         _ => {
@@ -212,7 +219,7 @@ impl<'a> AstRunner<'a> {
                 Ok(Value::Bool(result))
             }
             Expr::Not(expr) => {
-                let value = Box::pin(self.eval_expr(expr, ctx)).await?;
+                let value = Box::pin(self.eval_expr(expr, ctx, state)).await?;
                 match value {
                     Value::Bool(b) => Ok(Value::Bool(!b)),
                     _ => Err(Error::new(ErrorKind::TypeMismatch, "value is not a bool")
@@ -228,11 +235,12 @@ impl<'a> AstRunner<'a> {
         func: &str,
         args: &[Expr],
         ctx: &dyn Context,
+        state: &EvaluationState,
     ) -> Result<Value, Error> {
         // Evaluate the arguments.
         let mut args_values = vec![];
         for arg in args {
-            let value = Box::pin(self.eval_expr(arg, ctx)).await?;
+            let value = Box::pin(self.eval_expr(arg, ctx, state)).await?;
             args_values.push(value);
         }
 
@@ -244,6 +252,7 @@ impl<'a> AstRunner<'a> {
         return func
             .call(FunctionContext {
                 env: &self.env,
+                state,
                 args: &args_values,
             })
             .await;
@@ -255,11 +264,12 @@ impl<'a> AstRunner<'a> {
         method: &str,
         args: &[Expr],
         ctx: &dyn Context,
+        state: &EvaluationState,
     ) -> Result<Value, Error> {
-        let obj_value = Box::pin(self.eval_expr(obj, ctx)).await?;
+        let obj_value = Box::pin(self.eval_expr(obj, ctx, state)).await?;
         let mut args_values = vec![];
         for arg in args {
-            let value = Box::pin(self.eval_expr(arg, ctx)).await?;
+            let value = Box::pin(self.eval_expr(arg, ctx, state)).await?;
             args_values.push(value);
         }
 
@@ -268,6 +278,7 @@ impl<'a> AstRunner<'a> {
         let result = method
             .call(MethodContext {
                 env: &self.env,
+                state,
                 obj: &obj_value,
                 args: &args_values,
             })
@@ -275,10 +286,15 @@ impl<'a> AstRunner<'a> {
         Ok(result)
     }
 
-    async fn eval_array(&self, array: &[Expr], ctx: &dyn Context) -> Result<Value, Error> {
+    async fn eval_array(
+        &self,
+        array: &[Expr],
+        ctx: &dyn Context,
+        state: &EvaluationState,
+    ) -> Result<Value, Error> {
         let mut values = vec![];
         for expr in array {
-            let value = Box::pin(self.eval_expr(expr, ctx)).await?;
+            let value = Box::pin(self.eval_expr(expr, ctx, state)).await?;
             values.push(value);
         }
         Ok(Value::array(values))

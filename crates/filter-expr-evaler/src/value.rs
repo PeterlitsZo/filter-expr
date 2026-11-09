@@ -23,6 +23,8 @@ pub enum Value {
     F64(f64),
     /// The boolean value.
     Bool(bool),
+    /// An absolute instant in time.
+    DateTime(jiff::Timestamp),
     /// The null value.
     Null,
 
@@ -56,6 +58,12 @@ impl From<i64> for Value {
 impl From<f64> for Value {
     fn from(val: f64) -> Self {
         Value::F64(val)
+    }
+}
+
+impl From<jiff::Timestamp> for Value {
+    fn from(value: jiff::Timestamp) -> Self {
+        Self::DateTime(value)
     }
 }
 
@@ -150,6 +158,10 @@ impl Value {
         Value::Bool(b)
     }
 
+    pub fn datetime(value: jiff::Timestamp) -> Self {
+        Self::DateTime(value)
+    }
+
     pub fn null() -> Self {
         Value::Null
     }
@@ -183,6 +195,7 @@ impl Value {
             Value::I64(_) => ValueType::I64,
             Value::F64(_) => ValueType::F64,
             Value::Bool(_) => ValueType::Bool,
+            Value::DateTime(_) => ValueType::DateTime,
             Value::Null => ValueType::Null,
             Value::Array(_) => ValueType::Array,
             Value::Object(_) => ValueType::Object,
@@ -196,6 +209,7 @@ impl Value {
             (Value::I64(a), Value::I64(b)) => Ok(a == b),
             (Value::F64(a), Value::F64(b)) => Ok(a == b),
             (Value::Bool(a), Value::Bool(b)) => Ok(a == b),
+            (Value::DateTime(a), Value::DateTime(b)) => Ok(a == b),
             (Value::Null, Value::Null) => Ok(true),
 
             (Value::F64(a), Value::I64(b)) => Ok(*a == *b as f64),
@@ -245,6 +259,7 @@ impl Value {
             (Value::I64(a), Value::I64(b)) => Ok(a.partial_cmp(b)),
             (Value::F64(a), Value::F64(b)) => Ok(a.partial_cmp(b)),
             (Value::Bool(a), Value::Bool(b)) => Ok(a.partial_cmp(b)),
+            (Value::DateTime(a), Value::DateTime(b)) => Ok(a.partial_cmp(b)),
             (Value::Null, Value::Null) => Ok(Some(Ordering::Equal)),
 
             (Value::F64(a), Value::I64(b)) => Ok(a.partial_cmp(&(*b as f64))),
@@ -289,6 +304,7 @@ pub enum ValueType {
     I64,
     F64,
     Bool,
+    DateTime,
     Null,
 
     Array,
