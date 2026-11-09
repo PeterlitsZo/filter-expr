@@ -15,10 +15,22 @@ pub(crate) enum Token {
     /// A null literal.
     Null,
 
+    /// The let keyword (`let`).
+    Let,
+    /// The then keyword (`then`).
+    Then,
+    /// The binding operator (`:=`).
+    Bind,
+
+    /// The addition or unary positive operator (`+`).
     Add,
+    /// The subtraction or unary negative operator (`-`).
     Sub,
+    /// The multiplication operator (`*`).
     Mul,
+    /// The division operator (`/`).
     Div,
+    /// The remainder operator (`%`).
     Rem,
 
     /// The equal operator (`=` or `==`).
@@ -330,6 +342,9 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
                 if chars.peek() == Some(&':') {
                     chars.next();
                     tokens.push(Token::DoubleColon);
+                } else if chars.peek() == Some(&'=') {
+                    chars.next();
+                    tokens.push(Token::Bind);
                 } else {
                     tokens.push(Token::Colon);
                 }
@@ -372,6 +387,8 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
                     "AND" | "and" => tokens.push(Token::And),
                     "OR" | "or" => tokens.push(Token::Or),
                     "NOT" | "not" => tokens.push(Token::Not),
+                    "let" => tokens.push(Token::Let),
+                    "then" => tokens.push(Token::Then),
                     "IN" | "in" => tokens.push(Token::In),
 
                     "true" => tokens.push(Token::Bool(true)),

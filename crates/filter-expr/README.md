@@ -27,6 +27,7 @@ You can use arithmetic operators `+ - * / %` and unary `+` / `-`:
 
 ```text
 price * quantity - discount >= 100
+/* OR */
 (count + 1) % 2 = 0
 ```
 
@@ -35,7 +36,9 @@ and `NOT` / `not` / `!`, plus parentheses:
 
 ```text
 active AND (admin OR NOT banned)
+/* OR */
 active and (admin or not banned)
+/* OR */
 active && (admin || !banned)
 ```
 
@@ -44,7 +47,9 @@ values with `NOT IN` / `not in`:
 
 ```text
 status IN [200, 201, 204]
+/* OR */
 status in [200, 201, 204]
+/* OR */
 status not in [400, 404, 500]
 ```
 
@@ -73,6 +78,14 @@ You can parse nested field access with dot notation:
 user.address.city = 'London'
 ```
 
+You can bind intermediate results with `let name := value then body`:
+
+```text
+let is_foo := a = "foo" then
+let is_lucky := n in [1, 2, 3] then
+is_foo || is_lucky
+```
+
 ## Syntax Reference
 
 ### Filter
@@ -86,7 +99,9 @@ user.address.city = 'London'
 ### Expression
 
 ```
-<expr> = <or_test> (<or> <or_test>)*
+<expr> = <let-expr> | <logical-expr>
+<let-expr> = 'let' <ident> ':=' <logical-expr> 'then' <expr>
+<logical-expr> = <or_test> (<or> <or_test>)*
 
 <or_test> = <and_test> (<and> <and_test>)*
 <and_test> = <not> <and_test> | <comparison>

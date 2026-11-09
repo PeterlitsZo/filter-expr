@@ -2,6 +2,7 @@
 
 ## Behavior
 
+- Follow the existing code style, including data structures, naming and formatting; avoid unrelated reformatting.
 - DO NOT add unit tests until the user asks you to do so.
 - DO NOT change document until the user asks you to do so.
 

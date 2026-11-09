@@ -562,6 +562,29 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn test_parse_and_then_eval_let() {
+        let evaler = FilterExprEvaler::new();
+        parse_and_do_test_cases(
+            &evaler,
+            "let x := n + 1 then let is_lucky := x in [1, 2, 3] then is_lucky",
+            &[
+                (simple_context! { "n": 1 }, true),
+                (simple_context! { "n": 3 }, false),
+            ],
+        )
+        .await;
+        parse_and_do_test_cases(
+            &evaler,
+            "enabled && (let x := n then x > 0)",
+            &[
+                (simple_context! { "enabled": false }, false),
+                (simple_context! { "enabled": true, "n": 1 }, true),
+            ],
+        )
+        .await;
+    }
+
     async fn parse_and_do_test_cases(
         evaler: &FilterExprEvaler,
         input: &str,

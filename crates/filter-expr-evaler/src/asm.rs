@@ -3,7 +3,8 @@ use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub(crate) struct Asm {
-    pub(crate) locals: Vec<AsmLocal>,
+    pub(crate) local_count: u32,
+    pub(crate) context_vars: Vec<AsmContextVar>,
     pub(crate) functions: Vec<AsmFunction>,
     pub(crate) methods: Vec<AsmMethod>,
     pub(crate) str_pool: Vec<Arc<String>>,
@@ -12,11 +13,11 @@ pub(crate) struct Asm {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct AsmLocal {
+pub(crate) struct AsmContextVar {
     pub(crate) name: String,
 }
 
-impl AsmLocal {
+impl AsmContextVar {
     pub(crate) fn new(name: impl Into<String>) -> Self {
         Self { name: name.into() }
     }
@@ -50,10 +51,12 @@ pub(crate) enum AsmInstruction {
     /// Define a label. The argument is its numeric ID.
     Label(u32),
 
-    /// Load a local variable from the local variables table, and push it onto
-    /// the stack. The argument is the index of the local variable in the local
-    /// variables table.
+    /// Load a context variable by index, caching its value for this evaluation.
+    LoadContext(u32),
+    /// Push a local variable onto the stack.
     LoadLocal(u32),
+    /// Pop a value and store it in a local variable slot.
+    StoreLocal(u32),
 
     /// Pop an object and push its field value. The argument is the field name's
     /// index in the string pool.
@@ -162,7 +165,9 @@ impl fmt::Debug for AsmInstruction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AsmInstruction::Label(index) => write!(f, "LABEL label_index={index}"),
+            AsmInstruction::LoadContext(index) => write!(f, "LOAD_CONTEXT context_index={index}"),
             AsmInstruction::LoadLocal(index) => write!(f, "LOAD_LOCAL local_index={index}"),
+            AsmInstruction::StoreLocal(index) => write!(f, "STORE_LOCAL local_index={index}"),
             AsmInstruction::GetField(index) => write!(f, "GET_FIELD str_index={index}"),
             AsmInstruction::LoadString(index) => write!(f, "LOAD_STR str_index={index}"),
             AsmInstruction::LoadI64(value) => write!(f, "LOAD_I64 value={value}"),

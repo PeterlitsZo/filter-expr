@@ -17,10 +17,13 @@ pub(crate) struct BytecodeRunner<'a> {
     /// The bytecode to run.
     bytecode: &'a Bytecode,
 
-    /// The local slot to cache the local variables.
+    /// The cache for context variables.
     ///
     /// If it is `None`, we need to get the value from the context.
-    local_slot: Vec<Option<Value>>,
+    context_cache: Vec<Option<Value>>,
+
+    /// The local variable slots.
+    locals: Vec<Option<Value>>,
 
     /// The stack.
     stack: Vec<Value>,
@@ -38,7 +41,8 @@ impl<'a> BytecodeRunner<'a> {
 
             bytecode,
 
-            local_slot: vec![None; bytecode.locals.len()],
+            context_cache: vec![None; bytecode.context_vars.len()],
+            locals: vec![None; bytecode.local_count as usize],
 
             stack: Vec::with_capacity(8),
             pc: 0,
@@ -61,23 +65,35 @@ impl<'a> BytecodeRunner<'a> {
             self.pc += 1;
 
             match opcode {
-                bc::LOAD_LOCAL => {
+                bc::LOAD_CONTEXT => {
                     let index = unsafe { self.read_u32() };
                     let index = index as usize;
 
-                    let value = match &self.local_slot[index] {
+                    let value = match &self.context_cache[index] {
                         Some(cached) => cached.clone(),
                         None => {
-                            let local = &self.bytecode.locals[index];
-                            let value = ctx.get_var(&local.name).await?.ok_or_else(|| {
+                            let context_var = &self.bytecode.context_vars[index];
+                            let value = ctx.get_var(&context_var.name).await?.ok_or_else(|| {
                                 Error::new(ErrorKind::FailedToGet, "no such variable")
-                                    .with_metadata("var", &local.name)
+                                    .with_metadata("var", &context_var.name)
                             })?;
-                            self.local_slot[index] = Some(value.clone());
+                            self.context_cache[index] = Some(value.clone());
                             value
                         }
                     };
                     self.stack.push(value);
+                }
+                bc::LOAD_LOCAL => {
+                    let index = unsafe { self.read_u32() } as usize;
+                    let value = self.locals[index].as_ref().ok_or_else(|| {
+                        Error::new(ErrorKind::Internal, "uninitialized local variable")
+                    })?;
+                    self.stack.push(value.clone());
+                }
+                bc::STORE_LOCAL => {
+                    let index = unsafe { self.read_u32() } as usize;
+                    let value = unsafe { self.pop_stack_top_unchecked() };
+                    self.locals[index] = Some(value);
                 }
 
                 bc::GET_FIELD => {

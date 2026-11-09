@@ -5,16 +5,18 @@ use std::{
 
 use filter_expr::Expr;
 
-use crate::asm::{Asm, AsmFunction, AsmInstruction, AsmLocal, AsmMethod};
+use crate::asm::{Asm, AsmContextVar, AsmFunction, AsmInstruction, AsmMethod};
 
 pub(crate) struct AsmCodegen<'a> {
-    locals: Vec<AsmLocal>,
+    local_count: u32,
+    context_vars: Vec<AsmContextVar>,
     functions: Vec<AsmFunction>,
     methods: Vec<AsmMethod>,
     str_pool: Vec<Arc<String>>,
     instructions: Vec<AsmInstruction>,
 
     locals_map: HashMap<&'a str, u32>,
+    context_vars_map: HashMap<&'a str, u32>,
     str_pool_map: HashMap<&'a str, u32>,
     functions_map: HashMap<&'a str, u32>,
     methods_map: HashMap<&'a str, u32>,
@@ -24,13 +26,15 @@ pub(crate) struct AsmCodegen<'a> {
 impl<'a> AsmCodegen<'a> {
     pub(crate) fn new() -> Self {
         Self {
-            locals: Vec::new(),
+            local_count: 0,
+            context_vars: Vec::new(),
             functions: Vec::new(),
             methods: Vec::new(),
             str_pool: Vec::new(),
             instructions: Vec::new(),
 
             locals_map: HashMap::new(),
+            context_vars_map: HashMap::new(),
             str_pool_map: HashMap::new(),
             functions_map: HashMap::new(),
             methods_map: HashMap::new(),
@@ -50,7 +54,8 @@ impl<'a> AsmCodegen<'a> {
         self.instructions.push(AsmInstruction::Return);
 
         Asm {
-            locals: self.locals,
+            local_count: self.local_count,
+            context_vars: self.context_vars,
             functions: self.functions,
             methods: self.methods,
             str_pool: self.str_pool,
@@ -116,16 +121,34 @@ impl<'a> AsmCodegen<'a> {
             Expr::MethodCall(method_name, obj, args) => {
                 self.codegen_method_call(method_name, obj, args)
             }
+
+            Expr::Let(name, value, body) => {
+                self.codegen_expr(value);
+                let slot = self.local_count;
+                self.local_count += 1;
+                self.instructions.push(AsmInstruction::StoreLocal(slot));
+                let outer = self.locals_map.insert(name, slot);
+                self.codegen_expr(body);
+                if let Some(outer) = outer {
+                    self.locals_map.insert(name, outer);
+                } else {
+                    self.locals_map.remove(name.as_str());
+                }
+            }
         }
     }
 
     pub(crate) fn codegen_field(&mut self, field: &'a str) {
-        let index = *self.locals_map.entry(field).or_insert_with(|| {
-            let index = self.locals.len() as u32;
-            self.locals.push(AsmLocal::new(field));
+        if let Some(&slot) = self.locals_map.get(field) {
+            self.instructions.push(AsmInstruction::LoadLocal(slot));
+            return;
+        }
+        let index = *self.context_vars_map.entry(field).or_insert_with(|| {
+            let index = self.context_vars.len() as u32;
+            self.context_vars.push(AsmContextVar::new(field));
             index
         });
-        self.instructions.push(AsmInstruction::LoadLocal(index));
+        self.instructions.push(AsmInstruction::LoadContext(index));
     }
 
     pub(crate) fn codegen_field_access(&mut self, obj: &'a Expr, field: &'a str) {
@@ -343,8 +366,8 @@ mod tests {
         assert_eq!(
             asm,
             Asm {
-                locals: vec![AsmLocal::new("field")],
-                instructions: vec![AsmInstruction::LoadLocal(0), AsmInstruction::Return],
+                context_vars: vec![AsmContextVar::new("field")],
+                instructions: vec![AsmInstruction::LoadContext(0), AsmInstruction::Return],
                 ..Default::default()
             }
         );
@@ -976,10 +999,10 @@ mod tests {
         assert_eq!(
             asm,
             Asm {
-                locals: vec![AsmLocal::new("name")],
+                context_vars: vec![AsmContextVar::new("name")],
                 methods: vec![AsmMethod::new("toUpper")],
                 instructions: vec![
-                    AsmInstruction::LoadLocal(0),
+                    AsmInstruction::LoadContext(0),
                     AsmInstruction::CallMethod(0, 0),
                     AsmInstruction::Return,
                 ],
@@ -1008,6 +1031,70 @@ mod tests {
                     AsmInstruction::CallFunction(0, 1),
                     AsmInstruction::LoadI64(3),
                     AsmInstruction::Gt,
+                    AsmInstruction::Return,
+                ],
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn test_codegen_let() {
+        let asm_codegen = AsmCodegen::new();
+        let asm = asm_codegen.codegen(&Expr::let_(
+            "x",
+            Expr::func_call_("value", vec![]),
+            Expr::add_(Expr::field_("x"), Expr::field_("x")),
+        ));
+        assert_eq!(
+            asm,
+            Asm {
+                local_count: 1,
+                functions: vec![AsmFunction::new("value")],
+                instructions: vec![
+                    AsmInstruction::CallFunction(0, 0),
+                    AsmInstruction::StoreLocal(0),
+                    AsmInstruction::LoadLocal(0),
+                    AsmInstruction::LoadLocal(0),
+                    AsmInstruction::Add,
+                    AsmInstruction::Return,
+                ],
+                ..Default::default()
+            }
+        );
+    }
+
+    #[test]
+    fn test_codegen_let_shadowing() {
+        let asm_codegen = AsmCodegen::new();
+        // let x := x then (let x := x + 1 then x) + x
+        let asm = asm_codegen.codegen(&Expr::let_(
+            "x",
+            Expr::field_("x"),
+            Expr::add_(
+                Expr::let_(
+                    "x",
+                    Expr::add_(Expr::field_("x"), Expr::i64_(1)),
+                    Expr::field_("x"),
+                ),
+                Expr::field_("x"),
+            ),
+        ));
+        assert_eq!(
+            asm,
+            Asm {
+                local_count: 2,
+                context_vars: vec![AsmContextVar::new("x")],
+                instructions: vec![
+                    AsmInstruction::LoadContext(0),
+                    AsmInstruction::StoreLocal(0),
+                    AsmInstruction::LoadLocal(0),
+                    AsmInstruction::LoadI64(1),
+                    AsmInstruction::Add,
+                    AsmInstruction::StoreLocal(1),
+                    AsmInstruction::LoadLocal(1),
+                    AsmInstruction::LoadLocal(0),
+                    AsmInstruction::Add,
                     AsmInstruction::Return,
                 ],
                 ..Default::default()

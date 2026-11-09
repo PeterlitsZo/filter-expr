@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     asm::{Asm, AsmInstruction},
-    bc::{Bytecode, BytecodeFunction, BytecodeLocal, BytecodeMethod, BytecodeOpcode},
+    bc::{Bytecode, BytecodeContextVar, BytecodeFunction, BytecodeMethod, BytecodeOpcode},
 };
 
 pub(crate) struct BytecodeCodegen {
@@ -20,10 +20,10 @@ impl BytecodeCodegen {
     }
 
     pub(crate) fn codegen(mut self, asm: Asm) -> Bytecode {
-        let locals = asm
-            .locals
+        let context_vars = asm
+            .context_vars
             .into_iter()
-            .map(|local| BytecodeLocal { name: local.name })
+            .map(|context_var| BytecodeContextVar { name: context_var.name })
             .collect();
         let functions = asm
             .functions
@@ -50,7 +50,9 @@ impl BytecodeCodegen {
                 }
 
                 Ins::LoadString(..) => ins_offset += Op::LoadString.op_len(),
+                Ins::LoadContext(..) => ins_offset += Op::LoadContext.op_len(),
                 Ins::LoadLocal(..) => ins_offset += Op::LoadLocal.op_len(),
+                Ins::StoreLocal(..) => ins_offset += Op::StoreLocal.op_len(),
                 Ins::GetField(..) => ins_offset += Op::GetField.op_len(),
 
                 Ins::LoadI64(..) => ins_offset += Op::LoadI64.op_len(),
@@ -98,8 +100,9 @@ impl BytecodeCodegen {
         }
 
         Bytecode {
+            local_count: asm.local_count,
             code: self.code,
-            locals,
+            context_vars,
             functions,
             methods,
             str_pool: asm.str_pool,
@@ -140,8 +143,16 @@ impl BytecodeCodegen {
                 self.push_u8(BytecodeOpcode::LoadString.into_u8());
                 self.push_u32(index);
             }
+            AsmInstruction::LoadContext(index) => {
+                self.push_u8(BytecodeOpcode::LoadContext.into_u8());
+                self.push_u32(index);
+            }
             AsmInstruction::LoadLocal(index) => {
                 self.push_u8(BytecodeOpcode::LoadLocal.into_u8());
+                self.push_u32(index);
+            }
+            AsmInstruction::StoreLocal(index) => {
+                self.push_u8(BytecodeOpcode::StoreLocal.into_u8());
                 self.push_u32(index);
             }
 

@@ -13,16 +13,16 @@ type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 /// # Example
 ///
 /// ```rust
-/// use filter_expr::{Expr, Transform};
+/// use filter_expr::{Expr, Transform, TransformContext, TransformResult};
 /// use async_trait::async_trait;
 ///
 /// struct MyTransformer;
 ///
 /// #[async_trait]
 /// impl Transform for MyTransformer {
-///     async fn transform(&mut self, expr: Expr) -> Result<Expr, filter_expr::Error> {
+///     async fn transform(&mut self, expr: Expr, _ctx: TransformContext) -> TransformResult {
 ///         // Transform the expression before recursing
-///         Ok(match expr {
+///         TransformResult::Continue(match expr {
 ///             Expr::Field(name) if name == "old_name" => {
 ///                 Expr::Field("new_name".to_string())
 ///             }
@@ -34,7 +34,7 @@ type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 #[async_trait]
 pub trait Transform {
     /// Transform an expression.
-    async fn transform(&mut self, expr: Expr, ctx: TransformContext) -> TransformResult 
+    async fn transform(&mut self, expr: Expr, ctx: TransformContext) -> TransformResult
     where
         Self: Sized;
 }

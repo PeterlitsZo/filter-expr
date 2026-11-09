@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct BytecodeLocal {
+pub(crate) struct BytecodeContextVar {
     pub(crate) name: String,
 }
 
@@ -16,8 +16,10 @@ pub(crate) struct BytecodeMethod {
 }
 
 pub(crate) struct Bytecode {
-    /// The information of the local variables.
-    pub(crate) locals: Vec<BytecodeLocal>,
+    /// The information of the context variables.
+    pub(crate) context_vars: Vec<BytecodeContextVar>,
+    /// The number of local variable slots.
+    pub(crate) local_count: u32,
     /// The information of the functions.
     pub(crate) functions: Vec<BytecodeFunction>,
     /// The information of the methods.
@@ -32,7 +34,9 @@ pub(crate) struct Bytecode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum BytecodeOpcode {
+    LoadContext,
     LoadLocal,
+    StoreLocal,
     GetField,
 
     LoadString,
@@ -79,7 +83,9 @@ pub(crate) enum BytecodeOpcode {
 impl BytecodeOpcode {
     pub(crate) const fn into_u8(self) -> u8 {
         match self {
+            BytecodeOpcode::LoadContext => LOAD_CONTEXT,
             BytecodeOpcode::LoadLocal => LOAD_LOCAL,
+            BytecodeOpcode::StoreLocal => STORE_LOCAL,
             BytecodeOpcode::GetField => GET_FIELD,
             BytecodeOpcode::LoadString => LOAD_STRING,
             BytecodeOpcode::LoadI64 => LOAD_I64,
@@ -118,7 +124,9 @@ impl BytecodeOpcode {
     #[allow(dead_code)]
     pub(crate) const fn from_u8(value: u8) -> Option<Self> {
         match value {
+            LOAD_CONTEXT => Some(BytecodeOpcode::LoadContext),
             LOAD_LOCAL => Some(BytecodeOpcode::LoadLocal),
+            STORE_LOCAL => Some(BytecodeOpcode::StoreLocal),
             GET_FIELD => Some(BytecodeOpcode::GetField),
             LOAD_STRING => Some(BytecodeOpcode::LoadString),
             LOAD_I64 => Some(BytecodeOpcode::LoadI64),
@@ -157,7 +165,9 @@ impl BytecodeOpcode {
 
     pub fn op_len(self) -> usize {
         match self {
+            BytecodeOpcode::LoadContext => 5,
             BytecodeOpcode::LoadLocal => 5,
+            BytecodeOpcode::StoreLocal => 5,
             BytecodeOpcode::GetField => 5,
 
             BytecodeOpcode::LoadString => 5,
@@ -201,36 +211,60 @@ impl BytecodeOpcode {
     }
 }
 
-pub(crate) const LOAD_LOCAL: u8 = 0;
-pub(crate) const LOAD_STRING: u8 = 1;
-pub(crate) const LOAD_I64: u8 = 2;
-pub(crate) const LOAD_F64: u8 = 3;
-pub(crate) const LOAD_BOOL: u8 = 4;
-pub(crate) const LOAD_NULL: u8 = 5;
-pub(crate) const BUILD_ARRAY: u8 = 6;
-pub(crate) const CALL_FUNCTION: u8 = 7;
-pub(crate) const CALL_METHOD: u8 = 8;
-pub(crate) const POP_JUMP_IF_FALSE: u8 = 9;
-pub(crate) const JUMP_IF_FALSE: u8 = 10;
-pub(crate) const POP_JUMP_IF_TRUE: u8 = 11;
-pub(crate) const JUMP_IF_TRUE: u8 = 12;
-pub(crate) const JUMP: u8 = 13;
-pub(crate) const DUP: u8 = 14;
-pub(crate) const GT: u8 = 15;
-pub(crate) const LT: u8 = 16;
-pub(crate) const GE: u8 = 17;
-pub(crate) const LE: u8 = 18;
-pub(crate) const EQ: u8 = 19;
-pub(crate) const NE: u8 = 20;
-pub(crate) const IN: u8 = 21;
-pub(crate) const NOT: u8 = 22;
-pub(crate) const RETURN: u8 = 23;
-pub(crate) const GET_FIELD: u8 = 24;
-pub(crate) const BUILD_OBJECT: u8 = 25;
-pub(crate) const ADD: u8 = 26;
-pub(crate) const SUB: u8 = 27;
-pub(crate) const MUL: u8 = 28;
-pub(crate) const DIV: u8 = 29;
-pub(crate) const REM: u8 = 30;
-pub(crate) const POS: u8 = 31;
-pub(crate) const NEG: u8 = 32;
+macro_rules! define_opcodes {
+    (@next $value:expr;) => {};
+    (@next $value:expr; $name:ident, $($rest:ident,)*) => {
+        pub(crate) const $name: u8 = $value;
+        define_opcodes!(@next $name + 1; $($rest,)*);
+    };
+    ($($name:ident),* $(,)?) => {
+        define_opcodes!(@next 0; $($name,)*);
+    };
+}
+
+define_opcodes! {
+    LOAD_CONTEXT,
+    LOAD_LOCAL,
+    STORE_LOCAL,
+    GET_FIELD,
+
+    LOAD_STRING,
+    LOAD_I64,
+    LOAD_F64,
+    LOAD_BOOL,
+    LOAD_NULL,
+
+    BUILD_ARRAY,
+    BUILD_OBJECT,
+
+    CALL_FUNCTION,
+    CALL_METHOD,
+
+    POP_JUMP_IF_FALSE,
+    JUMP_IF_FALSE,
+    POP_JUMP_IF_TRUE,
+    JUMP_IF_TRUE,
+    JUMP,
+
+    DUP,
+
+    ADD,
+    SUB,
+    MUL,
+    DIV,
+    REM,
+    POS,
+    NEG,
+
+    GT,
+    LT,
+    GE,
+    LE,
+    EQ,
+    NE,
+    IN,
+
+    NOT,
+
+    RETURN,
+}

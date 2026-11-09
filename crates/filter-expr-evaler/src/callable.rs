@@ -11,7 +11,11 @@ pub struct FunctionContext<'env, 'a> {
     pub args: &'a [Value],
 }
 
-/// The trait for a function.
+/// A pure function of its arguments and the evaluation's world.
+///
+/// The same inputs MUST give the same value or error, without side effects.
+/// Lazy loading and caching are allowed within the evaluation. Optimizations
+/// may skip calls and their errors.
 #[async_trait::async_trait]
 pub trait Function: Send + Sync {
     /// Call the function.
@@ -31,7 +35,8 @@ pub struct MethodContext<'env, 'a> {
     pub args: &'a [Value],
 }
 
-/// The trait for a method.
+/// A pure method. Follows [`Function`]'s contract with the receiver as an
+/// input.
 #[async_trait::async_trait]
 pub trait Method: Send + Sync {
     /// Call the method.

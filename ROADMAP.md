@@ -3,7 +3,7 @@
 ## 2026-12
 
 - [ ] Support `obj[name]`.
-- [ ] Fix `transform_children` skipping recursive transformation of `Array`
+- [x] Fix `transform_children` skipping recursive transformation of `Array`
       elements.
 - [ ] Support `some_userdata.foo.bar`.
 - [x] Support the `DateTime` type and `DateTime::now` function.
@@ -30,7 +30,10 @@
 - [ ] Handle missing EOF checks during tokenization, such as unterminated
       string literals.
 - [x] Remove the AST runner.
-- [ ] Support the `let now = DateTime::now() in foo.bar < now`.
+- [x] Support `let now := DateTime::now() then foo.bar < now`.
+- [ ] Remove the `impl Ord`, `impl PartialOrd` and `impl Hash` for `Expr`
+      because it's useless now.
+- [ ] Add comment for all `pub` functions and methods.
 
 ## 2026-11
 

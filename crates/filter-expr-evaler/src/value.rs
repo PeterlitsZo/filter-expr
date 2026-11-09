@@ -332,6 +332,8 @@ impl Display for ValueType {
     }
 }
 
+/// A custom value. Comparisons and field reads follow [`crate::Function`]'s
+/// purity contract.
 pub trait Userdata: Debug + Send + Sync {
     /// Return the value as `Any` for implementer-side downcasting.
     fn as_any(&self) -> &dyn Any;

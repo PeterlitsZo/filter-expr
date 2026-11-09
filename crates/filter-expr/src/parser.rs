@@ -23,10 +23,33 @@ impl Parser {
         Ok(expr)
     }
 
-    /// ```text
-    /// <expr> = <or_test> (<or> <or_test>)*
-    /// ```
+    /// Parse a binding or a complete logical expression.
     fn parse_expr(&mut self) -> Result<Expr, Error> {
+        if self.peek() != Some(&Token::Let) {
+            return self.parse_logical_expr();
+        }
+        self.advance();
+        let Some(Token::Ident(name)) = self.peek().cloned() else {
+            return Err(Error::Parse("expected binding name after 'let'".into()));
+        };
+        self.advance();
+        if self.peek() != Some(&Token::Bind) {
+            return Err(Error::Parse("expected ':=' after binding name".into()));
+        }
+        self.advance();
+        let value = self.parse_logical_expr()?;
+        if self.peek() != Some(&Token::Then) {
+            return Err(Error::Parse("expected 'then' after binding value".into()));
+        }
+        self.advance();
+        let body = self.parse_expr()?;
+        Ok(Expr::let_(name, value, body))
+    }
+
+    /// ```text
+    /// <logical_expr> = <or_test> (<or> <or_test>)*
+    /// ```
+    fn parse_logical_expr(&mut self) -> Result<Expr, Error> {
         let item = self.parse_or_test()?;
         let mut exprs = match item {
             Expr::Or(exprs) => exprs,

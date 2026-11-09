@@ -43,6 +43,8 @@ pub enum Expr {
     And(Vec<Expr>),
     Or(Vec<Expr>),
     Not(Box<Expr>),
+
+    Let(String, Box<Expr>, Box<Expr>),
 }
 
 impl PartialOrd for Expr {
@@ -94,6 +96,8 @@ impl Ord for Expr {
                 And(..) => 700,
                 Or(..) => 701,
                 Not(..) => 702,
+
+                Let(..) => 800,
             }
         }
 
@@ -169,6 +173,14 @@ impl Ord for Expr {
                     (And(a), And(b)) => a.cmp(b),
                     (Or(a), Or(b)) => a.cmp(b),
                     (Not(a), Not(b)) => a.cmp(b),
+
+                    (Let(n1, v1, b1), Let(n2, v2, b2)) => match n1.cmp(n2) {
+                        Ordering::Equal => match v1.cmp(v2) {
+                            Ordering::Equal => b1.cmp(b2),
+                            other => other,
+                        },
+                        other => other,
+                    },
 
                     _ => unreachable!(),
                 }
@@ -254,6 +266,12 @@ impl Hash for Expr {
             And(v) => v.hash(state),
             Or(v) => v.hash(state),
             Not(e) => e.hash(state),
+
+            Let(name, value, body) => {
+                name.hash(state);
+                value.hash(state);
+                body.hash(state);
+            }
         }
     }
 }
@@ -370,22 +388,26 @@ impl Expr {
     pub fn not_(self) -> Self {
         Self::Not(Box::new(self))
     }
+
+    pub fn let_(name: impl Into<String>, value: Expr, body: Expr) -> Self {
+        Self::Let(name.into(), Box::new(value), Box::new(body))
+    }
 }
 
 impl Expr {
     /// Recursively transform an expression using the provided transformer.
     ///
     /// ```rust
-    /// use filter_expr::{Expr, Transform};
+    /// use filter_expr::{Expr, Transform, TransformContext, TransformResult};
     /// use async_trait::async_trait;
     ///
     /// struct MyTransformer;
     ///
     /// #[async_trait]
     /// impl Transform for MyTransformer {
-    ///     async fn transform(&mut self, expr: Expr) -> Result<Expr, filter_expr::Error> {
+    ///     async fn transform(&mut self, expr: Expr, _ctx: TransformContext) -> TransformResult {
     ///         // Transform the expression before recursing
-    ///         Ok(match expr {
+    ///         TransformResult::Continue(match expr {
     ///             Expr::Field(name) if name == "old_name" => {
     ///                 Expr::Field("new_name".to_string())
     ///             }
@@ -441,7 +463,13 @@ impl Expr {
             Expr::Bool(value) => Expr::Bool(value),
             Expr::Null => Expr::Null,
 
-            Expr::Array(value) => Expr::Array(value),
+            Expr::Array(elements) => {
+                let mut transformed_elements = Vec::new();
+                for element in elements {
+                    transformed_elements.push(Self::transform_expr(transformer, element, ctx.clone()).await?);
+                }
+                Expr::Array(transformed_elements)
+            }
             Expr::Object(fields) => {
                 let mut transformed_fields = BTreeMap::new();
                 for (key, value) in fields {
@@ -550,6 +578,12 @@ impl Expr {
                 let expr = Box::new(Self::transform_expr(transformer, *expr, ctx).await?);
                 Expr::Not(expr)
             }
+
+            Expr::Let(name, value, body) => {
+                let value = Box::new(Self::transform_expr(transformer, *value, ctx.clone()).await?);
+                let body = Box::new(Self::transform_expr(transformer, *body, ctx.clone()).await?);
+                Expr::Let(name, value, body)
+            }
         })
     }
 }
@@ -557,6 +591,9 @@ impl Expr {
 impl Expr {
     /// Optimize the expression by applying constant folding and simplification
     /// rules.
+    ///
+    /// Assumes expressions are pure within an evaluation's world. Removed
+    /// expressions are not evaluated, including their errors.
     ///
     /// Examples:
     ///
@@ -759,6 +796,11 @@ impl Expr {
                     }
                     other => Not(Box::new(other)),
                 }
+            }
+
+            // Optimize the binding value and body.
+            Let(name, value, body) => {
+                Let(name, Box::new(value.optimize()), Box::new(body.optimize()))
             }
         }
     }

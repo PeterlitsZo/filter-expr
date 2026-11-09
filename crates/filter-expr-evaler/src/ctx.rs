@@ -8,6 +8,8 @@ use crate::Value;
 use crate::Error;
 
 /// The context of the filter for evaluation.
+///
+/// Reads follow [`crate::Function`]'s purity contract and may be loaded lazily.
 #[async_trait::async_trait]
 pub trait Context: Send + Sync {
     /// Get the value of a variable/field.
