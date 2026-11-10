@@ -1,25 +1,34 @@
 use std::collections::BTreeMap;
 
-use crate::{Error, expr::Expr, token::Token};
+use crate::{Error, expr::Expr, token::{Lexer, Token}};
 
-pub(crate) struct Parser {
-    tokens: std::vec::IntoIter<Token>,
+pub(crate) struct Parser<'a> {
+    lexer: Lexer<'a>,
+    next_token: Option<Token>,
 }
 
-impl Parser {
-    pub(crate) fn new(tokens: Vec<Token>) -> Self {
-        Self { tokens: tokens.into_iter() }
+impl<'a> Parser<'a> {
+    pub(crate) fn new(input: &'a str) -> Result<Self, Error> {
+        let mut lexer = Lexer::new(input);
+        let next_token = lexer.next_token()?;
+        Ok(Self { lexer, next_token })
     }
 
     /// Parse a complete expression, rejecting trailing tokens.
     pub(crate) fn parse(&mut self) -> Result<Expr, Error> {
-        let expr = self.parse_expr()?;
-        if let Some(token) = self.peek() {
-            return Err(Error::Parse(format!(
-                "unexpected trailing token: {token:?}"
-            )));
+        let result = self.parse_expr().and_then(|expr| {
+            if let Some(token) = self.peek() {
+                return Err(Error::Parse(format!(
+                    "unexpected trailing token: {token:?}"
+                )));
+            }
+            Ok(expr)
+        });
+        if matches!(result, Err(Error::Parse(_))) {
+            // Preserve lexical error precedence without buffering the tokens.
+            while self.lexer.next_token()?.is_some() {}
         }
-        Ok(expr)
+        result
     }
 
     /// Parse a binding or a complete logical expression.
@@ -27,19 +36,19 @@ impl Parser {
         if self.peek() != Some(&Token::Let) {
             return self.parse_logical_expr();
         }
-        self.advance();
-        let Some(Token::Ident(name)) = self.tokens.next() else {
+        self.advance()?;
+        let Some(Token::Ident(name)) = self.next()? else {
             return Err(Error::Parse("expected binding name after 'let'".into()));
         };
         if self.peek() != Some(&Token::Bind) {
             return Err(Error::Parse("expected ':=' after binding name".into()));
         }
-        self.advance();
+        self.advance()?;
         let value = self.parse_logical_expr()?;
         if self.peek() != Some(&Token::Then) {
             return Err(Error::Parse("expected 'then' after binding value".into()));
         }
-        self.advance();
+        self.advance()?;
         let body = self.parse_expr()?;
         Ok(Expr::let_(name, value, body))
     }
@@ -58,7 +67,7 @@ impl Parser {
         };
 
         while self.peek() == Some(&Token::Or) {
-            self.advance(); // consume `OR` token.
+            self.advance()?; // consume `OR` token.
             let item = self.parse_or_test()?;
             match item {
                 Expr::Or(items) => exprs.extend(items),
@@ -87,7 +96,7 @@ impl Parser {
         };
 
         while self.peek() == Some(&Token::And) {
-            self.advance(); // consume `AND` token.
+            self.advance()?; // consume `AND` token.
             let item = self.parse_and_test()?;
             match item {
                 Expr::And(items) => exprs.extend(items),
@@ -108,7 +117,7 @@ impl Parser {
     fn parse_and_test(&mut self) -> Result<Expr, Error> {
         // Handle either spelling of unary negation.
         if matches!(self.peek(), Some(Token::Not | Token::Bang)) {
-            self.advance(); // consume NOT or !
+            self.advance()?; // consume NOT or !
             let expr = self.parse_and_test()?;
             return Ok(Expr::Not(Box::new(expr)));
         }
@@ -135,7 +144,7 @@ impl Parser {
                 // Parse <operator> <comparison> (recursive).
 
                 // Consume the operator.
-                self.advance();
+                self.advance()?;
 
                 // Recursive call.
                 let right = self.parse_comparison()?;
@@ -159,7 +168,7 @@ impl Parser {
                 // is 'NOT' 'IN'.
 
                 // consume the 'NOT'.
-                self.advance();
+                self.advance()?;
 
                 // consume the 'IN'.
                 let should_be_in = self.peek();
@@ -167,7 +176,7 @@ impl Parser {
                     let err_msg = format!("unexpected operator: {should_be_in:?} after NOT");
                     return Err(Error::Parse(err_msg));
                 }
-                self.advance();
+                self.advance()?;
 
                 // Recursive call.
                 let right = self.parse_comparison()?;
@@ -191,7 +200,7 @@ impl Parser {
     fn parse_additive(&mut self) -> Result<Expr, Error> {
         let mut left = self.parse_multiplicative()?;
         while matches!(self.peek(), Some(Token::Add | Token::Sub)) {
-            let operator = self.tokens.next().unwrap();
+            let operator = self.next()?.unwrap();
             let right = self.parse_multiplicative()?;
             left = match operator {
                 Token::Add => Expr::Add(Box::new(left), Box::new(right)),
@@ -208,7 +217,7 @@ impl Parser {
     fn parse_multiplicative(&mut self) -> Result<Expr, Error> {
         let mut left = self.parse_unary()?;
         while matches!(self.peek(), Some(Token::Mul | Token::Div | Token::Rem)) {
-            let operator = self.tokens.next().unwrap();
+            let operator = self.next()?.unwrap();
             let right = self.parse_unary()?;
             left = match operator {
                 Token::Mul => Expr::Mul(Box::new(left), Box::new(right)),
@@ -226,11 +235,11 @@ impl Parser {
     fn parse_unary(&mut self) -> Result<Expr, Error> {
         match self.peek() {
             Some(Token::Add) => {
-                self.advance();
+                self.advance()?;
                 Ok(Expr::Pos(Box::new(self.parse_unary()?)))
             }
             Some(Token::Sub) => {
-                self.advance();
+                self.advance()?;
                 Ok(Expr::Neg(Box::new(self.parse_unary()?)))
             }
             _ => self.parse_primary(),
@@ -246,12 +255,12 @@ impl Parser {
     fn parse_primary(&mut self) -> Result<Expr, Error> {
         // Parse a field or a possibly namespaced function call.
         if matches!(self.peek(), Some(Token::Ident(_))) {
-            let Some(Token::Ident(mut name)) = self.tokens.next() else { unreachable!() };
+            let Some(Token::Ident(mut name)) = self.next()? else { unreachable!() };
             let mut namespaced = false;
             while self.peek() == Some(&Token::DoubleColon) {
                 namespaced = true;
-                self.advance();
-                let Some(Token::Ident(segment)) = self.tokens.next() else {
+                self.advance()?;
+                let Some(Token::Ident(segment)) = self.next()? else {
                     return Err(Error::Parse("expected identifier after '::'".into()));
                 };
                 name.push_str("::");
@@ -305,7 +314,7 @@ impl Parser {
             return self.parse_object();
         }
 
-        let token = self.tokens.next();
+        let token = self.next()?;
         if let Some(token) = token {
             Ok(match token {
                 Token::Str(s) => Expr::str_(s),
@@ -319,7 +328,7 @@ impl Parser {
                     if self.peek() != Some(&Token::RParen) {
                         return Err(Error::Parse("expected ')'".to_string()));
                     }
-                    self.advance();
+                    self.advance()?;
                     expr
                 }
                 _ => {
@@ -340,13 +349,13 @@ impl Parser {
         if self.peek() != Some(&Token::LParen) {
             return Err(Error::Parse("expected '('".to_string()));
         }
-        self.advance();
+        self.advance()?;
 
         let mut args = Vec::new();
 
         // Handle empty argument list.
         if self.peek() == Some(&Token::RParen) {
-            self.advance();
+            self.advance()?;
             return Ok(Expr::FuncCall(func_name, args));
         }
 
@@ -355,7 +364,7 @@ impl Parser {
 
         // Parse remaining arguments separated by commas
         while self.peek() == Some(&Token::Comma) {
-            self.advance(); // consume comma
+            self.advance()?; // consume comma
             args.push(self.parse_expr()?);
         }
 
@@ -363,7 +372,7 @@ impl Parser {
         if self.peek() != Some(&Token::RParen) {
             return Err(Error::Parse("expected ')'".to_string()));
         }
-        self.advance();
+        self.advance()?;
 
         Ok(Expr::FuncCall(func_name, args))
     }
@@ -371,9 +380,9 @@ impl Parser {
     fn parse_method_call_chain_or_field_access(&mut self, mut value: Expr) -> Result<Expr, Error> {
         // Handle method calls: <value> '.' <ident> '(' ... ')'
         while self.peek() == Some(&Token::Dot) {
-            self.advance(); // consume '.'
+            self.advance()?; // consume '.'
 
-            let method_or_field_name = match self.tokens.next() {
+            let method_or_field_name = match self.next()? {
                 Some(Token::Ident(name)) => name,
                 _ => {
                     return Err(Error::Parse("expected method name after '.'".to_string()));
@@ -385,13 +394,13 @@ impl Parser {
                 value = Expr::FieldAccess(Box::new(value), method_or_field_name);
                 continue;
             }
-            self.advance(); // consume '('
+            self.advance()?; // consume '('
 
             let mut args = Vec::new();
 
             // Handle empty argument list ()
             if self.peek() == Some(&Token::RParen) {
-                self.advance();
+                self.advance()?;
                 value = Expr::MethodCall(method_or_field_name, Box::new(value), args);
                 continue;
             }
@@ -401,7 +410,7 @@ impl Parser {
 
             // Parse remaining arguments separated by commas
             while self.peek() == Some(&Token::Comma) {
-                self.advance(); // consume comma
+                self.advance()?; // consume comma
                 args.push(self.parse_expr()?);
             }
 
@@ -409,7 +418,7 @@ impl Parser {
             if self.peek() != Some(&Token::RParen) {
                 return Err(Error::Parse("expected ')'".to_string()));
             }
-            self.advance();
+            self.advance()?;
 
             value = Expr::MethodCall(method_or_field_name, Box::new(value), args);
         }
@@ -422,13 +431,13 @@ impl Parser {
         if self.peek() != Some(&Token::LBracket) {
             return Err(Error::Parse("expected [".to_string()));
         }
-        self.advance();
+        self.advance()?;
 
         let mut values = Vec::new();
 
         // Handle empty array []
         if self.peek() == Some(&Token::RBracket) {
-            self.advance();
+            self.advance()?;
             return Ok(Expr::array_(vec![]));
         }
 
@@ -437,7 +446,7 @@ impl Parser {
 
         // Parse remaining elements separated by commas
         while self.peek() == Some(&Token::Comma) {
-            self.advance(); // consume comma
+            self.advance()?; // consume comma
             values.push(self.parse_expr()?);
         }
 
@@ -445,7 +454,7 @@ impl Parser {
         if self.peek() != Some(&Token::RBracket) {
             return Err(Error::Parse("expected ]".to_string()));
         }
-        self.advance();
+        self.advance()?;
 
         Ok(Expr::array_(values))
     }
@@ -457,11 +466,11 @@ impl Parser {
         if self.peek() != Some(&Token::LBrace) {
             return Err(Error::Parse("expected '{'".to_string()));
         }
-        self.advance();
+        self.advance()?;
 
         let mut fields = BTreeMap::new();
         while self.peek() != Some(&Token::RBrace) {
-            let key = match self.tokens.next() {
+            let key = match self.next()? {
                 Some(Token::Str(key)) => key,
                 _ => return Err(Error::Parse("expected string key in object".to_string())),
             };
@@ -469,42 +478,45 @@ impl Parser {
             if self.peek() != Some(&Token::Colon) {
                 return Err(Error::Parse("expected ':' after object key".to_string()));
             }
-            self.advance();
+            self.advance()?;
             fields.insert(key, self.parse_expr()?);
 
             if self.peek() != Some(&Token::Comma) {
                 break;
             }
-            self.advance();
+            self.advance()?;
         }
 
         if self.peek() != Some(&Token::RBrace) {
             return Err(Error::Parse("expected '}'".to_string()));
         }
-        self.advance();
+        self.advance()?;
 
         Ok(Expr::object_(fields))
     }
 
     fn peek(&self) -> Option<&Token> {
-        self.tokens.as_slice().first()
+        self.next_token.as_ref()
     }
 
-    fn advance(&mut self) {
-        self.tokens.next();
+    fn next(&mut self) -> Result<Option<Token>, Error> {
+        let next_token = self.lexer.next_token()?;
+        Ok(std::mem::replace(&mut self.next_token, next_token))
+    }
+
+    fn advance(&mut self) -> Result<(), Error> {
+        self.next()?;
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::token::parse_token;
-
     use super::*;
 
     #[track_caller]
     fn parse_and_check(input: &str, expected: Expr) {
-        let tokens = parse_token(input).unwrap();
-        let mut parser = Parser::new(tokens);
+        let mut parser = Parser::new(input).unwrap();
         let expr = parser.parse_expr().unwrap();
         assert_eq!(expr, expected);
     }

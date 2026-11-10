@@ -101,265 +101,283 @@ impl<'a> CharCursor<'a> {
     }
 }
 
-pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
-    let mut tokens = Vec::new();
-    let mut chars = CharCursor::new(input);
+pub(crate) struct Lexer<'a> {
+    chars: CharCursor<'a>,
+}
 
-    while let Some(ch) = chars.peek() {
-        match ch {
-            // Skip whitespace.
-            c if c.is_whitespace() => {
-                chars.next();
-            }
-
-            // Division or block comments.
-            '/' => {
-                chars.next();
-                if chars.peek() != Some('*') {
-                    tokens.push(Token::Div);
-                    continue;
-                }
-
-                #[derive(Clone, Copy, PartialEq)]
-                enum CommentState {
-                    NeedStar,
-                    ReadingComment,
-                    NeedSlash,
-                    Done,
-                }
-                let mut s = CommentState::NeedStar;
-
-                while let Some(c) = chars.next() {
-                    match (s, c) {
-                        (CommentState::NeedStar, '*') => {
-                            s = CommentState::ReadingComment;
-                            continue;
-                        }
-                        (CommentState::NeedStar, _) => {
-                            return Err(Error::UnsupportedCharacter('/'));
-                        }
-                        (CommentState::ReadingComment, '*') => {
-                            s = CommentState::NeedSlash;
-                            continue;
-                        }
-                        (CommentState::ReadingComment, _) => {
-                            continue;
-                        }
-                        (CommentState::NeedSlash, '/') => {
-                            s = CommentState::Done;
-                            break;
-                        }
-                        (CommentState::NeedSlash, '*') => {
-                            continue;
-                        }
-                        (CommentState::NeedSlash, _) => {
-                            s = CommentState::ReadingComment;
-                            continue;
-                        }
-                        (CommentState::Done, _) => {
-                            unreachable!("s cannot be Done");
-                        }
-                    }
-                }
-
-                if s != CommentState::Done {
-                    return Err(Error::UnexpectedEOF);
-                }
-            }
-
-            // String literal.
-            '\'' | '"' => {
-                chars.next();
-                let remaining = chars.as_str();
-                let mut decoded: Option<String> = None;
-                let value = loop {
-                    let c = chars.next().ok_or(Error::UnexpectedEOF)?;
-                    if c == ch {
-                        break match decoded {
-                            Some(value) => value,
-                            None => remaining[..remaining.len() - chars.as_str().len() - 1].to_owned(),
-                        };
-                    }
-                    if c == '\\' {
-                        let value = decoded.get_or_insert_with(|| {
-                            remaining[..remaining.len() - chars.as_str().len() - 1].to_owned()
-                        });
-                        let escaped = chars.next().ok_or(Error::UnexpectedEOF)?;
-                        value.push(match escaped {
-                            'n' => '\n',
-                            'r' => '\r',
-                            't' => '\t',
-                            other => other,
-                        });
-                    } else if let Some(value) = &mut decoded {
-                        value.push(c);
-                    }
-                };
-                tokens.push(Token::Str(value));
-            }
-
-            // Operators.
-            '+' => {
-                chars.next();
-                tokens.push(Token::Add);
-            }
-            '-' => {
-                chars.next();
-                tokens.push(Token::Sub);
-            }
-            '*' => {
-                chars.next();
-                tokens.push(Token::Mul);
-            }
-            '%' => {
-                chars.next();
-                tokens.push(Token::Rem);
-            }
-
-            '&' | '|' => {
-                chars.next();
-                if chars.peek() != Some(ch) {
-                    return Err(Error::UnsupportedCharacter(ch));
-                }
-                chars.next();
-                tokens.push(if ch == '&' { Token::And } else { Token::Or });
-            }
-            '=' => {
-                chars.next();
-                if let Some('=') = chars.peek() {
-                    chars.next();
-                }
-                tokens.push(Token::Eq);
-            }
-            '>' => {
-                chars.next();
-                if let Some('=') = chars.peek() {
-                    chars.next();
-                    tokens.push(Token::Ge);
-                } else {
-                    tokens.push(Token::Gt);
-                }
-            }
-            '<' => {
-                chars.next();
-                if let Some('=') = chars.peek() {
-                    chars.next();
-                    tokens.push(Token::Le);
-                } else {
-                    tokens.push(Token::Lt);
-                }
-            }
-            '!' => {
-                chars.next();
-                if let Some('=') = chars.peek() {
-                    chars.next();
-                    tokens.push(Token::Ne);
-                } else {
-                    tokens.push(Token::Bang);
-                }
-            }
-
-            // Brackets.
-            '[' => {
-                chars.next();
-                tokens.push(Token::LBracket);
-            }
-            ']' => {
-                chars.next();
-                tokens.push(Token::RBracket);
-            }
-            '(' => {
-                chars.next();
-                tokens.push(Token::LParen);
-            }
-            ')' => {
-                chars.next();
-                tokens.push(Token::RParen);
-            }
-            '{' => {
-                chars.next();
-                tokens.push(Token::LBrace);
-            }
-            '}' => {
-                chars.next();
-                tokens.push(Token::RBrace);
-            }
-
-            // Punctuations.
-            ',' => {
-                chars.next();
-                tokens.push(Token::Comma);
-            }
-            ':' => {
-                chars.next();
-                if chars.peek() == Some(':') {
-                    chars.next();
-                    tokens.push(Token::DoubleColon);
-                } else if chars.peek() == Some('=') {
-                    chars.next();
-                    tokens.push(Token::Bind);
-                } else {
-                    tokens.push(Token::Colon);
-                }
-            }
-            '.' => {
-                chars.next();
-                tokens.push(Token::Dot);
-            }
-
-            // Float or Int.
-            c if c.is_ascii_digit() || c == '.' => {
-                let remaining = chars.as_str();
-                while let Some(c) = chars.peek() {
-                    if !(c.is_ascii_digit() || c == '.') {
-                        break;
-                    }
-                    chars.next();
-                }
-                let text = &remaining[..remaining.len() - chars.as_str().len()];
-                if text.contains('.') {
-                    tokens.push(Token::F64(text.parse::<f64>().unwrap()));
-                } else {
-                    tokens.push(Token::I64(text.parse::<i64>().unwrap()));
-                }
-            }
-
-            // Ident.
-            c if c.is_alphanumeric() || c == '_' => {
-                let remaining = chars.as_str();
-                while let Some(c) = chars.peek() {
-                    if !(c.is_alphanumeric() || c == '_') {
-                        break;
-                    }
-                    chars.next();
-                }
-
-                let text = &remaining[..remaining.len() - chars.as_str().len()];
-
-                // Check if it's a keyword or literal
-                match text {
-                    "AND" | "and" => tokens.push(Token::And),
-                    "OR" | "or" => tokens.push(Token::Or),
-                    "NOT" | "not" => tokens.push(Token::Not),
-                    "let" => tokens.push(Token::Let),
-                    "then" => tokens.push(Token::Then),
-                    "IN" | "in" => tokens.push(Token::In),
-
-                    "true" => tokens.push(Token::Bool(true)),
-                    "false" => tokens.push(Token::Bool(false)),
-                    "null" => tokens.push(Token::Null),
-
-                    _ => tokens.push(Token::Ident(text.to_owned())),
-                }
-            }
-
-            // Unsupported characters.
-            ch => {
-                return Err(Error::UnsupportedCharacter(ch));
-            }
-        }
+impl<'a> Lexer<'a> {
+    pub(crate) fn new(input: &'a str) -> Self {
+        Self { chars: CharCursor::new(input) }
     }
 
+    pub(crate) fn next_token(&mut self) -> Result<Option<Token>, Error> {
+        let chars = &mut self.chars;
+
+        while let Some(ch) = chars.peek() {
+            match ch {
+                // Skip whitespace.
+                c if c.is_whitespace() => {
+                    chars.next();
+                }
+
+                // Division or block comments.
+                '/' => {
+                    chars.next();
+                    if chars.peek() != Some('*') {
+                        return Ok(Some(Token::Div));
+                    }
+
+                    #[derive(Clone, Copy, PartialEq)]
+                    enum CommentState {
+                        NeedStar,
+                        ReadingComment,
+                        NeedSlash,
+                        Done,
+                    }
+                    let mut s = CommentState::NeedStar;
+
+                    while let Some(c) = chars.next() {
+                        match (s, c) {
+                            (CommentState::NeedStar, '*') => {
+                                s = CommentState::ReadingComment;
+                                continue;
+                            }
+                            (CommentState::NeedStar, _) => {
+                                return Err(Error::UnsupportedCharacter('/'));
+                            }
+                            (CommentState::ReadingComment, '*') => {
+                                s = CommentState::NeedSlash;
+                                continue;
+                            }
+                            (CommentState::ReadingComment, _) => {
+                                continue;
+                            }
+                            (CommentState::NeedSlash, '/') => {
+                                s = CommentState::Done;
+                                break;
+                            }
+                            (CommentState::NeedSlash, '*') => {
+                                continue;
+                            }
+                            (CommentState::NeedSlash, _) => {
+                                s = CommentState::ReadingComment;
+                                continue;
+                            }
+                            (CommentState::Done, _) => {
+                                unreachable!("s cannot be Done");
+                            }
+                        }
+                    }
+
+                    if s != CommentState::Done {
+                        return Err(Error::UnexpectedEOF);
+                    }
+                }
+
+                // String literal.
+                '\'' | '"' => {
+                    chars.next();
+                    let remaining = chars.as_str();
+                    let mut decoded: Option<String> = None;
+                    let value = loop {
+                        let c = chars.next().ok_or(Error::UnexpectedEOF)?;
+                        if c == ch {
+                            break match decoded {
+                                Some(value) => value,
+                                None => remaining[..remaining.len() - chars.as_str().len() - 1].to_owned(),
+                            };
+                        }
+                        if c == '\\' {
+                            let value = decoded.get_or_insert_with(|| {
+                                remaining[..remaining.len() - chars.as_str().len() - 1].to_owned()
+                            });
+                            let escaped = chars.next().ok_or(Error::UnexpectedEOF)?;
+                            value.push(match escaped {
+                                'n' => '\n',
+                                'r' => '\r',
+                                't' => '\t',
+                                other => other,
+                            });
+                        } else if let Some(value) = &mut decoded {
+                            value.push(c);
+                        }
+                    };
+                    return Ok(Some(Token::Str(value)));
+                }
+
+                // Operators.
+                '+' => {
+                    chars.next();
+                    return Ok(Some(Token::Add));
+                }
+                '-' => {
+                    chars.next();
+                    return Ok(Some(Token::Sub));
+                }
+                '*' => {
+                    chars.next();
+                    return Ok(Some(Token::Mul));
+                }
+                '%' => {
+                    chars.next();
+                    return Ok(Some(Token::Rem));
+                }
+
+                '&' | '|' => {
+                    chars.next();
+                    if chars.peek() != Some(ch) {
+                        return Err(Error::UnsupportedCharacter(ch));
+                    }
+                    chars.next();
+                    return Ok(Some(if ch == '&' { Token::And } else { Token::Or }));
+                }
+                '=' => {
+                    chars.next();
+                    if let Some('=') = chars.peek() {
+                        chars.next();
+                    }
+                    return Ok(Some(Token::Eq));
+                }
+                '>' => {
+                    chars.next();
+                    if let Some('=') = chars.peek() {
+                        chars.next();
+                        return Ok(Some(Token::Ge));
+                    } else {
+                        return Ok(Some(Token::Gt));
+                    }
+                }
+                '<' => {
+                    chars.next();
+                    if let Some('=') = chars.peek() {
+                        chars.next();
+                        return Ok(Some(Token::Le));
+                    } else {
+                        return Ok(Some(Token::Lt));
+                    }
+                }
+                '!' => {
+                    chars.next();
+                    if let Some('=') = chars.peek() {
+                        chars.next();
+                        return Ok(Some(Token::Ne));
+                    } else {
+                        return Ok(Some(Token::Bang));
+                    }
+                }
+
+                // Brackets.
+                '[' => {
+                    chars.next();
+                    return Ok(Some(Token::LBracket));
+                }
+                ']' => {
+                    chars.next();
+                    return Ok(Some(Token::RBracket));
+                }
+                '(' => {
+                    chars.next();
+                    return Ok(Some(Token::LParen));
+                }
+                ')' => {
+                    chars.next();
+                    return Ok(Some(Token::RParen));
+                }
+                '{' => {
+                    chars.next();
+                    return Ok(Some(Token::LBrace));
+                }
+                '}' => {
+                    chars.next();
+                    return Ok(Some(Token::RBrace));
+                }
+
+                // Punctuations.
+                ',' => {
+                    chars.next();
+                    return Ok(Some(Token::Comma));
+                }
+                ':' => {
+                    chars.next();
+                    if chars.peek() == Some(':') {
+                        chars.next();
+                        return Ok(Some(Token::DoubleColon));
+                    } else if chars.peek() == Some('=') {
+                        chars.next();
+                        return Ok(Some(Token::Bind));
+                    } else {
+                        return Ok(Some(Token::Colon));
+                    }
+                }
+                '.' => {
+                    chars.next();
+                    return Ok(Some(Token::Dot));
+                }
+
+                // Float or Int.
+                c if c.is_ascii_digit() || c == '.' => {
+                    let remaining = chars.as_str();
+                    while let Some(c) = chars.peek() {
+                        if !(c.is_ascii_digit() || c == '.') {
+                            break;
+                        }
+                        chars.next();
+                    }
+                    let text = &remaining[..remaining.len() - chars.as_str().len()];
+                    if text.contains('.') {
+                        return Ok(Some(Token::F64(text.parse::<f64>().unwrap())));
+                    } else {
+                        return Ok(Some(Token::I64(text.parse::<i64>().unwrap())));
+                    }
+                }
+
+                // Ident.
+                c if c.is_alphanumeric() || c == '_' => {
+                    let remaining = chars.as_str();
+                    while let Some(c) = chars.peek() {
+                        if !(c.is_alphanumeric() || c == '_') {
+                            break;
+                        }
+                        chars.next();
+                    }
+
+                    let text = &remaining[..remaining.len() - chars.as_str().len()];
+
+                    // Check if it's a keyword or literal
+                    match text {
+                        "AND" | "and" => return Ok(Some(Token::And)),
+                        "OR" | "or" => return Ok(Some(Token::Or)),
+                        "NOT" | "not" => return Ok(Some(Token::Not)),
+                        "let" => return Ok(Some(Token::Let)),
+                        "then" => return Ok(Some(Token::Then)),
+                        "IN" | "in" => return Ok(Some(Token::In)),
+
+                        "true" => return Ok(Some(Token::Bool(true))),
+                        "false" => return Ok(Some(Token::Bool(false))),
+                        "null" => return Ok(Some(Token::Null)),
+
+                        _ => return Ok(Some(Token::Ident(text.to_owned()))),
+                    }
+                }
+
+                // Unsupported characters.
+                ch => {
+                    return Err(Error::UnsupportedCharacter(ch));
+                }
+            }
+        }
+
+        Ok(None)
+    }
+}
+
+#[cfg(test)]
+fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
+    let mut lexer = Lexer::new(input);
+    let mut tokens = Vec::new();
+    while let Some(token) = lexer.next_token()? {
+        tokens.push(token);
+    }
     Ok(tokens)
 }
 
