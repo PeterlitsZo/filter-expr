@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::{CompactString, Error, expr::{Expr, ExprArena}, token::{Lexer, Token}};
+use crate::{CompactString, Error, LanguageVersion, expr::{Expr, ExprArena}, token::{Lexer, Token}};
 
 pub(crate) struct Parser<'a> {
     pub(crate) arena: ExprArena,
@@ -13,6 +13,14 @@ impl<'a> Parser<'a> {
         let mut lexer = Lexer::new(input);
         let next_token = lexer.next_token()?;
         Ok(Self { arena: ExprArena::default(), lexer, next_token })
+    }
+
+    pub(crate) fn language_version(&self) -> LanguageVersion {
+        self.lexer.language_version
+    }
+
+    pub(crate) fn is_empty(&self) -> bool {
+        self.next_token.is_none()
     }
 
     /// Parse a complete expression, rejecting trailing tokens.

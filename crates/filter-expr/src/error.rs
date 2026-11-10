@@ -9,6 +9,9 @@ pub enum Error {
     #[error("unsupported character: {0}")]
     UnsupportedCharacter(char),
 
+    #[error("unsupported language version: {0}; supported version: v1")]
+    UnsupportedLanguageVersion(String),
+
     #[error("unexpected EOF")]
     UnexpectedEOF,
 }

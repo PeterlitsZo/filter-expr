@@ -15,12 +15,20 @@ pub use error::Error;
 pub use expr::{Expr, ExprArena, ExprId};
 pub use transform::{Transform, TransformContext, TransformResult};
 
+/// The language semantics used to interpret an expression.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum LanguageVersion {
+    #[default]
+    V1,
+}
+
 /// The filter expression.
 #[derive(Clone)]
 pub struct FilterExpr {
     /// The expression of the filter. Possibly empty.
     expr: Option<Expr>,
     arena: ExprArena,
+    language_version: LanguageVersion,
 }
 
 impl Debug for FilterExpr {
@@ -46,8 +54,13 @@ impl FilterExpr {
         }
 
         let mut parser = parser::Parser::new(expr)?;
-        let expr = parser.parse()?;
-        Ok(Self { expr: Some(expr), arena: parser.arena })
+        let expr = if parser.is_empty() {
+            None
+        } else {
+            Some(parser.parse()?)
+        };
+        let language_version = parser.language_version();
+        Ok(Self { expr, arena: parser.arena, language_version })
     }
 
     /// Check if the filter expression is empty.
@@ -57,7 +70,11 @@ impl FilterExpr {
 
     /// Create a new filter expression with the given expression.
     pub fn new(expr: Option<Expr>, arena: ExprArena) -> Self {
-        Self { expr, arena }
+        Self { expr, arena, language_version: LanguageVersion::V1 }
+    }
+
+    pub fn language_version(&self) -> LanguageVersion {
+        self.language_version
     }
 
     /// Get the expression of the filter.
@@ -80,6 +97,9 @@ impl FilterExpr {
 
 impl PartialEq for FilterExpr {
     fn eq(&self, other: &Self) -> bool {
+        if self.language_version != other.language_version {
+            return false;
+        }
         match (&self.expr, &other.expr) {
             (Some(a), Some(b)) => a.eq_in(b, &self.arena, &other.arena),
             (None, None) => true,

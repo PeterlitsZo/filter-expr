@@ -1,4 +1,4 @@
-use crate::{CompactString, Error};
+use crate::{CompactString, Error, LanguageVersion};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Token {
@@ -103,29 +103,38 @@ impl<'a> CharCursor<'a> {
 
 pub(crate) struct Lexer<'a> {
     chars: CharCursor<'a>,
+    at_start: bool,
+    pub(crate) language_version: LanguageVersion,
 }
 
 impl<'a> Lexer<'a> {
     pub(crate) fn new(input: &'a str) -> Self {
-        Self { chars: CharCursor::new(input) }
+        Self {
+            chars: CharCursor::new(input),
+            at_start: true,
+            language_version: LanguageVersion::V1,
+        }
     }
 
     pub(crate) fn next_token(&mut self) -> Result<Option<Token>, Error> {
         let chars = &mut self.chars;
 
         while let Some(ch) = chars.peek() {
+            if ch.is_whitespace() {
+                chars.next();
+                continue;
+            }
+            let declaration_allowed = self.at_start;
+            self.at_start = false;
             match ch {
-                // Skip whitespace.
-                c if c.is_whitespace() => {
-                    chars.next();
-                }
-
                 // Division or block comments.
                 '/' => {
                     chars.next();
                     if chars.peek() != Some('*') {
                         return Ok(Some(Token::Div));
                     }
+
+                    let comment = chars.as_str();
 
                     #[derive(Clone, Copy, PartialEq)]
                     enum CommentState {
@@ -171,6 +180,22 @@ impl<'a> Lexer<'a> {
 
                     if s != CommentState::Done {
                         return Err(Error::UnexpectedEOF);
+                    }
+                    if declaration_allowed && comment.starts_with("*!") {
+                        let end = comment.len() - chars.as_str().len() - 2;
+                        let version = comment[2..end].trim();
+                        let valid = version.strip_prefix('v').is_some_and(|digits| {
+                            !digits.is_empty()
+                                && !digits.starts_with('0')
+                                && digits.bytes().all(|b| b.is_ascii_digit())
+                        });
+                        if !valid {
+                            continue;
+                        }
+                        self.language_version = match version {
+                            "v1" => LanguageVersion::V1,
+                            _ => return Err(Error::UnsupportedLanguageVersion(version.into())),
+                        };
                     }
                 }
 

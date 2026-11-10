@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-*Empty*
+- Support leading `/*! v1 */` language version comments.
+- Treat comment-only input as an empty expression.
 
 ## v0.6.1
 
