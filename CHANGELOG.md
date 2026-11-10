@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+*Empty*
+
+## v0.6.0
+
 - Support `DateTime::from_unix_ts()` and `datetime.to_unix_ts()` for UNIX
   seconds.
 - [BREAKING] Use an owned index arena for AST nodes and update AST APIs.
