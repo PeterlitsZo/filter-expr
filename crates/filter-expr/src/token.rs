@@ -168,103 +168,34 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
             }
 
             // String literal.
-            '\'' => {
+            '\'' | '"' => {
                 chars.next();
-                let mut s = String::new();
-                let mut escaped = false;
-                let mut closed = false;
-                while let Some(c) = chars.next() {
-                    match (escaped, c) {
-                        (false, '\'') => {
-                            closed = true;
-                            break;
-                        }
-                        (false, '\\') => {
-                            escaped = true;
-                        }
-                        (false, c) => {
-                            s.push(c);
-                        }
-
-                        (true, '\'') => {
-                            s.push('\'');
-                            escaped = false;
-                        }
-                        (true, 'n') => {
-                            s.push('\n');
-                            escaped = false;
-                        }
-                        (true, 'r') => {
-                            s.push('\r');
-                            escaped = false;
-                        }
-                        (true, 't') => {
-                            s.push('\t');
-                            escaped = false;
-                        }
-                        (true, '\\') => {
-                            s.push('\\');
-                            escaped = false;
-                        }
-                        (true, c) => {
-                            s.push(c);
-                            escaped = false;
-                        }
+                let remaining = chars.as_str();
+                let mut decoded: Option<String> = None;
+                let value = loop {
+                    let c = chars.next().ok_or(Error::UnexpectedEOF)?;
+                    if c == ch {
+                        break match decoded {
+                            Some(value) => value,
+                            None => remaining[..remaining.len() - chars.as_str().len() - 1].to_owned(),
+                        };
                     }
-                }
-                if !closed {
-                    return Err(Error::UnexpectedEOF);
-                }
-                tokens.push(Token::Str(s));
-            }
-            '"' => {
-                chars.next();
-                let mut s = String::new();
-                let mut escaped = false;
-                let mut closed = false;
-                while let Some(c) = chars.next() {
-                    match (escaped, c) {
-                        (false, '"') => {
-                            closed = true;
-                            break;
-                        }
-                        (false, '\\') => {
-                            escaped = true;
-                        }
-                        (false, c) => {
-                            s.push(c);
-                        }
-
-                        (true, '"') => {
-                            s.push('"');
-                            escaped = false;
-                        }
-                        (true, 'n') => {
-                            s.push('\n');
-                            escaped = false;
-                        }
-                        (true, 'r') => {
-                            s.push('\r');
-                            escaped = false;
-                        }
-                        (true, 't') => {
-                            s.push('\t');
-                            escaped = false;
-                        }
-                        (true, '\\') => {
-                            s.push('\\');
-                            escaped = false;
-                        }
-                        (true, c) => {
-                            s.push(c);
-                            escaped = false;
-                        }
+                    if c == '\\' {
+                        let value = decoded.get_or_insert_with(|| {
+                            remaining[..remaining.len() - chars.as_str().len() - 1].to_owned()
+                        });
+                        let escaped = chars.next().ok_or(Error::UnexpectedEOF)?;
+                        value.push(match escaped {
+                            'n' => '\n',
+                            'r' => '\r',
+                            't' => '\t',
+                            other => other,
+                        });
+                    } else if let Some(value) = &mut decoded {
+                        value.push(c);
                     }
-                }
-                if !closed {
-                    return Err(Error::UnexpectedEOF);
-                }
-                tokens.push(Token::Str(s));
+                };
+                tokens.push(Token::Str(value));
             }
 
             // Operators.
