@@ -249,6 +249,13 @@ impl Value {
     pub(crate) fn arithmetic(&self, other: &Self, op: ArithmeticOp) -> Result<Self> {
         use ArithmeticOp::*;
 
+        if let (Add, Self::Str(left), Self::Str(right)) = (op, self, other) {
+            let mut result = String::with_capacity(left.len() + right.len());
+            result.push_str(left);
+            result.push_str(right);
+            return Ok(Self::str(result));
+        }
+
         if let (Self::I64(left), Self::I64(right)) = (self, other) {
             if matches!(op, Div | Rem) && *right == 0 {
                 return Err(Error::new(ErrorKind::InvalidValue, "division by zero"));
@@ -270,8 +277,13 @@ impl Value {
             (Self::F64(left), Self::I64(right)) => (*left, *right as f64),
             (Self::F64(left), Self::F64(right)) => (*left, *right),
             _ => {
+                let message = if matches!(op, Add) {
+                    "expected numeric operands or two strings"
+                } else {
+                    "expected numeric operands"
+                };
                 return Err(
-                    Error::new(ErrorKind::TypeMismatch, "expected numeric operands")
+                    Error::new(ErrorKind::TypeMismatch, message)
                         .with_metadata("left", self.typ())
                         .with_metadata("right", other.typ()),
                 );

@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-*Empty*
+- Support string concatenation with the `+` operator.
 
 ## v0.6.0
 
