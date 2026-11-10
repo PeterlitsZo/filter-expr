@@ -1,8 +1,46 @@
-use std::cmp::Ordering;
 use std::collections::BTreeMap;
-use std::hash::{Hash, Hasher};
+use std::fmt;
 
 use crate::{CompactString, Error, Transform, TransformContext, TransformResult};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ExprId(usize);
+
+#[derive(Clone, Default)]
+pub struct ExprArena {
+    nodes: Vec<Expr>,
+}
+
+impl ExprArena {
+    pub fn alloc(&mut self, expr: Expr) -> ExprId {
+        if self.nodes.capacity() == 0 {
+            self.nodes.reserve(16);
+        }
+        let id = ExprId(self.nodes.len());
+        self.nodes.push(expr);
+        id
+    }
+
+    pub fn get(&self, id: ExprId) -> Option<&Expr> {
+        self.nodes.get(id.0)
+    }
+
+    fn optimize_node(&mut self, id: ExprId) -> ExprId {
+        let expr = self.get(id).unwrap().clone().optimize(self);
+        self.alloc(expr)
+    }
+
+    async fn transform_node<F: Transform>(
+        &mut self,
+        id: ExprId,
+        transformer: &mut F,
+        ctx: TransformContext,
+    ) -> Result<ExprId, Error> {
+        let expr = self.get(id).unwrap().clone();
+        let expr = Expr::transform_expr(self, transformer, expr, ctx).await?;
+        Ok(self.alloc(expr))
+    }
+}
 
 /// The expression.
 ///
@@ -10,7 +48,7 @@ use crate::{CompactString, Error, Transform, TransformContext, TransformResult};
 #[derive(Debug, Clone)]
 pub enum Expr {
     Field(CompactString),
-    FieldAccess(Box<Expr>, CompactString),
+    FieldAccess(ExprId, CompactString),
 
     Str(CompactString),
     I64(i64),
@@ -22,258 +60,29 @@ pub enum Expr {
     Object(BTreeMap<CompactString, Expr>),
 
     FuncCall(CompactString, Vec<Expr>),
-    MethodCall(CompactString, Box<Expr>, Vec<Expr>),
+    MethodCall(CompactString, ExprId, Vec<Expr>),
 
-    Add(Box<Expr>, Box<Expr>),
-    Sub(Box<Expr>, Box<Expr>),
-    Mul(Box<Expr>, Box<Expr>),
-    Div(Box<Expr>, Box<Expr>),
-    Rem(Box<Expr>, Box<Expr>),
-    Pos(Box<Expr>),
-    Neg(Box<Expr>),
+    Add(ExprId, ExprId),
+    Sub(ExprId, ExprId),
+    Mul(ExprId, ExprId),
+    Div(ExprId, ExprId),
+    Rem(ExprId, ExprId),
+    Pos(ExprId),
+    Neg(ExprId),
 
-    Gt(Box<Expr>, Box<Expr>),
-    Lt(Box<Expr>, Box<Expr>),
-    Ge(Box<Expr>, Box<Expr>),
-    Le(Box<Expr>, Box<Expr>),
-    Eq(Box<Expr>, Box<Expr>),
-    Ne(Box<Expr>, Box<Expr>),
-    In(Box<Expr>, Box<Expr>),
+    Gt(ExprId, ExprId),
+    Lt(ExprId, ExprId),
+    Ge(ExprId, ExprId),
+    Le(ExprId, ExprId),
+    Eq(ExprId, ExprId),
+    Ne(ExprId, ExprId),
+    In(ExprId, ExprId),
 
     And(Vec<Expr>),
     Or(Vec<Expr>),
-    Not(Box<Expr>),
+    Not(ExprId),
 
-    Let(CompactString, Box<Expr>, Box<Expr>),
-}
-
-impl PartialOrd for Expr {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Expr {
-    fn cmp(&self, other: &Self) -> Ordering {
-        use Expr::*;
-        use ordered_float::OrderedFloat;
-
-        // Helper function to get variant order.
-        fn variant_order(expr: &Expr) -> u16 {
-            use Expr::*;
-            match expr {
-                Field(..) => 100,
-                FieldAccess(..) => 101,
-
-                Str(..) => 200,
-                I64(..) => 201,
-                F64(..) => 202,
-                Bool(..) => 203,
-                Null => 204,
-
-                Array(..) => 300,
-                Object(..) => 301,
-
-                FuncCall(..) => 400,
-                MethodCall(..) => 401,
-
-                Add(..) => 500,
-                Sub(..) => 501,
-                Mul(..) => 502,
-                Div(..) => 503,
-                Rem(..) => 504,
-                Pos(..) => 505,
-                Neg(..) => 506,
-
-                Gt(..) => 600,
-                Lt(..) => 601,
-                Ge(..) => 602,
-                Le(..) => 603,
-                Eq(..) => 604,
-                Ne(..) => 605,
-                In(..) => 606,
-
-                And(..) => 700,
-                Or(..) => 701,
-                Not(..) => 702,
-
-                Let(..) => 800,
-            }
-        }
-
-        // First compare by variant order.
-        match variant_order(self).cmp(&variant_order(other)) {
-            Ordering::Equal => {
-                // Same variant, compare contents.
-                match (self, other) {
-                    (Field(a), Field(b)) => a.cmp(b),
-                    (FieldAccess(o1, f1), FieldAccess(o2, f2)) => match o1.cmp(o2) {
-                        Ordering::Equal => f1.cmp(f2),
-                        other => other,
-                    },
-
-                    (Str(a), Str(b)) => a.cmp(b),
-                    (I64(a), I64(b)) => a.cmp(b),
-                    (F64(a), F64(b)) => OrderedFloat(*a).cmp(&OrderedFloat(*b)),
-                    (Bool(a), Bool(b)) => a.cmp(b),
-                    (Null, Null) => Ordering::Equal,
-
-                    (Array(a), Array(b)) => a.cmp(b),
-                    (Object(a), Object(b)) => a.cmp(b),
-
-                    (FuncCall(f1, a1), FuncCall(f2, a2)) => match f1.cmp(f2) {
-                        Ordering::Equal => a1.cmp(a2),
-                        other => other,
-                    },
-                    (MethodCall(m1, o1, a1), MethodCall(m2, o2, a2)) => match m1.cmp(m2) {
-                        Ordering::Equal => match o1.cmp(o2) {
-                            Ordering::Equal => a1.cmp(a2),
-                            other => other,
-                        },
-                        other => other,
-                    },
-
-                    (Add(l1, r1), Add(l2, r2)) => (l1, r1).cmp(&(l2, r2)),
-                    (Sub(l1, r1), Sub(l2, r2)) => (l1, r1).cmp(&(l2, r2)),
-                    (Mul(l1, r1), Mul(l2, r2)) => (l1, r1).cmp(&(l2, r2)),
-                    (Div(l1, r1), Div(l2, r2)) => (l1, r1).cmp(&(l2, r2)),
-                    (Rem(l1, r1), Rem(l2, r2)) => (l1, r1).cmp(&(l2, r2)),
-                    (Pos(a), Pos(b)) => a.cmp(b),
-                    (Neg(a), Neg(b)) => a.cmp(b),
-
-                    (Gt(l1, r1), Gt(l2, r2)) => match l1.cmp(l2) {
-                        Ordering::Equal => r1.cmp(r2),
-                        other => other,
-                    },
-                    (Lt(l1, r1), Lt(l2, r2)) => match l1.cmp(l2) {
-                        Ordering::Equal => r1.cmp(r2),
-                        other => other,
-                    },
-                    (Ge(l1, r1), Ge(l2, r2)) => match l1.cmp(l2) {
-                        Ordering::Equal => r1.cmp(r2),
-                        other => other,
-                    },
-                    (Le(l1, r1), Le(l2, r2)) => match l1.cmp(l2) {
-                        Ordering::Equal => r1.cmp(r2),
-                        other => other,
-                    },
-                    (Eq(l1, r1), Eq(l2, r2)) => match l1.cmp(l2) {
-                        Ordering::Equal => r1.cmp(r2),
-                        other => other,
-                    },
-                    (Ne(l1, r1), Ne(l2, r2)) => match l1.cmp(l2) {
-                        Ordering::Equal => r1.cmp(r2),
-                        other => other,
-                    },
-                    (In(l1, r1), In(l2, r2)) => match l1.cmp(l2) {
-                        Ordering::Equal => r1.cmp(r2),
-                        other => other,
-                    },
-
-                    (And(a), And(b)) => a.cmp(b),
-                    (Or(a), Or(b)) => a.cmp(b),
-                    (Not(a), Not(b)) => a.cmp(b),
-
-                    (Let(n1, v1, b1), Let(n2, v2, b2)) => match n1.cmp(n2) {
-                        Ordering::Equal => match v1.cmp(v2) {
-                            Ordering::Equal => b1.cmp(b2),
-                            other => other,
-                        },
-                        other => other,
-                    },
-
-                    _ => unreachable!(),
-                }
-            }
-            other => other,
-        }
-    }
-}
-
-impl PartialEq for Expr {
-    fn eq(&self, other: &Self) -> bool {
-        self.cmp(other) == Ordering::Equal
-    }
-}
-
-impl Eq for Expr {}
-
-impl Hash for Expr {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        use Expr::*;
-        use ordered_float::OrderedFloat;
-
-        // Hash the discriminant first.
-        std::mem::discriminant(self).hash(state);
-
-        // Then hash the contents.
-        match self {
-            Field(s) => s.hash(state),
-            FieldAccess(obj, field) => {
-                obj.hash(state);
-                field.hash(state);
-            }
-
-            Str(s) => s.hash(state),
-            I64(i) => i.hash(state),
-            F64(f) => OrderedFloat(*f).hash(state),
-            Bool(b) => b.hash(state),
-            Null => {},
-            Array(v) => v.hash(state),
-            Object(v) => v.hash(state),
-            FuncCall(name, args) => {
-                name.hash(state);
-                args.hash(state);
-            }
-            MethodCall(method, obj, args) => {
-                method.hash(state);
-                obj.hash(state);
-                args.hash(state);
-            }
-            Add(l, r) | Sub(l, r) | Mul(l, r) | Div(l, r) | Rem(l, r) => {
-                l.hash(state);
-                r.hash(state);
-            }
-            Pos(e) | Neg(e) => e.hash(state),
-            Gt(l, r) => {
-                l.hash(state);
-                r.hash(state);
-            }
-            Lt(l, r) => {
-                l.hash(state);
-                r.hash(state);
-            }
-            Ge(l, r) => {
-                l.hash(state);
-                r.hash(state);
-            }
-            Le(l, r) => {
-                l.hash(state);
-                r.hash(state);
-            }
-            Eq(l, r) => {
-                l.hash(state);
-                r.hash(state);
-            }
-            Ne(l, r) => {
-                l.hash(state);
-                r.hash(state);
-            }
-            In(l, r) => {
-                l.hash(state);
-                r.hash(state);
-            }
-            And(v) => v.hash(state),
-            Or(v) => v.hash(state),
-            Not(e) => e.hash(state),
-
-            Let(name, value, body) => {
-                name.hash(state);
-                value.hash(state);
-                body.hash(state);
-            }
-        }
-    }
+    Let(CompactString, ExprId, ExprId),
 }
 
 impl Expr {
@@ -281,8 +90,8 @@ impl Expr {
         Self::Field(field.into())
     }
 
-    pub fn field_access_(obj: Expr, field: impl Into<CompactString>) -> Self {
-        Self::FieldAccess(Box::new(obj), field.into())
+    pub fn field_access_(obj: ExprId, field: impl Into<CompactString>) -> Self {
+        Self::FieldAccess(obj, field.into())
     }
 
     pub fn str_<T: Into<CompactString>>(value: T) -> Self {
@@ -317,64 +126,64 @@ impl Expr {
         Self::FuncCall(func.into(), args)
     }
 
-    pub fn method_call_(obj: Expr, method: impl Into<CompactString>, args: Vec<Expr>) -> Self {
-        Self::MethodCall(method.into(), Box::new(obj), args)
+    pub fn method_call_(obj: ExprId, method: impl Into<CompactString>, args: Vec<Expr>) -> Self {
+        Self::MethodCall(method.into(), obj, args)
     }
 
-    pub fn add_(left: Expr, right: Expr) -> Self {
-        Self::Add(Box::new(left), Box::new(right))
+    pub fn add_(left: ExprId, right: ExprId) -> Self {
+        Self::Add(left, right)
     }
 
-    pub fn sub_(left: Expr, right: Expr) -> Self {
-        Self::Sub(Box::new(left), Box::new(right))
+    pub fn sub_(left: ExprId, right: ExprId) -> Self {
+        Self::Sub(left, right)
     }
 
-    pub fn mul_(left: Expr, right: Expr) -> Self {
-        Self::Mul(Box::new(left), Box::new(right))
+    pub fn mul_(left: ExprId, right: ExprId) -> Self {
+        Self::Mul(left, right)
     }
 
-    pub fn div_(left: Expr, right: Expr) -> Self {
-        Self::Div(Box::new(left), Box::new(right))
+    pub fn div_(left: ExprId, right: ExprId) -> Self {
+        Self::Div(left, right)
     }
 
-    pub fn rem_(left: Expr, right: Expr) -> Self {
-        Self::Rem(Box::new(left), Box::new(right))
+    pub fn rem_(left: ExprId, right: ExprId) -> Self {
+        Self::Rem(left, right)
     }
 
-    pub fn pos_(expr: Expr) -> Self {
-        Self::Pos(Box::new(expr))
+    pub fn pos_(expr: ExprId) -> Self {
+        Self::Pos(expr)
     }
 
-    pub fn neg_(expr: Expr) -> Self {
-        Self::Neg(Box::new(expr))
+    pub fn neg_(expr: ExprId) -> Self {
+        Self::Neg(expr)
     }
 
-    pub fn gt_(left: Expr, right: Expr) -> Self {
-        Self::Gt(Box::new(left), Box::new(right))
+    pub fn gt_(left: ExprId, right: ExprId) -> Self {
+        Self::Gt(left, right)
     }
 
-    pub fn lt_(left: Expr, right: Expr) -> Self {
-        Self::Lt(Box::new(left), Box::new(right))
+    pub fn lt_(left: ExprId, right: ExprId) -> Self {
+        Self::Lt(left, right)
     }
 
-    pub fn ge_(left: Expr, right: Expr) -> Self {
-        Self::Ge(Box::new(left), Box::new(right))
+    pub fn ge_(left: ExprId, right: ExprId) -> Self {
+        Self::Ge(left, right)
     }
 
-    pub fn le_(left: Expr, right: Expr) -> Self {
-        Self::Le(Box::new(left), Box::new(right))
+    pub fn le_(left: ExprId, right: ExprId) -> Self {
+        Self::Le(left, right)
     }
 
-    pub fn eq_(left: Expr, right: Expr) -> Self {
-        Self::Eq(Box::new(left), Box::new(right))
+    pub fn eq_(left: ExprId, right: ExprId) -> Self {
+        Self::Eq(left, right)
     }
 
-    pub fn ne_(left: Expr, right: Expr) -> Self {
-        Self::Ne(Box::new(left), Box::new(right))
+    pub fn ne_(left: ExprId, right: ExprId) -> Self {
+        Self::Ne(left, right)
     }
 
-    pub fn in_(left: Expr, right: Expr) -> Self {
-        Self::In(Box::new(left), Box::new(right))
+    pub fn in_(left: ExprId, right: ExprId) -> Self {
+        Self::In(left, right)
     }
 
     pub fn and_<T: Into<Vec<Expr>>>(value: T) -> Self {
@@ -385,12 +194,12 @@ impl Expr {
         Self::Or(value.into())
     }
 
-    pub fn not_(self) -> Self {
-        Self::Not(Box::new(self))
+    pub fn not_(expr: ExprId) -> Self {
+        Self::Not(expr)
     }
 
-    pub fn let_(name: impl Into<CompactString>, value: Expr, body: Expr) -> Self {
-        Self::Let(name.into(), Box::new(value), Box::new(body))
+    pub fn let_(name: impl Into<CompactString>, value: ExprId, body: ExprId) -> Self {
+        Self::Let(name.into(), value, body)
     }
 }
 
@@ -398,14 +207,14 @@ impl Expr {
     /// Recursively transform an expression using the provided transformer.
     ///
     /// ```rust
-    /// use filter_expr::{Expr, Transform, TransformContext, TransformResult};
+    /// use filter_expr::{Expr, ExprArena, Transform, TransformContext, TransformResult};
     /// use async_trait::async_trait;
     ///
     /// struct MyTransformer;
     ///
     /// #[async_trait]
     /// impl Transform for MyTransformer {
-    ///     async fn transform(&mut self, expr: Expr, _ctx: TransformContext) -> TransformResult {
+    ///     async fn transform(&mut self, expr: Expr, _arena: &mut ExprArena, _ctx: TransformContext) -> TransformResult {
     ///         // Transform the expression before recursing
     ///         TransformResult::Continue(match expr {
     ///             Expr::Field(name) if name == "old_name" => {
@@ -420,22 +229,31 @@ impl Expr {
     /// # async fn main() {
     /// let expr = Expr::Field("old_name".into());
     /// let mut transformer = MyTransformer;
-    /// let result = expr.transform(&mut transformer).await.unwrap();
-    /// assert_eq!(result, Expr::Field("new_name".into()));
+    /// let result = expr.transform(&mut ExprArena::default(), &mut transformer).await.unwrap();
+    /// assert!(matches!(result, Expr::Field(name) if name == "new_name"));
     /// # }
     /// ```
-    pub async fn transform<F: Transform>(self, transformer: &mut F) -> Result<Expr, Error> {
+    pub async fn transform<F: Transform>(
+        self,
+        arena: &mut ExprArena,
+        transformer: &mut F,
+    ) -> Result<Expr, Error> {
         let ctx = TransformContext { depth: 0 };
 
-        return Self::transform_expr(transformer, self, ctx).await;
+        return Self::transform_expr(arena, transformer, self, ctx).await;
     }
 
-    async fn transform_expr<F: Transform>(transformer: &mut F, expr: Expr, ctx: TransformContext) -> Result<Expr, Error> {
-        let this = transformer.transform(expr, ctx.clone()).await;
+    async fn transform_expr<F: Transform>(
+        arena: &mut ExprArena,
+        transformer: &mut F,
+        expr: Expr,
+        ctx: TransformContext,
+    ) -> Result<Expr, Error> {
+        let this = transformer.transform(expr, arena, ctx.clone()).await;
 
         match this {
             TransformResult::Continue(expr) => {
-                return Box::pin(Self::transform_children(transformer, expr, ctx)).await;
+                return Box::pin(Self::transform_children(arena, transformer, expr, ctx)).await;
             }
             TransformResult::Stop(expr) => {
                 return Ok(expr);
@@ -446,14 +264,19 @@ impl Expr {
         }
     }
 
-    async fn transform_children<F: Transform>(transformer: &mut F, expr: Expr, mut ctx: TransformContext) -> Result<Expr, Error> {
+    async fn transform_children<F: Transform>(
+        arena: &mut ExprArena,
+        transformer: &mut F,
+        expr: Expr,
+        mut ctx: TransformContext,
+    ) -> Result<Expr, Error> {
         ctx.depth += 1;
 
         Ok(match expr {
             // Do nothing if the expression have no children.
             Expr::Field(name) => Expr::Field(name),
             Expr::FieldAccess(obj, field) => {
-                let obj = Box::new(Self::transform_expr(transformer, *obj, ctx.clone()).await?);
+                let obj = arena.transform_node(obj, transformer, ctx.clone()).await?;
                 Expr::FieldAccess(obj, field)
             }
 
@@ -466,14 +289,19 @@ impl Expr {
             Expr::Array(elements) => {
                 let mut transformed_elements = Vec::new();
                 for element in elements {
-                    transformed_elements.push(Self::transform_expr(transformer, element, ctx.clone()).await?);
+                    transformed_elements.push(
+                        Self::transform_expr(arena, transformer, element, ctx.clone()).await?,
+                    );
                 }
                 Expr::Array(transformed_elements)
             }
             Expr::Object(fields) => {
                 let mut transformed_fields = BTreeMap::new();
                 for (key, value) in fields {
-                    transformed_fields.insert(key, Self::transform_expr(transformer, value, ctx.clone()).await?);
+                    transformed_fields.insert(
+                        key,
+                        Self::transform_expr(arena, transformer, value, ctx.clone()).await?,
+                    );
                 }
                 Expr::Object(transformed_fields)
             }
@@ -481,107 +309,109 @@ impl Expr {
             Expr::FuncCall(func, args) => {
                 let mut transformed_args = Vec::new();
                 for arg in args {
-                    transformed_args.push(Self::transform_expr(transformer, arg, ctx.clone()).await?);
+                    transformed_args
+                        .push(Self::transform_expr(arena, transformer, arg, ctx.clone()).await?);
                 }
                 Expr::FuncCall(func, transformed_args)
             }
             Expr::MethodCall(method, obj, args) => {
-                let obj = Box::new(Self::transform_expr(transformer, *obj, ctx.clone()).await?);
+                let obj = arena.transform_node(obj, transformer, ctx.clone()).await?;
                 let mut transformed_args = Vec::new();
                 for arg in args {
-                    transformed_args.push(Self::transform_expr(transformer, arg, ctx.clone()).await?);
+                    transformed_args
+                        .push(Self::transform_expr(arena, transformer, arg, ctx.clone()).await?);
                 }
                 Expr::MethodCall(method, obj, transformed_args)
             }
 
             Expr::Add(left, right) => {
-                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
-                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
+                let left = arena.transform_node(left, transformer, ctx.clone()).await?;
+                let right = arena.transform_node(right, transformer, ctx).await?;
                 Expr::Add(left, right)
             }
             Expr::Sub(left, right) => {
-                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
-                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
+                let left = arena.transform_node(left, transformer, ctx.clone()).await?;
+                let right = arena.transform_node(right, transformer, ctx).await?;
                 Expr::Sub(left, right)
             }
             Expr::Mul(left, right) => {
-                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
-                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
+                let left = arena.transform_node(left, transformer, ctx.clone()).await?;
+                let right = arena.transform_node(right, transformer, ctx).await?;
                 Expr::Mul(left, right)
             }
             Expr::Div(left, right) => {
-                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
-                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
+                let left = arena.transform_node(left, transformer, ctx.clone()).await?;
+                let right = arena.transform_node(right, transformer, ctx).await?;
                 Expr::Div(left, right)
             }
             Expr::Rem(left, right) => {
-                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
-                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
+                let left = arena.transform_node(left, transformer, ctx.clone()).await?;
+                let right = arena.transform_node(right, transformer, ctx).await?;
                 Expr::Rem(left, right)
             }
-            Expr::Pos(expr) => Expr::Pos(Box::new(
-                Self::transform_expr(transformer, *expr, ctx).await?,
-            )),
-            Expr::Neg(expr) => Expr::Neg(Box::new(
-                Self::transform_expr(transformer, *expr, ctx).await?,
-            )),
+            Expr::Pos(expr) => Expr::Pos(arena.transform_node(expr, transformer, ctx).await?),
+            Expr::Neg(expr) => Expr::Neg(arena.transform_node(expr, transformer, ctx).await?),
             Expr::Gt(left, right) => {
-                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
-                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
+                let left = arena.transform_node(left, transformer, ctx.clone()).await?;
+                let right = arena.transform_node(right, transformer, ctx).await?;
                 Expr::Gt(left, right)
             }
             Expr::Lt(left, right) => {
-                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
-                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
+                let left = arena.transform_node(left, transformer, ctx.clone()).await?;
+                let right = arena.transform_node(right, transformer, ctx).await?;
                 Expr::Lt(left, right)
             }
             Expr::Ge(left, right) => {
-                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
-                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
+                let left = arena.transform_node(left, transformer, ctx.clone()).await?;
+                let right = arena.transform_node(right, transformer, ctx).await?;
                 Expr::Ge(left, right)
             }
             Expr::Le(left, right) => {
-                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
-                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
+                let left = arena.transform_node(left, transformer, ctx.clone()).await?;
+                let right = arena.transform_node(right, transformer, ctx).await?;
                 Expr::Le(left, right)
             }
             Expr::Eq(left, right) => {
-                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
-                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
+                let left = arena.transform_node(left, transformer, ctx.clone()).await?;
+                let right = arena.transform_node(right, transformer, ctx).await?;
                 Expr::Eq(left, right)
             }
             Expr::Ne(left, right) => {
-                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
-                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
+                let left = arena.transform_node(left, transformer, ctx.clone()).await?;
+                let right = arena.transform_node(right, transformer, ctx).await?;
                 Expr::Ne(left, right)
             }
             Expr::In(left, right) => {
-                let left = Box::new(Self::transform_expr(transformer, *left, ctx.clone()).await?);
-                let right = Box::new(Self::transform_expr(transformer, *right, ctx).await?);
+                let left = arena.transform_node(left, transformer, ctx.clone()).await?;
+                let right = arena.transform_node(right, transformer, ctx).await?;
                 Expr::In(left, right)
             }
             Expr::And(exprs) => {
                 let mut transformed_exprs = Vec::new();
                 for e in exprs {
-                    transformed_exprs.push(Self::transform_expr(transformer, e, ctx.clone()).await?);
+                    transformed_exprs
+                        .push(Self::transform_expr(arena, transformer, e, ctx.clone()).await?);
                 }
                 Expr::And(transformed_exprs)
             }
             Expr::Or(exprs) => {
                 let mut transformed_exprs = Vec::new();
                 for e in exprs {
-                    transformed_exprs.push(Self::transform_expr(transformer, e, ctx.clone()).await?);
+                    transformed_exprs
+                        .push(Self::transform_expr(arena, transformer, e, ctx.clone()).await?);
                 }
                 Expr::Or(transformed_exprs)
             }
             Expr::Not(expr) => {
-                let expr = Box::new(Self::transform_expr(transformer, *expr, ctx).await?);
+                let expr = arena.transform_node(expr, transformer, ctx).await?;
                 Expr::Not(expr)
             }
 
             Expr::Let(name, value, body) => {
-                let value = Box::new(Self::transform_expr(transformer, *value, ctx.clone()).await?);
-                let body = Box::new(Self::transform_expr(transformer, *body, ctx.clone()).await?);
+                let value = arena
+                    .transform_node(value, transformer, ctx.clone())
+                    .await?;
+                let body = arena.transform_node(body, transformer, ctx.clone()).await?;
                 Expr::Let(name, value, body)
             }
         })
@@ -601,7 +431,7 @@ impl Expr {
     /// - `true AND false` → `false`
     /// - `NOT NOT expr` → `expr`
     /// - `1 > 2` → `false`
-    pub fn optimize(self) -> Self {
+    pub fn optimize(self, arena: &mut ExprArena) -> Self {
         use Expr::*;
 
         match self {
@@ -609,107 +439,108 @@ impl Expr {
             Field(_) | Str(_) | I64(_) | F64(_) | Bool(_) | Null => self,
 
             // Field access - optimize the object.
-            FieldAccess(obj, field) => {
-                FieldAccess(Box::new(obj.optimize()), field)
-            }
+            FieldAccess(obj, field) => FieldAccess(arena.optimize_node(obj), field),
 
             // Array - optimize all elements.
-            Array(elements) => {
-                Array(elements.into_iter().map(|e| e.optimize()).collect())
-            }
+            Array(elements) => Array(elements.into_iter().map(|e| e.optimize(arena)).collect()),
 
             // Object - optimize all field values.
-            Object(fields) => {
-                Object(fields.into_iter().map(|(key, value)| (key, value.optimize())).collect())
-            }
+            Object(fields) => Object(
+                fields
+                    .into_iter()
+                    .map(|(key, value)| (key, value.optimize(arena)))
+                    .collect(),
+            ),
 
             // Function call - optimize all arguments.
             FuncCall(func, args) => {
-                FuncCall(func, args.into_iter().map(|a| a.optimize()).collect())
+                FuncCall(func, args.into_iter().map(|a| a.optimize(arena)).collect())
             }
 
             // Method call - optimize object and arguments.
-            MethodCall(method, obj, args) => {
-                MethodCall(method, Box::new(obj.optimize()), args.into_iter().map(|a| a.optimize()).collect())
-            }
+            MethodCall(method, obj, args) => MethodCall(
+                method,
+                arena.optimize_node(obj),
+                args.into_iter().map(|a| a.optimize(arena)).collect(),
+            ),
 
-            Add(left, right) => Add(Box::new(left.optimize()), Box::new(right.optimize())),
-            Sub(left, right) => Sub(Box::new(left.optimize()), Box::new(right.optimize())),
-            Mul(left, right) => Mul(Box::new(left.optimize()), Box::new(right.optimize())),
-            Div(left, right) => Div(Box::new(left.optimize()), Box::new(right.optimize())),
-            Rem(left, right) => Rem(Box::new(left.optimize()), Box::new(right.optimize())),
-            Pos(expr) => Pos(Box::new(expr.optimize())),
-            Neg(expr) => Neg(Box::new(expr.optimize())),
+            Add(left, right) => Add(arena.optimize_node(left), arena.optimize_node(right)),
+            Sub(left, right) => Sub(arena.optimize_node(left), arena.optimize_node(right)),
+            Mul(left, right) => Mul(arena.optimize_node(left), arena.optimize_node(right)),
+            Div(left, right) => Div(arena.optimize_node(left), arena.optimize_node(right)),
+            Rem(left, right) => Rem(arena.optimize_node(left), arena.optimize_node(right)),
+            Pos(expr) => Pos(arena.optimize_node(expr)),
+            Neg(expr) => Neg(arena.optimize_node(expr)),
 
             // Comparison operators - optimize and fold constants.
             Gt(left, right) => {
-                let left = left.optimize();
-                let right = right.optimize();
+                let left = arena.get(left).unwrap().clone().optimize(arena);
+                let right = arena.get(right).unwrap().clone().optimize(arena);
                 match (&left, &right) {
                     (I64(a), I64(b)) => Bool(*a > *b),
                     (F64(a), F64(b)) => Bool(*a > *b),
                     (Str(a), Str(b)) => Bool(a > b),
-                    _ => Gt(Box::new(left), Box::new(right)),
+                    _ => Gt(arena.alloc(left), arena.alloc(right)),
                 }
             }
             Lt(left, right) => {
-                let left = left.optimize();
-                let right = right.optimize();
+                let left = arena.get(left).unwrap().clone().optimize(arena);
+                let right = arena.get(right).unwrap().clone().optimize(arena);
                 match (&left, &right) {
                     (I64(a), I64(b)) => Bool(*a < *b),
                     (F64(a), F64(b)) => Bool(*a < *b),
                     (Str(a), Str(b)) => Bool(a < b),
-                    _ => Lt(Box::new(left), Box::new(right)),
+                    _ => Lt(arena.alloc(left), arena.alloc(right)),
                 }
             }
             Ge(left, right) => {
-                let left = left.optimize();
-                let right = right.optimize();
+                let left = arena.get(left).unwrap().clone().optimize(arena);
+                let right = arena.get(right).unwrap().clone().optimize(arena);
                 match (&left, &right) {
                     (I64(a), I64(b)) => Bool(*a >= *b),
                     (F64(a), F64(b)) => Bool(*a >= *b),
                     (Str(a), Str(b)) => Bool(a >= b),
-                    _ => Ge(Box::new(left), Box::new(right)),
+                    _ => Ge(arena.alloc(left), arena.alloc(right)),
                 }
             }
             Le(left, right) => {
-                let left = left.optimize();
-                let right = right.optimize();
+                let left = arena.get(left).unwrap().clone().optimize(arena);
+                let right = arena.get(right).unwrap().clone().optimize(arena);
                 match (&left, &right) {
                     (I64(a), I64(b)) => Bool(*a <= *b),
                     (F64(a), F64(b)) => Bool(*a <= *b),
                     (Str(a), Str(b)) => Bool(a <= b),
-                    _ => Le(Box::new(left), Box::new(right)),
+                    _ => Le(arena.alloc(left), arena.alloc(right)),
                 }
             }
             Eq(left, right) => {
-                let left = left.optimize();
-                let right = right.optimize();
+                let left = arena.get(left).unwrap().clone().optimize(arena);
+                let right = arena.get(right).unwrap().clone().optimize(arena);
                 match (&left, &right) {
                     (I64(a), I64(b)) => Bool(*a == *b),
                     (F64(a), F64(b)) => Bool(*a == *b),
                     (Str(a), Str(b)) => Bool(a == b),
                     (Bool(a), Bool(b)) => Bool(*a == *b),
                     (Null, Null) => Bool(true),
-                    _ => Eq(Box::new(left), Box::new(right)),
+                    _ => Eq(arena.alloc(left), arena.alloc(right)),
                 }
             }
             Ne(left, right) => {
-                let left = left.optimize();
-                let right = right.optimize();
+                let left = arena.get(left).unwrap().clone().optimize(arena);
+                let right = arena.get(right).unwrap().clone().optimize(arena);
                 match (&left, &right) {
                     (I64(a), I64(b)) => Bool(*a != *b),
                     (F64(a), F64(b)) => Bool(*a != *b),
                     (Str(a), Str(b)) => Bool(a != b),
                     (Bool(a), Bool(b)) => Bool(*a != *b),
                     (Null, Null) => Bool(false),
-                    _ => Ne(Box::new(left), Box::new(right)),
+                    _ => Ne(arena.alloc(left), arena.alloc(right)),
                 }
             }
             In(left, right) => {
-                let left = left.optimize();
-                let right = right.optimize();
-                In(Box::new(left), Box::new(right))
+                let left = arena.get(left).unwrap().clone().optimize(arena);
+                let right = arena.get(right).unwrap().clone().optimize(arena);
+                In(arena.alloc(left), arena.alloc(right))
             }
 
             // AND optimization.
@@ -718,7 +549,7 @@ impl Expr {
                 let mut has_false = false;
 
                 for expr in exprs {
-                    let opt_expr = expr.optimize();
+                    let opt_expr = expr.optimize(arena);
                     match &opt_expr {
                         Bool(true) => {
                             // Skip true values in AND.
@@ -754,7 +585,7 @@ impl Expr {
                 let mut has_true = false;
 
                 for expr in exprs {
-                    let opt_expr = expr.optimize();
+                    let opt_expr = expr.optimize(arena);
                     match &opt_expr {
                         Bool(false) => {
                             // Skip false values in OR
@@ -786,42 +617,259 @@ impl Expr {
 
             // NOT optimization.
             Not(expr) => {
-                let opt_expr = expr.optimize();
+                let opt_expr = arena.get(expr).unwrap().clone().optimize(arena);
                 match opt_expr {
                     Bool(true) => Bool(false),
                     Bool(false) => Bool(true),
                     Not(inner) => {
                         // Double negation: NOT NOT expr -> expr
-                        *inner
+                        arena.get(inner).unwrap().clone()
                     }
-                    other => Not(Box::new(other)),
+                    other => Not(arena.alloc(other)),
                 }
             }
 
             // Optimize the binding value and body.
             Let(name, value, body) => {
-                Let(name, Box::new(value.optimize()), Box::new(body.optimize()))
+                Let(name, arena.optimize_node(value), arena.optimize_node(body))
             }
+        }
+    }
+}
+
+impl Expr {
+    pub(crate) fn eq_in(&self, other: &Self, arena: &ExprArena, other_arena: &ExprArena) -> bool {
+        let nodes_eq = |a, b| {
+            arena
+                .get(a)
+                .unwrap()
+                .eq_in(other_arena.get(b).unwrap(), arena, other_arena)
+        };
+        let lists_eq = |a: &[Expr], b: &[Expr]| {
+            a.len() == b.len() && a.iter().zip(b).all(|(a, b)| a.eq_in(b, arena, other_arena))
+        };
+        match (self, other) {
+            (Self::Field(a), Self::Field(b)) | (Self::Str(a), Self::Str(b)) => a == b,
+            (Self::I64(a), Self::I64(b)) => a == b,
+            (Self::F64(a), Self::F64(b)) => {
+                ordered_float::OrderedFloat(*a) == ordered_float::OrderedFloat(*b)
+            }
+            (Self::Bool(a), Self::Bool(b)) => a == b,
+            (Self::Null, Self::Null) => true,
+            (Self::FieldAccess(a, field_a), Self::FieldAccess(b, field_b)) => {
+                field_a == field_b && nodes_eq(*a, *b)
+            }
+            (Self::Array(a), Self::Array(b))
+            | (Self::And(a), Self::And(b))
+            | (Self::Or(a), Self::Or(b)) => lists_eq(a, b),
+            (Self::Object(a), Self::Object(b)) => {
+                a.len() == b.len()
+                    && a.iter()
+                        .zip(b)
+                        .all(|((ka, a), (kb, b))| ka == kb && a.eq_in(b, arena, other_arena))
+            }
+            (Self::FuncCall(a, args_a), Self::FuncCall(b, args_b)) => {
+                a == b && lists_eq(args_a, args_b)
+            }
+            (Self::MethodCall(a, obj_a, args_a), Self::MethodCall(b, obj_b, args_b)) => {
+                a == b && nodes_eq(*obj_a, *obj_b) && lists_eq(args_a, args_b)
+            }
+            (Self::Add(al, ar), Self::Add(bl, br))
+            | (Self::Sub(al, ar), Self::Sub(bl, br))
+            | (Self::Mul(al, ar), Self::Mul(bl, br))
+            | (Self::Div(al, ar), Self::Div(bl, br))
+            | (Self::Rem(al, ar), Self::Rem(bl, br))
+            | (Self::Gt(al, ar), Self::Gt(bl, br))
+            | (Self::Lt(al, ar), Self::Lt(bl, br))
+            | (Self::Ge(al, ar), Self::Ge(bl, br))
+            | (Self::Le(al, ar), Self::Le(bl, br))
+            | (Self::Eq(al, ar), Self::Eq(bl, br))
+            | (Self::Ne(al, ar), Self::Ne(bl, br))
+            | (Self::In(al, ar), Self::In(bl, br)) => nodes_eq(*al, *bl) && nodes_eq(*ar, *br),
+            (Self::Pos(a), Self::Pos(b))
+            | (Self::Neg(a), Self::Neg(b))
+            | (Self::Not(a), Self::Not(b)) => nodes_eq(*a, *b),
+            (Self::Let(a, av, ab), Self::Let(b, bv, bb)) => {
+                a == b && nodes_eq(*av, *bv) && nodes_eq(*ab, *bb)
+            }
+            _ => false,
+        }
+    }
+}
+
+pub(crate) struct ExprDebug<'a>(pub(crate) &'a Expr, pub(crate) &'a ExprArena);
+
+struct ExprListDebug<'a>(&'a [Expr], &'a ExprArena);
+
+impl fmt::Debug for ExprListDebug<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list()
+            .entries(self.0.iter().map(|expr| ExprDebug(expr, self.1)))
+            .finish()
+    }
+}
+
+struct ExprMapDebug<'a>(&'a BTreeMap<CompactString, Expr>, &'a ExprArena);
+
+impl fmt::Debug for ExprMapDebug<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_map()
+            .entries(
+                self.0
+                    .iter()
+                    .map(|(key, expr)| (key, ExprDebug(expr, self.1))),
+            )
+            .finish()
+    }
+}
+
+impl fmt::Debug for ExprDebug<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            Expr::Field(name) => f.debug_tuple("Field").field(name).finish(),
+            Expr::FieldAccess(obj, field) => f
+                .debug_tuple("FieldAccess")
+                .field(&ExprDebug(self.1.get(*obj).unwrap(), self.1))
+                .field(field)
+                .finish(),
+            Expr::Str(value) => f.debug_tuple("Str").field(value).finish(),
+            Expr::I64(value) => f.debug_tuple("I64").field(value).finish(),
+            Expr::F64(value) => f.debug_tuple("F64").field(value).finish(),
+            Expr::Bool(value) => f.debug_tuple("Bool").field(value).finish(),
+            Expr::Null => f.write_str("Null"),
+            Expr::Array(elements) => f
+                .debug_tuple("Array")
+                .field(&ExprListDebug(elements, self.1))
+                .finish(),
+            Expr::Object(fields) => f
+                .debug_tuple("Object")
+                .field(&ExprMapDebug(fields, self.1))
+                .finish(),
+            Expr::FuncCall(func, args) => f
+                .debug_tuple("FuncCall")
+                .field(func)
+                .field(&ExprListDebug(args, self.1))
+                .finish(),
+            Expr::MethodCall(method, obj, args) => f
+                .debug_tuple("MethodCall")
+                .field(method)
+                .field(&ExprDebug(self.1.get(*obj).unwrap(), self.1))
+                .field(&ExprListDebug(args, self.1))
+                .finish(),
+            Expr::Add(left, right) => f
+                .debug_tuple("Add")
+                .field(&ExprDebug(self.1.get(*left).unwrap(), self.1))
+                .field(&ExprDebug(self.1.get(*right).unwrap(), self.1))
+                .finish(),
+            Expr::Sub(left, right) => f
+                .debug_tuple("Sub")
+                .field(&ExprDebug(self.1.get(*left).unwrap(), self.1))
+                .field(&ExprDebug(self.1.get(*right).unwrap(), self.1))
+                .finish(),
+            Expr::Mul(left, right) => f
+                .debug_tuple("Mul")
+                .field(&ExprDebug(self.1.get(*left).unwrap(), self.1))
+                .field(&ExprDebug(self.1.get(*right).unwrap(), self.1))
+                .finish(),
+            Expr::Div(left, right) => f
+                .debug_tuple("Div")
+                .field(&ExprDebug(self.1.get(*left).unwrap(), self.1))
+                .field(&ExprDebug(self.1.get(*right).unwrap(), self.1))
+                .finish(),
+            Expr::Rem(left, right) => f
+                .debug_tuple("Rem")
+                .field(&ExprDebug(self.1.get(*left).unwrap(), self.1))
+                .field(&ExprDebug(self.1.get(*right).unwrap(), self.1))
+                .finish(),
+            Expr::Pos(expr) => f
+                .debug_tuple("Pos")
+                .field(&ExprDebug(self.1.get(*expr).unwrap(), self.1))
+                .finish(),
+            Expr::Neg(expr) => f
+                .debug_tuple("Neg")
+                .field(&ExprDebug(self.1.get(*expr).unwrap(), self.1))
+                .finish(),
+            Expr::Gt(left, right) => f
+                .debug_tuple("Gt")
+                .field(&ExprDebug(self.1.get(*left).unwrap(), self.1))
+                .field(&ExprDebug(self.1.get(*right).unwrap(), self.1))
+                .finish(),
+            Expr::Lt(left, right) => f
+                .debug_tuple("Lt")
+                .field(&ExprDebug(self.1.get(*left).unwrap(), self.1))
+                .field(&ExprDebug(self.1.get(*right).unwrap(), self.1))
+                .finish(),
+            Expr::Ge(left, right) => f
+                .debug_tuple("Ge")
+                .field(&ExprDebug(self.1.get(*left).unwrap(), self.1))
+                .field(&ExprDebug(self.1.get(*right).unwrap(), self.1))
+                .finish(),
+            Expr::Le(left, right) => f
+                .debug_tuple("Le")
+                .field(&ExprDebug(self.1.get(*left).unwrap(), self.1))
+                .field(&ExprDebug(self.1.get(*right).unwrap(), self.1))
+                .finish(),
+            Expr::Eq(left, right) => f
+                .debug_tuple("Eq")
+                .field(&ExprDebug(self.1.get(*left).unwrap(), self.1))
+                .field(&ExprDebug(self.1.get(*right).unwrap(), self.1))
+                .finish(),
+            Expr::Ne(left, right) => f
+                .debug_tuple("Ne")
+                .field(&ExprDebug(self.1.get(*left).unwrap(), self.1))
+                .field(&ExprDebug(self.1.get(*right).unwrap(), self.1))
+                .finish(),
+            Expr::In(left, right) => f
+                .debug_tuple("In")
+                .field(&ExprDebug(self.1.get(*left).unwrap(), self.1))
+                .field(&ExprDebug(self.1.get(*right).unwrap(), self.1))
+                .finish(),
+            Expr::And(exprs) => f
+                .debug_tuple("And")
+                .field(&ExprListDebug(exprs, self.1))
+                .finish(),
+            Expr::Or(exprs) => f
+                .debug_tuple("Or")
+                .field(&ExprListDebug(exprs, self.1))
+                .finish(),
+            Expr::Not(expr) => f
+                .debug_tuple("Not")
+                .field(&ExprDebug(self.1.get(*expr).unwrap(), self.1))
+                .finish(),
+            Expr::Let(name, value, body) => f
+                .debug_tuple("Let")
+                .field(name)
+                .field(&ExprDebug(self.1.get(*value).unwrap(), self.1))
+                .field(&ExprDebug(self.1.get(*body).unwrap(), self.1))
+                .finish(),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    macro_rules! alloc {
+        ($arena:expr, $expr:expr) => {{
+            let expr = $expr;
+            $arena.alloc(expr)
+        }};
+    }
+
     use super::*;
 
     #[test]
     fn test_optimize() {
+        let mut arena = crate::ExprArena::default();
         let expr = Expr::And(vec![Expr::Bool(true), Expr::Bool(false)]);
-        let optimized = expr.optimize();
-        assert_eq!(optimized, Expr::Bool(false));
+        let optimized = expr.optimize(&mut arena);
+        assert!(matches!(optimized, Expr::Bool(false)));
 
         let expr = Expr::Or(vec![Expr::Bool(false), Expr::Bool(true)]);
-        let optimized = expr.optimize();
-        assert_eq!(optimized, Expr::Bool(true));
+        let optimized = expr.optimize(&mut arena);
+        assert!(matches!(optimized, Expr::Bool(true)));
 
-        let expr = Expr::Not(Box::new(Expr::Bool(true)));
-        let optimized = expr.optimize();
-        assert_eq!(optimized, Expr::Bool(false));
+        let expr = Expr::Not(alloc!(arena, Expr::Bool(true)));
+        let optimized = expr.optimize(&mut arena);
+        assert!(matches!(optimized, Expr::Bool(false)));
     }
 }

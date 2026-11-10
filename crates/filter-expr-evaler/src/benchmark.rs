@@ -64,8 +64,7 @@ pub async fn run() {
     println!("Stages are measured independently; parent timings are not sums.");
     for (name, source) in cases {
         let filter = FilterExpr::parse(source).unwrap();
-        let expr = filter.expr().unwrap();
-        let asm = AsmCodegen::new().codegen(expr);
+        let asm = AsmCodegen::new(&filter).codegen();
         let bytecode = BytecodeCodegen::new().codegen(asm.clone());
         let evaler = FilterExprEvaler::new();
         let env = &evaler.env;
@@ -115,7 +114,7 @@ pub async fn run() {
             "   │  ├─ ast -> asm",
             iterations,
             || (),
-            |()| async { AsmCodegen::new().codegen(black_box(expr)) },
+            |()| async { AsmCodegen::new(black_box(&filter)).codegen() },
         )
         .await;
         measure(

@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
-use crate::{CompactString, Error, expr::Expr, token::{Lexer, Token}};
+use crate::{CompactString, Error, expr::{Expr, ExprArena}, token::{Lexer, Token}};
 
 pub(crate) struct Parser<'a> {
+    pub(crate) arena: ExprArena,
     lexer: Lexer<'a>,
     next_token: Option<Token>,
 }
@@ -11,7 +12,7 @@ impl<'a> Parser<'a> {
     pub(crate) fn new(input: &'a str) -> Result<Self, Error> {
         let mut lexer = Lexer::new(input);
         let next_token = lexer.next_token()?;
-        Ok(Self { lexer, next_token })
+        Ok(Self { arena: ExprArena::default(), lexer, next_token })
     }
 
     /// Parse a complete expression, rejecting trailing tokens.
@@ -50,7 +51,7 @@ impl<'a> Parser<'a> {
         }
         self.advance()?;
         let body = self.parse_expr()?;
-        Ok(Expr::let_(name, value, body))
+        Ok(Expr::let_(name, self.arena.alloc(value), self.arena.alloc(body)))
     }
 
     /// ```text
@@ -119,7 +120,7 @@ impl<'a> Parser<'a> {
         if matches!(self.peek(), Some(Token::Not | Token::Bang)) {
             self.advance()?; // consume NOT or !
             let expr = self.parse_and_test()?;
-            return Ok(Expr::Not(Box::new(expr)));
+            return Ok(Expr::Not(self.arena.alloc(expr)));
         }
 
         self.parse_comparison()
@@ -150,13 +151,13 @@ impl<'a> Parser<'a> {
                 let right = self.parse_comparison()?;
 
                 Ok(match operator {
-                    Some(Token::Eq) => Expr::Eq(Box::new(primary), Box::new(right)),
-                    Some(Token::Gt) => Expr::Gt(Box::new(primary), Box::new(right)),
-                    Some(Token::Lt) => Expr::Lt(Box::new(primary), Box::new(right)),
-                    Some(Token::Ge) => Expr::Ge(Box::new(primary), Box::new(right)),
-                    Some(Token::Le) => Expr::Le(Box::new(primary), Box::new(right)),
-                    Some(Token::Ne) => Expr::Ne(Box::new(primary), Box::new(right)),
-                    Some(Token::In) => Expr::In(Box::new(primary), Box::new(right)),
+                    Some(Token::Eq) => Expr::Eq(self.arena.alloc(primary), self.arena.alloc(right)),
+                    Some(Token::Gt) => Expr::Gt(self.arena.alloc(primary), self.arena.alloc(right)),
+                    Some(Token::Lt) => Expr::Lt(self.arena.alloc(primary), self.arena.alloc(right)),
+                    Some(Token::Ge) => Expr::Ge(self.arena.alloc(primary), self.arena.alloc(right)),
+                    Some(Token::Le) => Expr::Le(self.arena.alloc(primary), self.arena.alloc(right)),
+                    Some(Token::Ne) => Expr::Ne(self.arena.alloc(primary), self.arena.alloc(right)),
+                    Some(Token::In) => Expr::In(self.arena.alloc(primary), self.arena.alloc(right)),
                     _ => {
                         let err_msg = format!("unexpected operator: {operator:?}");
                         return Err(Error::Parse(err_msg));
@@ -182,10 +183,8 @@ impl<'a> Parser<'a> {
                 let right = self.parse_comparison()?;
 
                 // Return the result.
-                Ok(Expr::Not(Box::new(Expr::In(
-                    Box::new(primary),
-                    Box::new(right),
-                ))))
+                let expr = Expr::In(self.arena.alloc(primary), self.arena.alloc(right));
+                Ok(Expr::Not(self.arena.alloc(expr)))
             }
             _ => {
                 // No comparison operator follows.
@@ -203,8 +202,8 @@ impl<'a> Parser<'a> {
             let operator = self.next()?.unwrap();
             let right = self.parse_multiplicative()?;
             left = match operator {
-                Token::Add => Expr::Add(Box::new(left), Box::new(right)),
-                Token::Sub => Expr::Sub(Box::new(left), Box::new(right)),
+                Token::Add => Expr::Add(self.arena.alloc(left), self.arena.alloc(right)),
+                Token::Sub => Expr::Sub(self.arena.alloc(left), self.arena.alloc(right)),
                 _ => unreachable!(),
             };
         }
@@ -220,9 +219,9 @@ impl<'a> Parser<'a> {
             let operator = self.next()?.unwrap();
             let right = self.parse_unary()?;
             left = match operator {
-                Token::Mul => Expr::Mul(Box::new(left), Box::new(right)),
-                Token::Div => Expr::Div(Box::new(left), Box::new(right)),
-                Token::Rem => Expr::Rem(Box::new(left), Box::new(right)),
+                Token::Mul => Expr::Mul(self.arena.alloc(left), self.arena.alloc(right)),
+                Token::Div => Expr::Div(self.arena.alloc(left), self.arena.alloc(right)),
+                Token::Rem => Expr::Rem(self.arena.alloc(left), self.arena.alloc(right)),
                 _ => unreachable!(),
             };
         }
@@ -236,11 +235,13 @@ impl<'a> Parser<'a> {
         match self.peek() {
             Some(Token::Add) => {
                 self.advance()?;
-                Ok(Expr::Pos(Box::new(self.parse_unary()?)))
+                let expr = self.parse_unary()?;
+                Ok(Expr::Pos(self.arena.alloc(expr)))
             }
             Some(Token::Sub) => {
                 self.advance()?;
-                Ok(Expr::Neg(Box::new(self.parse_unary()?)))
+                let expr = self.parse_unary()?;
+                Ok(Expr::Neg(self.arena.alloc(expr)))
             }
             _ => self.parse_primary(),
         }
@@ -391,7 +392,7 @@ impl<'a> Parser<'a> {
 
             // Parse method call or field access arguments
             if self.peek() != Some(&Token::LParen) {
-                value = Expr::FieldAccess(Box::new(value), method_or_field_name);
+                value = Expr::FieldAccess(self.arena.alloc(value), method_or_field_name);
                 continue;
             }
             self.advance()?; // consume '('
@@ -401,7 +402,7 @@ impl<'a> Parser<'a> {
             // Handle empty argument list ()
             if self.peek() == Some(&Token::RParen) {
                 self.advance()?;
-                value = Expr::MethodCall(method_or_field_name, Box::new(value), args);
+                value = Expr::MethodCall(method_or_field_name, self.arena.alloc(value), args);
                 continue;
             }
 
@@ -420,7 +421,7 @@ impl<'a> Parser<'a> {
             }
             self.advance()?;
 
-            value = Expr::MethodCall(method_or_field_name, Box::new(value), args);
+            value = Expr::MethodCall(method_or_field_name, self.arena.alloc(value), args);
         }
 
         Ok(value)
@@ -512,41 +513,64 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    macro_rules! alloc {
+        ($arena:expr, $expr:expr) => {{
+            let expr = $expr;
+            $arena.alloc(expr)
+        }};
+    }
+
+    use super::Parser;
+    use crate::Expr;
 
     #[track_caller]
-    fn parse_and_check(input: &str, expected: Expr) {
+    fn parse_and_check(input: &str, expected: Expr, arena: &crate::ExprArena) {
         let mut parser = Parser::new(input).unwrap();
         let expr = parser.parse_expr().unwrap();
-        assert_eq!(expr, expected);
+        assert!(expr.eq_in(&expected, &parser.arena, arena), "{input}");
     }
 
     #[test]
     fn test_parse_expr() {
+        let mut arena = crate::ExprArena::default();
         parse_and_check(
             "name = 'John' AND age > 18 AND 1 > 0",
             Expr::and_([
-                Expr::eq_(Expr::field_("name"), Expr::str_("John")),
-                Expr::gt_(Expr::field_("age"), Expr::i64_(18)),
-                Expr::gt_(Expr::i64_(1), Expr::i64_(0)),
+                Expr::eq_(
+                    alloc!(arena, Expr::field_("name")),
+                    alloc!(arena, Expr::str_("John")),
+                ),
+                Expr::gt_(
+                    alloc!(arena, Expr::field_("age")),
+                    alloc!(arena, Expr::i64_(18)),
+                ),
+                Expr::gt_(alloc!(arena, Expr::i64_(1)), alloc!(arena, Expr::i64_(0))),
             ]),
+            &arena,
         );
 
         parse_and_check(
             r#"name = "John" AND age IN [18, 19, 20, 22] AND 1 > 0"#,
             Expr::and_([
-                Expr::eq_(Expr::field_("name"), Expr::str_("John")),
-                Expr::in_(
-                    Expr::field_("age"),
-                    Expr::array_([
-                        Expr::i64_(18),
-                        Expr::i64_(19),
-                        Expr::i64_(20),
-                        Expr::i64_(22),
-                    ]),
+                Expr::eq_(
+                    alloc!(arena, Expr::field_("name")),
+                    alloc!(arena, Expr::str_("John")),
                 ),
-                Expr::gt_(Expr::i64_(1), Expr::i64_(0)),
+                Expr::in_(
+                    alloc!(arena, Expr::field_("age")),
+                    alloc!(
+                        arena,
+                        Expr::array_([
+                            Expr::i64_(18),
+                            Expr::i64_(19),
+                            Expr::i64_(20),
+                            Expr::i64_(22),
+                        ])
+                    ),
+                ),
+                Expr::gt_(alloc!(arena, Expr::i64_(1)), alloc!(arena, Expr::i64_(0))),
             ]),
+            &arena,
         );
 
         parse_and_check(
@@ -555,45 +579,71 @@ mod tests {
                 "matches".into(),
                 vec![Expr::field_("name"), Expr::str_("^J.*n$")],
             ),
+            &arena,
         );
 
         parse_and_check(
             r#"name != null"#,
-            Expr::ne_(Expr::field_("name"), Expr::null_()),
+            Expr::ne_(
+                alloc!(arena, Expr::field_("name")),
+                alloc!(arena, Expr::null_()),
+            ),
+            &arena,
         );
 
         parse_and_check(
             r#"name.to_uppercase() = 'JOHN'"#,
             Expr::eq_(
-                Expr::method_call_(Expr::field_("name"), "to_uppercase".to_string(), vec![]),
-                Expr::str_("JOHN"),
+                alloc!(
+                    arena,
+                    Expr::method_call_(
+                        alloc!(arena, Expr::field_("name")),
+                        "to_uppercase".to_string(),
+                        vec![]
+                    )
+                ),
+                alloc!(arena, Expr::str_("JOHN")),
             ),
+            &arena,
         );
 
         parse_and_check(
             r#"name.to_uppercase().to_lowercase() = 'john'"#,
             Expr::eq_(
-                Expr::method_call_(
-                    Expr::method_call_(Expr::field_("name"), "to_uppercase".to_string(), vec![]),
-                    "to_lowercase".to_string(),
-                    vec![],
+                alloc!(
+                    arena,
+                    Expr::method_call_(
+                        alloc!(
+                            arena,
+                            Expr::method_call_(
+                                alloc!(arena, Expr::field_("name")),
+                                "to_uppercase".to_string(),
+                                vec![]
+                            )
+                        ),
+                        "to_lowercase".to_string(),
+                        vec![]
+                    )
                 ),
-                Expr::str_("john"),
+                alloc!(arena, Expr::str_("john")),
             ),
+            &arena,
         );
 
         parse_and_check(
             r#"name.contains('John')"#,
             Expr::method_call_(
-                Expr::field_("name"),
+                alloc!(arena, Expr::field_("name")),
                 "contains".to_string(),
                 vec![Expr::str_("John")],
             ),
+            &arena,
         );
 
         parse_and_check(
             r#"true OR false"#,
             Expr::or_(vec![Expr::bool_(true), Expr::bool_(false)]),
+            &arena,
         );
 
         parse_and_check(
@@ -602,6 +652,7 @@ mod tests {
                 Expr::and_(vec![Expr::bool_(true), Expr::bool_(false)]),
                 Expr::bool_(true),
             ]),
+            &arena,
         );
 
         parse_and_check(
@@ -610,90 +661,145 @@ mod tests {
                 Expr::or_(vec![Expr::bool_(true), Expr::bool_(false)]),
                 Expr::bool_(true),
             ]),
+            &arena,
         );
 
         parse_and_check(
             r#"(name = 'John' AND age > 18) AND 1 > 0"#,
             Expr::and_(vec![
-                Expr::eq_(Expr::field_("name"), Expr::str_("John")),
-                Expr::gt_(Expr::field_("age"), Expr::i64_(18)),
-                Expr::gt_(Expr::i64_(1), Expr::i64_(0)),
+                Expr::eq_(
+                    alloc!(arena, Expr::field_("name")),
+                    alloc!(arena, Expr::str_("John")),
+                ),
+                Expr::gt_(
+                    alloc!(arena, Expr::field_("age")),
+                    alloc!(arena, Expr::i64_(18)),
+                ),
+                Expr::gt_(alloc!(arena, Expr::i64_(1)), alloc!(arena, Expr::i64_(0))),
             ]),
+            &arena,
         );
 
         parse_and_check(
             r#"name = 'John' AND (age > 18 AND 1 > 0)"#,
             Expr::and_(vec![
-                Expr::eq_(Expr::field_("name"), Expr::str_("John")),
-                Expr::gt_(Expr::field_("age"), Expr::i64_(18)),
-                Expr::gt_(Expr::i64_(1), Expr::i64_(0)),
+                Expr::eq_(
+                    alloc!(arena, Expr::field_("name")),
+                    alloc!(arena, Expr::str_("John")),
+                ),
+                Expr::gt_(
+                    alloc!(arena, Expr::field_("age")),
+                    alloc!(arena, Expr::i64_(18)),
+                ),
+                Expr::gt_(alloc!(arena, Expr::i64_(1)), alloc!(arena, Expr::i64_(0))),
             ]),
+            &arena,
         );
 
         parse_and_check(
             r#"(name = 'John' AND age > 18) OR (1 > 0)"#,
             Expr::or_(vec![
                 Expr::and_(vec![
-                    Expr::eq_(Expr::field_("name"), Expr::str_("John")),
-                    Expr::gt_(Expr::field_("age"), Expr::i64_(18)),
+                    Expr::eq_(
+                        alloc!(arena, Expr::field_("name")),
+                        alloc!(arena, Expr::str_("John")),
+                    ),
+                    Expr::gt_(
+                        alloc!(arena, Expr::field_("age")),
+                        alloc!(arena, Expr::i64_(18)),
+                    ),
                 ]),
-                Expr::gt_(Expr::i64_(1), Expr::i64_(0)),
+                Expr::gt_(alloc!(arena, Expr::i64_(1)), alloc!(arena, Expr::i64_(0))),
             ]),
+            &arena,
         );
 
         parse_and_check(
             r#"type(maybe_i64_or_f64) IN ['i64', 'f64']"#,
             Expr::in_(
-                Expr::FuncCall("type".into(), vec![Expr::field_("maybe_i64_or_f64")]),
-                Expr::array_([Expr::str_("i64"), Expr::str_("f64")]),
+                alloc!(
+                    arena,
+                    Expr::FuncCall("type".into(), vec![Expr::field_("maybe_i64_or_f64")])
+                ),
+                alloc!(arena, Expr::array_([Expr::str_("i64"), Expr::str_("f64")])),
             ),
+            &arena,
         );
 
         parse_and_check(
             r#"type(foo.contains('bar')) = 'i64'"#,
             Expr::eq_(
-                Expr::FuncCall(
-                    "type".into(),
-                    vec![Expr::method_call_(
-                        Expr::field_("foo"),
-                        "contains".to_string(),
-                        vec![Expr::str_("bar")],
-                    )],
+                alloc!(
+                    arena,
+                    Expr::FuncCall(
+                        "type".into(),
+                        vec![Expr::method_call_(
+                            alloc!(arena, Expr::field_("foo")),
+                            "contains".to_string(),
+                            vec![Expr::str_("bar")]
+                        )],
+                    )
                 ),
-                Expr::str_("i64"),
+                alloc!(arena, Expr::str_("i64")),
             ),
+            &arena,
         );
 
         parse_and_check(
             r#"foo.bar.baz = 5"#,
             Expr::eq_(
-                Expr::field_access_(Expr::field_access_(Expr::field_("foo"), "bar"), "baz"),
-                Expr::i64_(5),
+                alloc!(
+                    arena,
+                    Expr::field_access_(
+                        alloc!(
+                            arena,
+                            Expr::field_access_(alloc!(arena, Expr::field_("foo")), "bar")
+                        ),
+                        "baz"
+                    )
+                ),
+                alloc!(arena, Expr::i64_(5)),
             ),
+            &arena,
         );
 
         parse_and_check(
             r#"a NOT IN ['foo', 'bar']"#,
-            Expr::not_(Expr::in_(
-                Expr::field_("a"),
-                Expr::array_([Expr::str_("foo"), Expr::str_("bar")]),
+            Expr::not_(alloc!(
+                arena,
+                Expr::in_(
+                    alloc!(arena, Expr::field_("a")),
+                    alloc!(arena, Expr::array_([Expr::str_("foo"), Expr::str_("bar")]))
+                )
             )),
+            &arena,
         );
 
         parse_and_check(
             r#"!(a IN ['foo', 'bar'])"#,
-            Expr::not_(Expr::in_(
-                Expr::field_("a"),
-                Expr::array_([Expr::str_("foo"), Expr::str_("bar")]),
+            Expr::not_(alloc!(
+                arena,
+                Expr::in_(
+                    alloc!(arena, Expr::field_("a")),
+                    alloc!(arena, Expr::array_([Expr::str_("foo"), Expr::str_("bar")]))
+                )
             )),
+            &arena,
         );
 
         parse_and_check(
             r#"{"a":"b",}.a = "b""#,
             Expr::eq_(
-                Expr::field_access_(Expr::object_([("a".into(), Expr::str_("b"))]), "a"),
-                Expr::str_("b"),
+                alloc!(
+                    arena,
+                    Expr::field_access_(
+                        alloc!(arena, Expr::object_([("a".into(), Expr::str_("b"))])),
+                        "a"
+                    )
+                ),
+                alloc!(arena, Expr::str_("b")),
             ),
+            &arena,
         );
     }
 }

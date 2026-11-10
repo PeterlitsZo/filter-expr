@@ -13,8 +13,8 @@ pub struct CompiledFilterExpr {
 impl CompiledFilterExpr {
     /// Compile an expression for repeated execution.
     pub fn compile(filter: &FilterExpr) -> Self {
-        let bytecode = filter.expr().map(|expr| {
-            let asm = AsmCodegen::new().codegen(expr);
+        let bytecode = filter.expr().map(|_| {
+            let asm = AsmCodegen::new(filter).codegen();
             Arc::new(BytecodeCodegen::new().codegen(asm))
         });
         Self { bytecode }

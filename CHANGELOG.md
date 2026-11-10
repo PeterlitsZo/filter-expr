@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- [BREAKING] Use an owned index arena for AST nodes and update AST APIs.
 - [BREAKING] Use `CompactString` for AST strings and object keys to reduce
   short-string allocations; re-export it as `filter_expr::CompactString`.
 

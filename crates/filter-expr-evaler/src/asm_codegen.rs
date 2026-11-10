@@ -3,11 +3,12 @@ use std::{
     sync::Arc,
 };
 
-use filter_expr::Expr;
+use filter_expr::{Expr, ExprId, FilterExpr};
 
 use crate::asm::{Asm, AsmContextVar, AsmFunction, AsmInstruction, AsmMethod};
 
 pub(crate) struct AsmCodegen<'a> {
+    filter: &'a FilterExpr,
     local_count: u32,
     context_vars: Vec<AsmContextVar>,
     functions: Vec<AsmFunction>,
@@ -24,8 +25,9 @@ pub(crate) struct AsmCodegen<'a> {
 }
 
 impl<'a> AsmCodegen<'a> {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(filter: &'a FilterExpr) -> Self {
         Self {
+            filter,
             local_count: 0,
             context_vars: Vec::new(),
             functions: Vec::new(),
@@ -48,8 +50,10 @@ impl<'a> AsmCodegen<'a> {
         label_id
     }
 
-    pub(crate) fn codegen(mut self, expr: &'a Expr) -> Asm {
-        self.codegen_expr(expr);
+    pub(crate) fn codegen(mut self) -> Asm {
+        if let Some(expr) = self.filter.expr() {
+            self.codegen_expr(expr);
+        }
 
         self.instructions.push(AsmInstruction::Return);
 
@@ -63,10 +67,14 @@ impl<'a> AsmCodegen<'a> {
         }
     }
 
+    fn node(&self, id: ExprId) -> &'a Expr {
+        self.filter.node(id).unwrap()
+    }
+
     fn codegen_expr(&mut self, expr: &'a Expr) {
         match expr {
             Expr::Field(field) => self.codegen_field(field),
-            Expr::FieldAccess(obj, field) => self.codegen_field_access(obj, field),
+            Expr::FieldAccess(obj, field) => self.codegen_field_access(self.node(*obj), field),
             Expr::Str(value) => self.codegen_str(value),
             Expr::I64(value) => self.codegen_i64(*value),
             Expr::F64(value) => self.codegen_f64(*value),
@@ -75,60 +83,60 @@ impl<'a> AsmCodegen<'a> {
             Expr::Array(elements) => self.codegen_array(elements),
             Expr::Object(fields) => self.codegen_object(fields),
             Expr::Add(left, right) => {
-                self.codegen_expr(left);
-                self.codegen_expr(right);
+                self.codegen_expr(self.node(*left));
+                self.codegen_expr(self.node(*right));
                 self.instructions.push(AsmInstruction::Add);
             }
             Expr::Sub(left, right) => {
-                self.codegen_expr(left);
-                self.codegen_expr(right);
+                self.codegen_expr(self.node(*left));
+                self.codegen_expr(self.node(*right));
                 self.instructions.push(AsmInstruction::Sub);
             }
             Expr::Mul(left, right) => {
-                self.codegen_expr(left);
-                self.codegen_expr(right);
+                self.codegen_expr(self.node(*left));
+                self.codegen_expr(self.node(*right));
                 self.instructions.push(AsmInstruction::Mul);
             }
             Expr::Div(left, right) => {
-                self.codegen_expr(left);
-                self.codegen_expr(right);
+                self.codegen_expr(self.node(*left));
+                self.codegen_expr(self.node(*right));
                 self.instructions.push(AsmInstruction::Div);
             }
             Expr::Rem(left, right) => {
-                self.codegen_expr(left);
-                self.codegen_expr(right);
+                self.codegen_expr(self.node(*left));
+                self.codegen_expr(self.node(*right));
                 self.instructions.push(AsmInstruction::Rem);
             }
             Expr::Pos(expr) => {
-                self.codegen_expr(expr);
+                self.codegen_expr(self.node(*expr));
                 self.instructions.push(AsmInstruction::Pos);
             }
             Expr::Neg(expr) => {
-                self.codegen_expr(expr);
+                self.codegen_expr(self.node(*expr));
                 self.instructions.push(AsmInstruction::Neg);
             }
-            Expr::Gt(left, right) => self.codegen_gt(left, right),
-            Expr::Lt(left, right) => self.codegen_lt(left, right),
-            Expr::Ge(left, right) => self.codegen_ge(left, right),
-            Expr::Le(left, right) => self.codegen_le(left, right),
-            Expr::Eq(left, right) => self.codegen_eq(left, right),
-            Expr::Ne(left, right) => self.codegen_ne(left, right),
-            Expr::In(left, right) => self.codegen_in(left, right),
+            Expr::Gt(left, right) => self.codegen_gt(self.node(*left), self.node(*right)),
+            Expr::Lt(left, right) => self.codegen_lt(self.node(*left), self.node(*right)),
+            Expr::Ge(left, right) => self.codegen_ge(self.node(*left), self.node(*right)),
+            Expr::Le(left, right) => self.codegen_le(self.node(*left), self.node(*right)),
+            Expr::Eq(left, right) => self.codegen_eq(self.node(*left), self.node(*right)),
+            Expr::Ne(left, right) => self.codegen_ne(self.node(*left), self.node(*right)),
+            Expr::In(left, right) => self.codegen_in(self.node(*left), self.node(*right)),
             Expr::And(exprs) => self.codegen_and(exprs),
             Expr::Or(exprs) => self.codegen_or(exprs),
-            Expr::Not(expr) => self.codegen_not(expr),
+            Expr::Not(expr) => self.codegen_not(self.node(*expr)),
             Expr::FuncCall(func_name, args) => self.codegen_func_call(func_name, args),
             Expr::MethodCall(method_name, obj, args) => {
-                self.codegen_method_call(method_name, obj, args)
+                self.codegen_method_call(method_name, self.node(*obj), args)
             }
 
             Expr::Let(name, value, body) => {
-                self.codegen_expr(value);
+                self.codegen_expr(self.node(*value));
                 let slot = self.local_count;
                 self.local_count += 1;
                 self.instructions.push(AsmInstruction::StoreLocal(slot));
                 let outer = self.locals_map.insert(name, slot);
-                self.codegen_expr(body);
+                self.codegen_expr(self.node(*body));
                 if let Some(outer) = outer {
                     self.locals_map.insert(name, outer);
                 } else {
@@ -354,15 +362,28 @@ impl<'a> AsmCodegen<'a> {
 
 #[cfg(test)]
 mod tests {
+    macro_rules! alloc {
+        ($arena:expr, $expr:expr) => {{
+            let expr = $expr;
+            $arena.alloc(expr)
+        }};
+    }
+
     use core::f64;
     use std::sync::Arc;
 
     use super::*;
+    use filter_expr::{Expr, ExprArena};
+
+    fn codegen(expr: &Expr, arena: &ExprArena) -> Asm {
+        let filter = FilterExpr::new(Some(expr.clone()), arena.clone());
+        AsmCodegen::new(&filter).codegen()
+    }
 
     #[test]
     fn test_codegen_field() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Field("field".into()));
+        let arena = ExprArena::default();
+        let asm = codegen(&Expr::Field("field".into()), &arena);
         assert_eq!(
             asm,
             Asm {
@@ -375,8 +396,8 @@ mod tests {
 
     #[test]
     fn test_codegen_str() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Str("str".into()));
+        let arena = ExprArena::default();
+        let asm = codegen(&Expr::Str("str".into()), &arena);
         assert_eq!(
             asm,
             Asm {
@@ -389,8 +410,8 @@ mod tests {
 
     #[test]
     fn test_codegen_i64() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::I64(42));
+        let arena = ExprArena::default();
+        let asm = codegen(&Expr::I64(42), &arena);
         assert_eq!(
             asm,
             Asm {
@@ -402,8 +423,8 @@ mod tests {
 
     #[test]
     fn test_codegen_f64() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::F64(f64::consts::PI));
+        let arena = ExprArena::default();
+        let asm = codegen(&Expr::F64(f64::consts::PI), &arena);
         assert_eq!(
             asm,
             Asm {
@@ -418,8 +439,8 @@ mod tests {
 
     #[test]
     fn test_codegen_bool() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Bool(true));
+        let arena = ExprArena::default();
+        let asm = codegen(&Expr::Bool(true), &arena);
         assert_eq!(
             asm,
             Asm {
@@ -428,8 +449,7 @@ mod tests {
             }
         );
 
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Bool(false));
+        let asm = codegen(&Expr::Bool(false), &arena);
         assert_eq!(
             asm,
             Asm {
@@ -441,8 +461,8 @@ mod tests {
 
     #[test]
     fn test_codegen_null() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Null);
+        let arena = ExprArena::default();
+        let asm = codegen(&Expr::Null, &arena);
         assert_eq!(
             asm,
             Asm {
@@ -454,8 +474,11 @@ mod tests {
 
     #[test]
     fn test_codegen_array() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Array(vec![Expr::I64(1), Expr::I64(2), Expr::I64(3)]));
+        let arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::Array(vec![Expr::I64(1), Expr::I64(2), Expr::I64(3)]),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -473,8 +496,8 @@ mod tests {
 
     #[test]
     fn test_codegen_empty_array() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Array(vec![]));
+        let arena = ExprArena::default();
+        let asm = codegen(&Expr::Array(vec![]), &arena);
         assert_eq!(
             asm,
             Asm {
@@ -486,8 +509,11 @@ mod tests {
 
     #[test]
     fn test_codegen_gt() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Gt(Box::new(Expr::I64(5)), Box::new(Expr::I64(3))));
+        let mut arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::Gt(alloc!(arena, Expr::I64(5)), alloc!(arena, Expr::I64(3))),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -504,8 +530,11 @@ mod tests {
 
     #[test]
     fn test_codegen_lt() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Lt(Box::new(Expr::I64(3)), Box::new(Expr::I64(5))));
+        let mut arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::Lt(alloc!(arena, Expr::I64(3)), alloc!(arena, Expr::I64(5))),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -522,8 +551,11 @@ mod tests {
 
     #[test]
     fn test_codegen_ge() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Ge(Box::new(Expr::I64(5)), Box::new(Expr::I64(5))));
+        let mut arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::Ge(alloc!(arena, Expr::I64(5)), alloc!(arena, Expr::I64(5))),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -540,8 +572,11 @@ mod tests {
 
     #[test]
     fn test_codegen_le() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Le(Box::new(Expr::I64(3)), Box::new(Expr::I64(5))));
+        let mut arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::Le(alloc!(arena, Expr::I64(3)), alloc!(arena, Expr::I64(5))),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -558,11 +593,14 @@ mod tests {
 
     #[test]
     fn test_codegen_eq() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Eq(
-            Box::new(Expr::Str("hello".into())),
-            Box::new(Expr::Str("hello".into())),
-        ));
+        let mut arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::Eq(
+                alloc!(arena, Expr::Str("hello".into())),
+                alloc!(arena, Expr::Str("hello".into())),
+            ),
+            &arena,
+        );
         // Same string constants are deduplicated
         assert_eq!(
             asm,
@@ -581,11 +619,14 @@ mod tests {
 
     #[test]
     fn test_codegen_eq_different_strings() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Eq(
-            Box::new(Expr::Str("hello".into())),
-            Box::new(Expr::Str("world".into())),
-        ));
+        let mut arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::Eq(
+                alloc!(arena, Expr::Str("hello".into())),
+                alloc!(arena, Expr::Str("world".into())),
+            ),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -603,8 +644,11 @@ mod tests {
 
     #[test]
     fn test_codegen_ne() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Ne(Box::new(Expr::I64(1)), Box::new(Expr::I64(2))));
+        let mut arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::Ne(alloc!(arena, Expr::I64(1)), alloc!(arena, Expr::I64(2))),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -621,11 +665,17 @@ mod tests {
 
     #[test]
     fn test_codegen_in() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::In(
-            Box::new(Expr::I64(2)),
-            Box::new(Expr::Array(vec![Expr::I64(1), Expr::I64(2), Expr::I64(3)])),
-        ));
+        let mut arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::In(
+                alloc!(arena, Expr::I64(2)),
+                alloc!(
+                    arena,
+                    Expr::Array(vec![Expr::I64(1), Expr::I64(2), Expr::I64(3)])
+                ),
+            ),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -645,12 +695,11 @@ mod tests {
 
     #[test]
     fn test_codegen_and() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::And(vec![
-            Expr::Bool(true),
-            Expr::Bool(false),
-            Expr::Bool(true),
-        ]));
+        let arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::And(vec![Expr::Bool(true), Expr::Bool(false), Expr::Bool(true)]),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -670,8 +719,8 @@ mod tests {
 
     #[test]
     fn test_codegen_and_single() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::And(vec![Expr::Bool(true)]));
+        let arena = ExprArena::default();
+        let asm = codegen(&Expr::And(vec![Expr::Bool(true)]), &arena);
         assert_eq!(
             asm,
             Asm {
@@ -683,8 +732,8 @@ mod tests {
 
     #[test]
     fn test_codegen_and_empty() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::And(vec![]));
+        let arena = ExprArena::default();
+        let asm = codegen(&Expr::And(vec![]), &arena);
         assert_eq!(
             asm,
             Asm {
@@ -696,12 +745,11 @@ mod tests {
 
     #[test]
     fn test_codegen_or() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Or(vec![
-            Expr::Bool(false),
-            Expr::Bool(true),
-            Expr::Bool(false),
-        ]));
+        let arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::Or(vec![Expr::Bool(false), Expr::Bool(true), Expr::Bool(false)]),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -721,8 +769,8 @@ mod tests {
 
     #[test]
     fn test_codegen_or_single() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Or(vec![Expr::Bool(false)]));
+        let arena = ExprArena::default();
+        let asm = codegen(&Expr::Or(vec![Expr::Bool(false)]), &arena);
         assert_eq!(
             asm,
             Asm {
@@ -734,8 +782,8 @@ mod tests {
 
     #[test]
     fn test_codegen_or_empty() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Or(vec![]));
+        let arena = ExprArena::default();
+        let asm = codegen(&Expr::Or(vec![]), &arena);
         assert_eq!(
             asm,
             Asm {
@@ -747,8 +795,8 @@ mod tests {
 
     #[test]
     fn test_codegen_not() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Not(Box::new(Expr::Bool(true))));
+        let mut arena = ExprArena::default();
+        let asm = codegen(&Expr::Not(alloc!(arena, Expr::Bool(true))), &arena);
         assert_eq!(
             asm,
             Asm {
@@ -764,11 +812,14 @@ mod tests {
 
     #[test]
     fn test_codegen_complex() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::And(vec![
-            Expr::Gt(Box::new(Expr::I64(1)), Box::new(Expr::I64(0))),
-            Expr::Lt(Box::new(Expr::I64(2)), Box::new(Expr::I64(3))),
-        ]));
+        let mut arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::And(vec![
+                Expr::Gt(alloc!(arena, Expr::I64(1)), alloc!(arena, Expr::I64(0))),
+                Expr::Lt(alloc!(arena, Expr::I64(2)), alloc!(arena, Expr::I64(3))),
+            ]),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -790,8 +841,11 @@ mod tests {
 
     #[test]
     fn test_codegen_and_short_circuit() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::And(vec![Expr::Bool(false), Expr::Bool(true)]));
+        let arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::And(vec![Expr::Bool(false), Expr::Bool(true)]),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -809,8 +863,8 @@ mod tests {
 
     #[test]
     fn test_codegen_or_short_circuit() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Or(vec![Expr::Bool(true), Expr::Bool(false)]));
+        let arena = ExprArena::default();
+        let asm = codegen(&Expr::Or(vec![Expr::Bool(true), Expr::Bool(false)]), &arena);
         assert_eq!(
             asm,
             Asm {
@@ -828,11 +882,11 @@ mod tests {
 
     #[test]
     fn test_codegen_func_call() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::FuncCall(
-            "len".into(),
-            vec![Expr::Str("hello".into())],
-        ));
+        let arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::FuncCall("len".into(), vec![Expr::Str("hello".into())]),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -850,11 +904,14 @@ mod tests {
 
     #[test]
     fn test_codegen_func_call_multiple_args() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::FuncCall(
-            "substr".into(),
-            vec![Expr::Str("hello".into()), Expr::I64(0), Expr::I64(3)],
-        ));
+        let arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::FuncCall(
+                "substr".into(),
+                vec![Expr::Str("hello".into()), Expr::I64(0), Expr::I64(3)],
+            ),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -874,8 +931,8 @@ mod tests {
 
     #[test]
     fn test_codegen_func_call_no_args() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::FuncCall("now".into(), vec![]));
+        let arena = ExprArena::default();
+        let asm = codegen(&Expr::FuncCall("now".into(), vec![]), &arena);
         assert_eq!(
             asm,
             Asm {
@@ -888,14 +945,14 @@ mod tests {
 
     #[test]
     fn test_codegen_func_call_same_function_twice() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::FuncCall(
-            "len".into(),
-            vec![Expr::FuncCall(
+        let arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::FuncCall(
                 "len".into(),
-                vec![Expr::Str("test".into())],
-            )],
-        ));
+                vec![Expr::FuncCall("len".into(), vec![Expr::Str("test".into())])],
+            ),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -914,12 +971,15 @@ mod tests {
 
     #[test]
     fn test_codegen_method_call() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::MethodCall(
-            "toUpper".into(),
-            Box::new(Expr::Str("hello".into())),
-            vec![],
-        ));
+        let mut arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::MethodCall(
+                "toUpper".into(),
+                alloc!(arena, Expr::Str("hello".into())),
+                vec![],
+            ),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -937,12 +997,15 @@ mod tests {
 
     #[test]
     fn test_codegen_method_call_with_args() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::MethodCall(
-            "substring".into(),
-            Box::new(Expr::Str("hello".into())),
-            vec![Expr::I64(0), Expr::I64(3)],
-        ));
+        let mut arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::MethodCall(
+                "substring".into(),
+                alloc!(arena, Expr::Str("hello".into())),
+                vec![Expr::I64(0), Expr::I64(3)],
+            ),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -962,16 +1025,22 @@ mod tests {
 
     #[test]
     fn test_codegen_method_call_chained() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::MethodCall(
-            "method2".into(),
-            Box::new(Expr::MethodCall(
-                "method1".into(),
-                Box::new(Expr::Str("test".into())),
+        let mut arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::MethodCall(
+                "method2".into(),
+                alloc!(
+                    arena,
+                    Expr::MethodCall(
+                        "method1".into(),
+                        alloc!(arena, Expr::Str("test".into())),
+                        vec![],
+                    )
+                ),
                 vec![],
-            )),
-            vec![],
-        ));
+            ),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -990,12 +1059,15 @@ mod tests {
 
     #[test]
     fn test_codegen_method_call_on_field() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::MethodCall(
-            "toUpper".into(),
-            Box::new(Expr::Field("name".into())),
-            vec![],
-        ));
+        let mut arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::MethodCall(
+                "toUpper".into(),
+                alloc!(arena, Expr::Field("name".into())),
+                vec![],
+            ),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -1013,14 +1085,17 @@ mod tests {
 
     #[test]
     fn test_codegen_func_call_in_comparison() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Gt(
-            Box::new(Expr::FuncCall(
-                "len".into(),
-                vec![Expr::Str("hello".into())],
-            )),
-            Box::new(Expr::I64(3)),
-        ));
+        let mut arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::Gt(
+                alloc!(
+                    arena,
+                    Expr::FuncCall("len".into(), vec![Expr::Str("hello".into())],)
+                ),
+                alloc!(arena, Expr::I64(3)),
+            ),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -1040,12 +1115,21 @@ mod tests {
 
     #[test]
     fn test_codegen_let() {
-        let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::let_(
-            "x",
-            Expr::func_call_("value", vec![]),
-            Expr::add_(Expr::field_("x"), Expr::field_("x")),
-        ));
+        let mut arena = ExprArena::default();
+        let asm = codegen(
+            &Expr::let_(
+                "x",
+                alloc!(arena, Expr::func_call_("value", vec![])),
+                alloc!(
+                    arena,
+                    Expr::add_(
+                        alloc!(arena, Expr::field_("x")),
+                        alloc!(arena, Expr::field_("x"))
+                    )
+                ),
+            ),
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
@@ -1066,20 +1150,35 @@ mod tests {
 
     #[test]
     fn test_codegen_let_shadowing() {
-        let asm_codegen = AsmCodegen::new();
+        let mut arena = ExprArena::default();
         // let x := x then (let x := x + 1 then x) + x
-        let asm = asm_codegen.codegen(&Expr::let_(
-            "x",
-            Expr::field_("x"),
-            Expr::add_(
-                Expr::let_(
-                    "x",
-                    Expr::add_(Expr::field_("x"), Expr::i64_(1)),
-                    Expr::field_("x"),
+        let asm = codegen(
+            &Expr::let_(
+                "x",
+                alloc!(arena, Expr::field_("x")),
+                alloc!(
+                    arena,
+                    Expr::add_(
+                        alloc!(
+                            arena,
+                            Expr::let_(
+                                "x",
+                                alloc!(
+                                    arena,
+                                    Expr::add_(
+                                        alloc!(arena, Expr::field_("x")),
+                                        alloc!(arena, Expr::i64_(1))
+                                    )
+                                ),
+                                alloc!(arena, Expr::field_("x"))
+                            )
+                        ),
+                        alloc!(arena, Expr::field_("x"))
+                    )
                 ),
-                Expr::field_("x"),
             ),
-        ));
+            &arena,
+        );
         assert_eq!(
             asm,
             Asm {
