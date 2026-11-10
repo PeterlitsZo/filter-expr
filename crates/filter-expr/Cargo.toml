@@ -8,6 +8,7 @@ repository.workspace = true
 documentation = "https://docs.rs/filter-expr"
 
 [dependencies]
+compact_str = "0.10"
 async-trait.workspace = true
 ordered-float = "5.3.0"
 thiserror.workspace = true

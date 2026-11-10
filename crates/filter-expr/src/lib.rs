@@ -8,6 +8,7 @@ mod transform;
 
 use std::fmt::Debug;
 
+pub use compact_str::CompactString;
 pub use error::Error;
 pub use expr::Expr;
 pub use transform::{Transform, TransformContext, TransformResult};

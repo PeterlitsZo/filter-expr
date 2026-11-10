@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::{Error, expr::Expr, token::{Lexer, Token}};
+use crate::{CompactString, Error, expr::Expr, token::{Lexer, Token}};
 
 pub(crate) struct Parser<'a> {
     lexer: Lexer<'a>,
@@ -344,7 +344,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_func_call(&mut self, func_name: String) -> Result<Expr, Error> {
+    fn parse_func_call(&mut self, func_name: CompactString) -> Result<Expr, Error> {
         // Consume the '(' token.
         if self.peek() != Some(&Token::LParen) {
             return Err(Error::Parse("expected '('".to_string()));
@@ -552,7 +552,7 @@ mod tests {
         parse_and_check(
             r#"matches(name, "^J.*n$")"#,
             Expr::FuncCall(
-                "matches".to_string(),
+                "matches".into(),
                 vec![Expr::field_("name"), Expr::str_("^J.*n$")],
             ),
         );
@@ -644,7 +644,7 @@ mod tests {
         parse_and_check(
             r#"type(maybe_i64_or_f64) IN ['i64', 'f64']"#,
             Expr::in_(
-                Expr::FuncCall("type".to_string(), vec![Expr::field_("maybe_i64_or_f64")]),
+                Expr::FuncCall("type".into(), vec![Expr::field_("maybe_i64_or_f64")]),
                 Expr::array_([Expr::str_("i64"), Expr::str_("f64")]),
             ),
         );
@@ -653,7 +653,7 @@ mod tests {
             r#"type(foo.contains('bar')) = 'i64'"#,
             Expr::eq_(
                 Expr::FuncCall(
-                    "type".to_string(),
+                    "type".into(),
                     vec![Expr::method_call_(
                         Expr::field_("foo"),
                         "contains".to_string(),
@@ -691,7 +691,7 @@ mod tests {
         parse_and_check(
             r#"{"a":"b",}.a = "b""#,
             Expr::eq_(
-                Expr::field_access_(Expr::object_([("a".to_string(), Expr::str_("b"))]), "a"),
+                Expr::field_access_(Expr::object_([("a".into(), Expr::str_("b"))]), "a"),
                 Expr::str_("b"),
             ),
         );

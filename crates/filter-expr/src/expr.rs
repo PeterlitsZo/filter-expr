@@ -2,27 +2,27 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 
-use crate::{Error, Transform, TransformContext, TransformResult};
+use crate::{CompactString, Error, Transform, TransformContext, TransformResult};
 
 /// The expression.
 ///
 /// It is an AST of the filter expression.
 #[derive(Debug, Clone)]
 pub enum Expr {
-    Field(String),
-    FieldAccess(Box<Expr>, String),
+    Field(CompactString),
+    FieldAccess(Box<Expr>, CompactString),
 
-    Str(String),
+    Str(CompactString),
     I64(i64),
     F64(f64),
     Bool(bool),
     Null,
 
     Array(Vec<Expr>),
-    Object(BTreeMap<String, Expr>),
+    Object(BTreeMap<CompactString, Expr>),
 
-    FuncCall(String, Vec<Expr>),
-    MethodCall(String, Box<Expr>, Vec<Expr>),
+    FuncCall(CompactString, Vec<Expr>),
+    MethodCall(CompactString, Box<Expr>, Vec<Expr>),
 
     Add(Box<Expr>, Box<Expr>),
     Sub(Box<Expr>, Box<Expr>),
@@ -44,7 +44,7 @@ pub enum Expr {
     Or(Vec<Expr>),
     Not(Box<Expr>),
 
-    Let(String, Box<Expr>, Box<Expr>),
+    Let(CompactString, Box<Expr>, Box<Expr>),
 }
 
 impl PartialOrd for Expr {
@@ -277,15 +277,15 @@ impl Hash for Expr {
 }
 
 impl Expr {
-    pub fn field_<T: Into<String>>(field: T) -> Self {
+    pub fn field_<T: Into<CompactString>>(field: T) -> Self {
         Self::Field(field.into())
     }
 
-    pub fn field_access_(obj: Expr, field: impl Into<String>) -> Self {
+    pub fn field_access_(obj: Expr, field: impl Into<CompactString>) -> Self {
         Self::FieldAccess(Box::new(obj), field.into())
     }
 
-    pub fn str_<T: Into<String>>(value: T) -> Self {
+    pub fn str_<T: Into<CompactString>>(value: T) -> Self {
         Self::Str(value.into())
     }
 
@@ -309,15 +309,15 @@ impl Expr {
         Self::Array(value.into())
     }
 
-    pub fn object_<T: Into<BTreeMap<String, Expr>>>(value: T) -> Self {
+    pub fn object_<T: Into<BTreeMap<CompactString, Expr>>>(value: T) -> Self {
         Self::Object(value.into())
     }
 
-    pub fn func_call_(func: impl Into<String>, args: Vec<Expr>) -> Self {
+    pub fn func_call_(func: impl Into<CompactString>, args: Vec<Expr>) -> Self {
         Self::FuncCall(func.into(), args)
     }
 
-    pub fn method_call_(obj: Expr, method: impl Into<String>, args: Vec<Expr>) -> Self {
+    pub fn method_call_(obj: Expr, method: impl Into<CompactString>, args: Vec<Expr>) -> Self {
         Self::MethodCall(method.into(), Box::new(obj), args)
     }
 
@@ -389,7 +389,7 @@ impl Expr {
         Self::Not(Box::new(self))
     }
 
-    pub fn let_(name: impl Into<String>, value: Expr, body: Expr) -> Self {
+    pub fn let_(name: impl Into<CompactString>, value: Expr, body: Expr) -> Self {
         Self::Let(name.into(), Box::new(value), Box::new(body))
     }
 }
@@ -409,7 +409,7 @@ impl Expr {
     ///         // Transform the expression before recursing
     ///         TransformResult::Continue(match expr {
     ///             Expr::Field(name) if name == "old_name" => {
-    ///                 Expr::Field("new_name".to_string())
+    ///                 Expr::Field("new_name".into())
     ///             }
     ///             other => other,
     ///         })
@@ -418,10 +418,10 @@ impl Expr {
     ///
     /// # #[tokio::main]
     /// # async fn main() {
-    /// let expr = Expr::Field("old_name".to_string());
+    /// let expr = Expr::Field("old_name".into());
     /// let mut transformer = MyTransformer;
     /// let result = expr.transform(&mut transformer).await.unwrap();
-    /// assert_eq!(result, Expr::Field("new_name".to_string()));
+    /// assert_eq!(result, Expr::Field("new_name".into()));
     /// # }
     /// ```
     pub async fn transform<F: Transform>(self, transformer: &mut F) -> Result<Expr, Error> {

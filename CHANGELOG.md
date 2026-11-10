@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-*Empty*
+- [BREAKING] Use `CompactString` for AST strings and object keys to reduce
+  short-string allocations; re-export it as `filter_expr::CompactString`.
 
 ## v0.5.0
 

@@ -24,7 +24,7 @@ type BoxedError = Box<dyn std::error::Error + Send + Sync>;
 ///         // Transform the expression before recursing
 ///         TransformResult::Continue(match expr {
 ///             Expr::Field(name) if name == "old_name" => {
-///                 Expr::Field("new_name".to_string())
+///                 Expr::Field("new_name".into())
 ///             }
 ///             other => other,
 ///         })
@@ -77,7 +77,7 @@ mod tests {
                 async fn transform(&mut self, expr: Expr, _ctx: TransformContext) -> TransformResult {
                     TransformResult::Continue(match expr {
                         Expr::Field(name) if name == self.old_name => {
-                            Expr::Field(self.new_name.clone())
+                            Expr::Field(self.new_name.as_str().into())
                         }
                         _ => expr,
                     })
@@ -146,8 +146,8 @@ mod tests {
                 tokio::time::sleep(Duration::from_millis(100)).await;
 
                 vec![
-                    Expr::Str("foo".to_string()),
-                    Expr::Str("bar".to_string()),
+                    Expr::Str("foo".into()),
+                    Expr::Str("bar".into()),
                 ]
             }
         }

@@ -1,11 +1,11 @@
-use crate::Error;
+use crate::{CompactString, Error};
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Token {
     /// An identifier (variable name, field name, etc.).
-    Ident(String),
+    Ident(CompactString),
     /// A string literal (single quotes or double quotes).
-    Str(String),
+    Str(CompactString),
     /// A float literal.
     F64(f64),
     /// A integer literal.
@@ -178,18 +178,18 @@ impl<'a> Lexer<'a> {
                 '\'' | '"' => {
                     chars.next();
                     let remaining = chars.as_str();
-                    let mut decoded: Option<String> = None;
+                    let mut decoded: Option<CompactString> = None;
                     let value = loop {
                         let c = chars.next().ok_or(Error::UnexpectedEOF)?;
                         if c == ch {
                             break match decoded {
                                 Some(value) => value,
-                                None => remaining[..remaining.len() - chars.as_str().len() - 1].to_owned(),
+                                None => remaining[..remaining.len() - chars.as_str().len() - 1].into(),
                             };
                         }
                         if c == '\\' {
                             let value = decoded.get_or_insert_with(|| {
-                                remaining[..remaining.len() - chars.as_str().len() - 1].to_owned()
+                                remaining[..remaining.len() - chars.as_str().len() - 1].into()
                             });
                             let escaped = chars.next().ok_or(Error::UnexpectedEOF)?;
                             value.push(match escaped {
@@ -356,7 +356,7 @@ impl<'a> Lexer<'a> {
                         "false" => return Ok(Some(Token::Bool(false))),
                         "null" => return Ok(Some(Token::Null)),
 
-                        _ => return Ok(Some(Token::Ident(text.to_owned()))),
+                        _ => return Ok(Some(Token::Ident(text.into()))),
                     }
                 }
 
@@ -398,11 +398,11 @@ mod tests {
         parse_and_check(
             r#"name = 'John' AND age > 18"#,
             &[
-                Ident("name".to_string()),
+                Ident("name".into()),
                 Eq,
-                Str("John".to_string()),
+                Str("John".into()),
                 And,
-                Ident("age".to_string()),
+                Ident("age".into()),
                 Gt,
                 I64(18),
             ],
@@ -411,11 +411,11 @@ mod tests {
         parse_and_check(
             r#"name = "John" AND age IN [18, 19, 20, 21]"#,
             &[
-                Ident("name".to_string()),
+                Ident("name".into()),
                 Eq,
-                Str("John".to_string()),
+                Str("John".into()),
                 And,
-                Ident("age".to_string()),
+                Ident("age".into()),
                 In,
                 LBracket,
                 I64(18),
@@ -432,29 +432,29 @@ mod tests {
         parse_and_check(
             r#"matches(name, "^J.*n$")"#,
             &[
-                Ident("matches".to_string()),
+                Ident("matches".into()),
                 LParen,
-                Ident("name".to_string()),
+                Ident("name".into()),
                 Comma,
-                Str("^J.*n$".to_string()),
+                Str("^J.*n$".into()),
                 RParen,
             ],
         );
 
-        parse_and_check(r#"name != null"#, &[Ident("name".to_string()), Ne, Null]);
+        parse_and_check(r#"name != null"#, &[Ident("name".into()), Ne, Null]);
 
         parse_and_check(
             r#"open = 1.5 AND age = 18 AND is_peter = true"#,
             &[
-                Ident("open".to_string()),
+                Ident("open".into()),
                 Eq,
                 F64(1.5),
                 And,
-                Ident("age".to_string()),
+                Ident("age".into()),
                 Eq,
                 I64(18),
                 And,
-                Ident("is_peter".to_string()),
+                Ident("is_peter".into()),
                 Eq,
                 Bool(true),
             ],
@@ -463,24 +463,24 @@ mod tests {
         parse_and_check(
             r#"name.to_uppercase() = 'JOHN'"#,
             &[
-                Ident("name".to_string()),
+                Ident("name".into()),
                 Dot,
-                Ident("to_uppercase".to_string()),
+                Ident("to_uppercase".into()),
                 LParen,
                 RParen,
                 Eq,
-                Str("JOHN".to_string()),
+                Str("JOHN".into()),
             ],
         );
 
         parse_and_check(
             r#"name.contains('John')"#,
             &[
-                Ident("name".to_string()),
+                Ident("name".into()),
                 Dot,
-                Ident("contains".to_string()),
+                Ident("contains".into()),
                 LParen,
-                Str("John".to_string()),
+                Str("John".into()),
                 RParen,
             ],
         );
@@ -488,15 +488,15 @@ mod tests {
         parse_and_check(
             r#"type(maybe_i64_or_f64) IN ['i64', 'f64']"#,
             &[
-                Ident("type".to_string()),
+                Ident("type".into()),
                 LParen,
-                Ident("maybe_i64_or_f64".to_string()),
+                Ident("maybe_i64_or_f64".into()),
                 RParen,
                 In,
                 LBracket,
-                Str("i64".to_string()),
+                Str("i64".into()),
                 Comma,
-                Str("f64".to_string()),
+                Str("f64".into()),
                 RBracket,
             ],
         );
@@ -504,61 +504,61 @@ mod tests {
         parse_and_check(
             r#"type(foo.contains('bar')) = 'i64'"#,
             &[
-                Ident("type".to_string()),
+                Ident("type".into()),
                 LParen,
-                Ident("foo".to_string()),
+                Ident("foo".into()),
                 Dot,
-                Ident("contains".to_string()),
+                Ident("contains".into()),
                 LParen,
-                Str("bar".to_string()),
+                Str("bar".into()),
                 RParen,
                 RParen,
                 Eq,
-                Str("i64".to_string()),
+                Str("i64".into()),
             ],
         );
 
         parse_and_check(
             r#"name = 'John\nDoe' OR name = "John\tDoe""#,
             &[
-                Ident("name".to_string()),
+                Ident("name".into()),
                 Eq,
-                Str("John\nDoe".to_string()),
+                Str("John\nDoe".into()),
                 Or,
-                Ident("name".to_string()),
+                Ident("name".into()),
                 Eq,
-                Str("John\tDoe".to_string()),
+                Str("John\tDoe".into()),
             ],
         );
 
         parse_and_check(
             r#"name = 'John\\Doe'"#,
-            &[Ident("name".to_string()), Eq, Str("John\\Doe".to_string())],
+            &[Ident("name".into()), Eq, Str("John\\Doe".into())],
         );
 
         parse_and_check(
             r#"magic = "\"\n\r\t\\" AND magic = '\'\n\r\t\\'"#,
             &[
-                Ident("magic".to_string()),
+                Ident("magic".into()),
                 Eq,
-                Str("\"\n\r\t\\".to_string()),
+                Str("\"\n\r\t\\".into()),
                 And,
-                Ident("magic".to_string()),
+                Ident("magic".into()),
                 Eq,
-                Str("'\n\r\t\\".to_string()),
+                Str("'\n\r\t\\".into()),
             ],
         );
 
         parse_and_check(
             r#"a NOT IN ['foo', 'bar']"#,
             &[
-                Ident("a".to_string()),
+                Ident("a".into()),
                 Not,
                 In,
                 LBracket,
-                Str("foo".to_string()),
+                Str("foo".into()),
                 Comma,
-                Str("bar".to_string()),
+                Str("bar".into()),
                 RBracket,
             ],
         );
@@ -568,12 +568,12 @@ mod tests {
             &[
                 Bang,
                 LParen,
-                Ident("a".to_string()),
+                Ident("a".into()),
                 In,
                 LBracket,
-                Str("foo".to_string()),
+                Str("foo".into()),
                 Comma,
-                Str("bar".to_string()),
+                Str("bar".into()),
                 RBracket,
                 RParen,
             ],
@@ -584,12 +584,12 @@ mod tests {
             &[
                 Bang,
                 LParen,
-                Ident("a".to_string()),
+                Ident("a".into()),
                 In,
                 LBracket,
-                Str("foo".to_string()),
+                Str("foo".into()),
                 Comma,
-                Str("bar".to_string()),
+                Str("bar".into()),
                 RBracket,
                 RParen,
             ],
@@ -599,14 +599,14 @@ mod tests {
             r#"{"a":"b"}.a = "b""#,
             &[
                 LBrace,
-                Str("a".to_string()),
+                Str("a".into()),
                 Colon,
-                Str("b".to_string()),
+                Str("b".into()),
                 RBrace,
                 Dot,
-                Ident("a".to_string()),
+                Ident("a".into()),
                 Eq,
-                Str("b".to_string()),
+                Str("b".into()),
             ],
         );
     }

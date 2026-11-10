@@ -196,7 +196,7 @@ impl<'a> AsmCodegen<'a> {
             .push(AsmInstruction::BuildArray(elements.len() as u32));
     }
 
-    pub(crate) fn codegen_object(&mut self, fields: &'a BTreeMap<String, Expr>) {
+    pub(crate) fn codegen_object(&mut self, fields: &'a BTreeMap<filter_expr::CompactString, Expr>) {
         for (key, value) in fields {
             self.codegen_str(key);
             self.codegen_expr(value);
@@ -362,7 +362,7 @@ mod tests {
     #[test]
     fn test_codegen_field() {
         let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Field("field".to_string()));
+        let asm = asm_codegen.codegen(&Expr::Field("field".into()));
         assert_eq!(
             asm,
             Asm {
@@ -376,7 +376,7 @@ mod tests {
     #[test]
     fn test_codegen_str() {
         let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::Str("str".to_string()));
+        let asm = asm_codegen.codegen(&Expr::Str("str".into()));
         assert_eq!(
             asm,
             Asm {
@@ -560,8 +560,8 @@ mod tests {
     fn test_codegen_eq() {
         let asm_codegen = AsmCodegen::new();
         let asm = asm_codegen.codegen(&Expr::Eq(
-            Box::new(Expr::Str("hello".to_string())),
-            Box::new(Expr::Str("hello".to_string())),
+            Box::new(Expr::Str("hello".into())),
+            Box::new(Expr::Str("hello".into())),
         ));
         // Same string constants are deduplicated
         assert_eq!(
@@ -583,8 +583,8 @@ mod tests {
     fn test_codegen_eq_different_strings() {
         let asm_codegen = AsmCodegen::new();
         let asm = asm_codegen.codegen(&Expr::Eq(
-            Box::new(Expr::Str("hello".to_string())),
-            Box::new(Expr::Str("world".to_string())),
+            Box::new(Expr::Str("hello".into())),
+            Box::new(Expr::Str("world".into())),
         ));
         assert_eq!(
             asm,
@@ -830,8 +830,8 @@ mod tests {
     fn test_codegen_func_call() {
         let asm_codegen = AsmCodegen::new();
         let asm = asm_codegen.codegen(&Expr::FuncCall(
-            "len".to_string(),
-            vec![Expr::Str("hello".to_string())],
+            "len".into(),
+            vec![Expr::Str("hello".into())],
         ));
         assert_eq!(
             asm,
@@ -852,8 +852,8 @@ mod tests {
     fn test_codegen_func_call_multiple_args() {
         let asm_codegen = AsmCodegen::new();
         let asm = asm_codegen.codegen(&Expr::FuncCall(
-            "substr".to_string(),
-            vec![Expr::Str("hello".to_string()), Expr::I64(0), Expr::I64(3)],
+            "substr".into(),
+            vec![Expr::Str("hello".into()), Expr::I64(0), Expr::I64(3)],
         ));
         assert_eq!(
             asm,
@@ -875,7 +875,7 @@ mod tests {
     #[test]
     fn test_codegen_func_call_no_args() {
         let asm_codegen = AsmCodegen::new();
-        let asm = asm_codegen.codegen(&Expr::FuncCall("now".to_string(), vec![]));
+        let asm = asm_codegen.codegen(&Expr::FuncCall("now".into(), vec![]));
         assert_eq!(
             asm,
             Asm {
@@ -890,10 +890,10 @@ mod tests {
     fn test_codegen_func_call_same_function_twice() {
         let asm_codegen = AsmCodegen::new();
         let asm = asm_codegen.codegen(&Expr::FuncCall(
-            "len".to_string(),
+            "len".into(),
             vec![Expr::FuncCall(
-                "len".to_string(),
-                vec![Expr::Str("test".to_string())],
+                "len".into(),
+                vec![Expr::Str("test".into())],
             )],
         ));
         assert_eq!(
@@ -916,8 +916,8 @@ mod tests {
     fn test_codegen_method_call() {
         let asm_codegen = AsmCodegen::new();
         let asm = asm_codegen.codegen(&Expr::MethodCall(
-            "toUpper".to_string(),
-            Box::new(Expr::Str("hello".to_string())),
+            "toUpper".into(),
+            Box::new(Expr::Str("hello".into())),
             vec![],
         ));
         assert_eq!(
@@ -939,8 +939,8 @@ mod tests {
     fn test_codegen_method_call_with_args() {
         let asm_codegen = AsmCodegen::new();
         let asm = asm_codegen.codegen(&Expr::MethodCall(
-            "substring".to_string(),
-            Box::new(Expr::Str("hello".to_string())),
+            "substring".into(),
+            Box::new(Expr::Str("hello".into())),
             vec![Expr::I64(0), Expr::I64(3)],
         ));
         assert_eq!(
@@ -964,10 +964,10 @@ mod tests {
     fn test_codegen_method_call_chained() {
         let asm_codegen = AsmCodegen::new();
         let asm = asm_codegen.codegen(&Expr::MethodCall(
-            "method2".to_string(),
+            "method2".into(),
             Box::new(Expr::MethodCall(
-                "method1".to_string(),
-                Box::new(Expr::Str("test".to_string())),
+                "method1".into(),
+                Box::new(Expr::Str("test".into())),
                 vec![],
             )),
             vec![],
@@ -992,8 +992,8 @@ mod tests {
     fn test_codegen_method_call_on_field() {
         let asm_codegen = AsmCodegen::new();
         let asm = asm_codegen.codegen(&Expr::MethodCall(
-            "toUpper".to_string(),
-            Box::new(Expr::Field("name".to_string())),
+            "toUpper".into(),
+            Box::new(Expr::Field("name".into())),
             vec![],
         ));
         assert_eq!(
@@ -1016,8 +1016,8 @@ mod tests {
         let asm_codegen = AsmCodegen::new();
         let asm = asm_codegen.codegen(&Expr::Gt(
             Box::new(Expr::FuncCall(
-                "len".to_string(),
-                vec![Expr::Str("hello".to_string())],
+                "len".into(),
+                vec![Expr::Str("hello".into())],
             )),
             Box::new(Expr::I64(3)),
         ));
