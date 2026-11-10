@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+*Empty*
+
+## v0.6.1
+
 - Support string concatenation with the `+` operator.
 
 ## v0.6.0

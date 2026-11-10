@@ -159,7 +159,7 @@ dependencies = [
 
 [[package]]
 name = "filter-expr"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "async-trait",
  "compact_str",
@@ -170,7 +170,7 @@ dependencies = [
 
 [[package]]
 name = "filter-expr-evaler"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "async-trait",
