@@ -461,3 +461,36 @@ impl Function for FunctionDateTimeNow {
         Ok(Value::datetime(ctx.state.now()))
     }
 }
+
+/// Constructs a DateTime from integer UNIX seconds.
+pub(crate) struct FunctionDateTimeFromUnixTs;
+
+#[async_trait::async_trait]
+impl Function for FunctionDateTimeFromUnixTs {
+    async fn call(&self, ctx: FunctionContext<'_, '_>) -> Result<Value, Error> {
+        if ctx.args.len() != 1 {
+            return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument count")
+                .with_metadata("function", "DateTime::from_unix_ts")
+                .with_metadata("expected", 1)
+                .with_metadata("got", ctx.args.len()));
+        }
+        let seconds = match ctx.args[0] {
+            Value::I64(value) => value,
+            _ => {
+                return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
+                    .with_metadata("function", "DateTime::from_unix_ts")
+                    .with_metadata("index", 0)
+                    .with_metadata("expected", ValueType::I64)
+                    .with_metadata("got", ctx.args[0].typ()));
+            }
+        };
+        let ts = jiff::Timestamp::from_second(seconds).map_err(|err| {
+            Error::new(ErrorKind::InvalidValue, "UNIX timestamp is out of range")
+                .with_metadata("function", "DateTime::from_unix_ts")
+                .with_metadata("index", 0)
+                .with_metadata("value", seconds)
+                .with_source(err)
+        })?;
+        Ok(Value::datetime(ts))
+    }
+}

@@ -168,6 +168,7 @@ impl FilterExprEvalerEnv {
         }
 
         insert_function!("DateTime::now", FunctionDateTimeNow);
+        insert_function!("DateTime::from_unix_ts", FunctionDateTimeFromUnixTs);
 
         insert_function!("matches", FunctionMatches);
 
@@ -199,6 +200,8 @@ impl FilterExprEvalerEnv {
                 methods.insert(($name.to_string(), $obj_type), Arc::new($method));
             };
         }
+
+        insert_method!("to_unix_ts", DateTime, MethodDateTimeToUnixTs);
 
         insert_method!("to_uppercase", Str, MethodStrToUppercase);
         insert_method!("to_lowercase", Str, MethodStrToLowercase);

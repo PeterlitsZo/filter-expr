@@ -513,3 +513,28 @@ impl Method for MethodStrStripSuffix {
         Ok(s.strip_suffix(arg.as_str()).map_or(Value::Null, Value::str))
     }
 }
+
+/// Returns integer UNIX seconds, truncating fractional seconds toward zero.
+pub(crate) struct MethodDateTimeToUnixTs;
+
+#[async_trait::async_trait]
+impl Method for MethodDateTimeToUnixTs {
+    async fn call(&self, ctx: MethodContext<'_, '_>) -> Result<Value, Error> {
+        let ts = match ctx.obj {
+            Value::DateTime(ts) => ts,
+            _ => {
+                return Err(Error::new(ErrorKind::Internal, "object is not a datetime")
+                    .with_metadata("method", "to_unix_ts")
+                    .with_metadata("expected", ValueType::DateTime)
+                    .with_metadata("got", ctx.obj.typ()));
+            }
+        };
+        if !ctx.args.is_empty() {
+            return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument count")
+                .with_metadata("method", "to_unix_ts")
+                .with_metadata("expected", 0)
+                .with_metadata("got", ctx.args.len()));
+        }
+        Ok(Value::I64(ts.as_second()))
+    }
+}
