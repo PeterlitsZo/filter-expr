@@ -79,11 +79,33 @@ pub(crate) enum Token {
     Bang,
 }
 
+struct CharCursor<'a> {
+    chars: std::str::Chars<'a>,
+}
+
+impl<'a> CharCursor<'a> {
+    fn new(input: &'a str) -> Self {
+        Self { chars: input.chars() }
+    }
+
+    fn peek(&self) -> Option<char> {
+        self.chars.clone().next()
+    }
+
+    fn next(&mut self) -> Option<char> {
+        self.chars.next()
+    }
+
+    fn as_str(&self) -> &'a str {
+        self.chars.as_str()
+    }
+}
+
 pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
     let mut tokens = Vec::new();
-    let mut chars = input.chars().peekable();
+    let mut chars = CharCursor::new(input);
 
-    while let Some(&ch) = chars.peek() {
+    while let Some(ch) = chars.peek() {
         match ch {
             // Skip whitespace.
             c if c.is_whitespace() => {
@@ -93,7 +115,7 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
             // Division or block comments.
             '/' => {
                 chars.next();
-                if chars.peek() != Some(&'*') {
+                if chars.peek() != Some('*') {
                     tokens.push(Token::Div);
                     continue;
                 }
@@ -265,7 +287,7 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
 
             '&' | '|' => {
                 chars.next();
-                if chars.peek() != Some(&ch) {
+                if chars.peek() != Some(ch) {
                     return Err(Error::UnsupportedCharacter(ch));
                 }
                 chars.next();
@@ -273,14 +295,14 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
             }
             '=' => {
                 chars.next();
-                if let Some(&'=') = chars.peek() {
+                if let Some('=') = chars.peek() {
                     chars.next();
                 }
                 tokens.push(Token::Eq);
             }
             '>' => {
                 chars.next();
-                if let Some(&'=') = chars.peek() {
+                if let Some('=') = chars.peek() {
                     chars.next();
                     tokens.push(Token::Ge);
                 } else {
@@ -289,7 +311,7 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
             }
             '<' => {
                 chars.next();
-                if let Some(&'=') = chars.peek() {
+                if let Some('=') = chars.peek() {
                     chars.next();
                     tokens.push(Token::Le);
                 } else {
@@ -298,7 +320,7 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
             }
             '!' => {
                 chars.next();
-                if let Some(&'=') = chars.peek() {
+                if let Some('=') = chars.peek() {
                     chars.next();
                     tokens.push(Token::Ne);
                 } else {
@@ -339,10 +361,10 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
             }
             ':' => {
                 chars.next();
-                if chars.peek() == Some(&':') {
+                if chars.peek() == Some(':') {
                     chars.next();
                     tokens.push(Token::DoubleColon);
-                } else if chars.peek() == Some(&'=') {
+                } else if chars.peek() == Some('=') {
                     chars.next();
                     tokens.push(Token::Bind);
                 } else {
@@ -356,14 +378,14 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
 
             // Float or Int.
             c if c.is_ascii_digit() || c == '.' => {
-                let mut text = String::new();
-                while let Some(&c) = chars.peek() {
+                let remaining = chars.as_str();
+                while let Some(c) = chars.peek() {
                     if !(c.is_ascii_digit() || c == '.') {
                         break;
                     }
-                    text.push(c);
                     chars.next();
                 }
+                let text = &remaining[..remaining.len() - chars.as_str().len()];
                 if text.contains('.') {
                     tokens.push(Token::F64(text.parse::<f64>().unwrap()));
                 } else {
@@ -373,17 +395,18 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
 
             // Ident.
             c if c.is_alphanumeric() || c == '_' => {
-                let mut text = String::new();
-                while let Some(&c) = chars.peek() {
+                let remaining = chars.as_str();
+                while let Some(c) = chars.peek() {
                     if !(c.is_alphanumeric() || c == '_') {
                         break;
                     }
-                    text.push(c);
                     chars.next();
                 }
 
+                let text = &remaining[..remaining.len() - chars.as_str().len()];
+
                 // Check if it's a keyword or literal
-                match text.as_str() {
+                match text {
                     "AND" | "and" => tokens.push(Token::And),
                     "OR" | "or" => tokens.push(Token::Or),
                     "NOT" | "not" => tokens.push(Token::Not),
@@ -395,7 +418,7 @@ pub(crate) fn parse_token(input: &str) -> Result<Vec<Token>, Error> {
                     "false" => tokens.push(Token::Bool(false)),
                     "null" => tokens.push(Token::Null),
 
-                    _ => tokens.push(Token::Ident(text)),
+                    _ => tokens.push(Token::Ident(text.to_owned())),
                 }
             }
 
