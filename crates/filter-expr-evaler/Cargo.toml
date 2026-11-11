@@ -10,7 +10,7 @@ documentation = "https://docs.rs/filter-expr"
 [dependencies]
 num-bigint.workspace = true
 num-traits.workspace = true
-filter-expr = { path = "../filter-expr", version = "0.6.1" }
+filter-expr = { path = "../filter-expr", version = "0.7.0" }
 
 async-trait.workspace = true
 thiserror.workspace = true
