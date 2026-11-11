@@ -5,6 +5,7 @@ use std::{
 
 use filter_expr::{Expr, ExprId, FilterExpr};
 
+use crate::Value;
 use crate::asm::{Asm, AsmContextVar, AsmFunction, AsmInstruction, AsmMethod};
 
 pub(crate) struct AsmCodegen<'a> {
@@ -13,12 +14,12 @@ pub(crate) struct AsmCodegen<'a> {
     context_vars: Vec<AsmContextVar>,
     functions: Vec<AsmFunction>,
     methods: Vec<AsmMethod>,
-    str_pool: Vec<Arc<String>>,
+    const_pool: Vec<Value>,
     instructions: Vec<AsmInstruction>,
 
     locals_map: HashMap<&'a str, u32>,
     context_vars_map: HashMap<&'a str, u32>,
-    str_pool_map: HashMap<&'a str, u32>,
+    str_const_map: HashMap<&'a str, u32>,
     functions_map: HashMap<&'a str, u32>,
     methods_map: HashMap<&'a str, u32>,
     label_counter: u32,
@@ -32,12 +33,12 @@ impl<'a> AsmCodegen<'a> {
             context_vars: Vec::new(),
             functions: Vec::new(),
             methods: Vec::new(),
-            str_pool: Vec::new(),
+            const_pool: Vec::new(),
             instructions: Vec::new(),
 
             locals_map: HashMap::new(),
             context_vars_map: HashMap::new(),
-            str_pool_map: HashMap::new(),
+            str_const_map: HashMap::new(),
             functions_map: HashMap::new(),
             methods_map: HashMap::new(),
             label_counter: 0,
@@ -62,7 +63,7 @@ impl<'a> AsmCodegen<'a> {
             context_vars: self.context_vars,
             functions: self.functions,
             methods: self.methods,
-            str_pool: self.str_pool,
+            const_pool: self.const_pool,
             instructions: self.instructions,
         }
     }
@@ -77,6 +78,11 @@ impl<'a> AsmCodegen<'a> {
             Expr::FieldAccess(obj, field) => self.codegen_field_access(self.node(*obj), field),
             Expr::Str(value) => self.codegen_str(value),
             Expr::I64(value) => self.codegen_i64(*value),
+            Expr::BigInt(value) => {
+                let index = self.const_pool.len() as u32;
+                self.const_pool.push(Value::BigInt(value.clone()));
+                self.instructions.push(AsmInstruction::LoadConst(index));
+            }
             Expr::F64(value) => self.codegen_f64(*value),
             Expr::Bool(value) => self.codegen_bool(*value),
             Expr::Null => self.codegen_null(),
@@ -166,16 +172,16 @@ impl<'a> AsmCodegen<'a> {
     }
 
     fn intern_str(&mut self, value: &'a str) -> u32 {
-        *self.str_pool_map.entry(value).or_insert_with(|| {
-            let index = self.str_pool.len() as u32;
-            self.str_pool.push(Arc::new(value.to_string()));
+        *self.str_const_map.entry(value).or_insert_with(|| {
+            let index = self.const_pool.len() as u32;
+            self.const_pool.push(Value::Str(Arc::new(value.to_string())));
             index
         })
     }
 
     pub(crate) fn codegen_str(&mut self, value: &'a str) {
         let index = self.intern_str(value);
-        self.instructions.push(AsmInstruction::LoadString(index));
+        self.instructions.push(AsmInstruction::LoadConst(index));
     }
 
     pub(crate) fn codegen_i64(&mut self, value: i64) {
@@ -362,6 +368,7 @@ impl<'a> AsmCodegen<'a> {
 
 #[cfg(test)]
 mod tests {
+    use crate::Value;
     macro_rules! alloc {
         ($arena:expr, $expr:expr) => {{
             let expr = $expr;
@@ -401,8 +408,8 @@ mod tests {
         assert_eq!(
             asm,
             Asm {
-                str_pool: vec![Arc::new("str".to_string())],
-                instructions: vec![AsmInstruction::LoadString(0), AsmInstruction::Return],
+                const_pool: vec![Value::Str(Arc::new("str".to_string()))],
+                instructions: vec![AsmInstruction::LoadConst(0), AsmInstruction::Return],
                 ..Default::default()
             }
         );
@@ -605,10 +612,10 @@ mod tests {
         assert_eq!(
             asm,
             Asm {
-                str_pool: vec![Arc::new("hello".to_string())],
+                const_pool: vec![Value::Str(Arc::new("hello".to_string()))],
                 instructions: vec![
-                    AsmInstruction::LoadString(0),
-                    AsmInstruction::LoadString(0),
+                    AsmInstruction::LoadConst(0),
+                    AsmInstruction::LoadConst(0),
                     AsmInstruction::Eq,
                     AsmInstruction::Return,
                 ],
@@ -630,10 +637,13 @@ mod tests {
         assert_eq!(
             asm,
             Asm {
-                str_pool: vec![Arc::new("hello".to_string()), Arc::new("world".to_string())],
+                const_pool: vec![
+                    Value::Str(Arc::new("hello".to_string())),
+                    Value::Str(Arc::new("world".to_string())),
+                ],
                 instructions: vec![
-                    AsmInstruction::LoadString(0),
-                    AsmInstruction::LoadString(1),
+                    AsmInstruction::LoadConst(0),
+                    AsmInstruction::LoadConst(1),
                     AsmInstruction::Eq,
                     AsmInstruction::Return,
                 ],
@@ -891,9 +901,9 @@ mod tests {
             asm,
             Asm {
                 functions: vec![AsmFunction::new("len")],
-                str_pool: vec![Arc::new("hello".to_string())],
+                const_pool: vec![Value::Str(Arc::new("hello".to_string()))],
                 instructions: vec![
-                    AsmInstruction::LoadString(0),
+                    AsmInstruction::LoadConst(0),
                     AsmInstruction::CallFunction(0, 1),
                     AsmInstruction::Return,
                 ],
@@ -916,9 +926,9 @@ mod tests {
             asm,
             Asm {
                 functions: vec![AsmFunction::new("substr")],
-                str_pool: vec![Arc::new("hello".to_string())],
+                const_pool: vec![Value::Str(Arc::new("hello".to_string()))],
                 instructions: vec![
-                    AsmInstruction::LoadString(0),
+                    AsmInstruction::LoadConst(0),
                     AsmInstruction::LoadI64(0),
                     AsmInstruction::LoadI64(3),
                     AsmInstruction::CallFunction(0, 3),
@@ -957,9 +967,9 @@ mod tests {
             asm,
             Asm {
                 functions: vec![AsmFunction::new("len")],
-                str_pool: vec![Arc::new("test".to_string())],
+                const_pool: vec![Value::Str(Arc::new("test".to_string()))],
                 instructions: vec![
-                    AsmInstruction::LoadString(0),
+                    AsmInstruction::LoadConst(0),
                     AsmInstruction::CallFunction(0, 1),
                     AsmInstruction::CallFunction(0, 1),
                     AsmInstruction::Return,
@@ -984,9 +994,9 @@ mod tests {
             asm,
             Asm {
                 methods: vec![AsmMethod::new("toUpper")],
-                str_pool: vec![Arc::new("hello".to_string())],
+                const_pool: vec![Value::Str(Arc::new("hello".to_string()))],
                 instructions: vec![
-                    AsmInstruction::LoadString(0),
+                    AsmInstruction::LoadConst(0),
                     AsmInstruction::CallMethod(0, 0),
                     AsmInstruction::Return,
                 ],
@@ -1010,9 +1020,9 @@ mod tests {
             asm,
             Asm {
                 methods: vec![AsmMethod::new("substring")],
-                str_pool: vec![Arc::new("hello".to_string())],
+                const_pool: vec![Value::Str(Arc::new("hello".to_string()))],
                 instructions: vec![
-                    AsmInstruction::LoadString(0),
+                    AsmInstruction::LoadConst(0),
                     AsmInstruction::LoadI64(0),
                     AsmInstruction::LoadI64(3),
                     AsmInstruction::CallMethod(0, 2),
@@ -1045,9 +1055,9 @@ mod tests {
             asm,
             Asm {
                 methods: vec![AsmMethod::new("method1"), AsmMethod::new("method2")],
-                str_pool: vec![Arc::new("test".to_string())],
+                const_pool: vec![Value::Str(Arc::new("test".to_string()))],
                 instructions: vec![
-                    AsmInstruction::LoadString(0),
+                    AsmInstruction::LoadConst(0),
                     AsmInstruction::CallMethod(0, 0),
                     AsmInstruction::CallMethod(1, 0),
                     AsmInstruction::Return,
@@ -1100,9 +1110,9 @@ mod tests {
             asm,
             Asm {
                 functions: vec![AsmFunction::new("len")],
-                str_pool: vec![Arc::new("hello".to_string())],
+                const_pool: vec![Value::Str(Arc::new("hello".to_string()))],
                 instructions: vec![
-                    AsmInstruction::LoadString(0),
+                    AsmInstruction::LoadConst(0),
                     AsmInstruction::CallFunction(0, 1),
                     AsmInstruction::LoadI64(3),
                     AsmInstruction::Gt,

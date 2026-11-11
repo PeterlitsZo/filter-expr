@@ -13,5 +13,7 @@ repository = "https://github.com/PeterlitsZo/filter-expr"
 keywords = ["filter", "expression", "parser", "ast"]
 
 [workspace.dependencies]
+num-bigint = "0.5.1"
+num-traits = "0.2"
 async-trait = "0.1.92"
 thiserror = "2.0.20"

@@ -99,14 +99,16 @@ impl<'a> BytecodeRunner<'a> {
                 bc::GET_FIELD => {
                     let index = unsafe { self.read_u32() };
                     let object = unsafe { self.pop_stack_top_unchecked() };
-                    let field = &self.bytecode.str_pool[index as usize];
+                    let Value::Str(field) = &self.bytecode.const_pool[index as usize] else {
+                        unreachable!("field name constant must be a string");
+                    };
                     self.stack.push(object.get_field(field)?);
                 }
 
-                bc::LOAD_STRING => {
+                bc::LOAD_CONST => {
                     let index = unsafe { self.read_u32() };
-                    let value = Arc::clone(&self.bytecode.str_pool[index as usize]);
-                    self.stack.push(Value::Str(value));
+                    let value = self.bytecode.const_pool[index as usize].clone();
+                    self.stack.push(value);
                 }
                 bc::LOAD_I64 => {
                     let value = unsafe { self.read_i64() };

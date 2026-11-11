@@ -1,5 +1,7 @@
 //! Evaluator for filter expressions.
 
+pub use num_bigint::BigInt;
+
 mod asm;
 mod asm_codegen;
 mod bc;
@@ -459,9 +461,9 @@ mod tests {
         //     type(name) = 'str'
         //     type(name) = 'null'
         //     type(foo.contains('bar')) = 'bool'
-        //     type(age) = 'i64'
-        //     type(open) = 'f64'
-        //     type(maybe_i64_or_f64) IN ['i64', 'f64']
+        //     type(age) = 'int'
+        //     type(open) = 'float'
+        //     type(maybe_i64_or_f64) IN ['int', 'float']
         // =====================================================================
         parse_and_do_test_cases!(
             r#"type(name) = 'str'"#,
@@ -490,7 +492,7 @@ mod tests {
         );
 
         parse_and_do_test_cases!(
-            r#"type(age) = 'i64'"#,
+            r#"type(age) = 'int'"#,
             &[
                 (simple_context! { "age": 18 }, true),
                 (simple_context! { "age": 18.5 }, false),
@@ -498,7 +500,7 @@ mod tests {
         );
 
         parse_and_do_test_cases!(
-            r#"type(open) = 'f64'"#,
+            r#"type(open) = 'float'"#,
             &[
                 (simple_context! { "open": 18 }, false),
                 (simple_context! { "open": 18.5 }, true),
@@ -507,7 +509,7 @@ mod tests {
         );
 
         parse_and_do_test_cases!(
-            r#"type(maybe_i64_or_f64) IN ['i64', 'f64']"#,
+            r#"type(maybe_i64_or_f64) IN ['int', 'float']"#,
             &[
                 (simple_context! { "maybe_i64_or_f64": 18 }, true),
                 (simple_context! { "maybe_i64_or_f64": 18.5 }, true),

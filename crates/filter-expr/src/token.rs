@@ -10,6 +10,7 @@ pub(crate) enum Token {
     F64(f64),
     /// A integer literal.
     I64(i64),
+    BigInt(crate::BigInt),
     /// A boolean literal.
     Bool(bool),
     /// A null literal.
@@ -352,7 +353,12 @@ impl<'a> Lexer<'a> {
                     if text.contains('.') {
                         return Ok(Some(Token::F64(text.parse::<f64>().unwrap())));
                     } else {
-                        return Ok(Some(Token::I64(text.parse::<i64>().unwrap())));
+                        return Ok(Some(match text.parse::<i64>() {
+                            Ok(value) => Token::I64(value),
+                            Err(_) => Token::BigInt(text.parse().map_err(|_| {
+                                Error::Parse("invalid integer literal".into())
+                            })?),
+                        }));
                     }
                 }
 

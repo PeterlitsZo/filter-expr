@@ -1,5 +1,7 @@
 //! A library for parsing the filter expression.
 
+pub use num_bigint::BigInt;
+
 mod error;
 mod expr;
 mod parser;

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- [BREAKING] Support arbitrary-precision integers with automatic promotion.
+- [BREAKING] Rename `type()` results `"i64"` / `"f64"` to `"int"` / `"float"`.
 - Support leading `/*! v1 */` language version comments.
 - Treat comment-only input as an empty expression.
 

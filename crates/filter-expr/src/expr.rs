@@ -1,5 +1,8 @@
 use std::collections::BTreeMap;
 use std::fmt;
+use std::sync::Arc;
+
+use num_traits::ToPrimitive;
 
 use crate::{CompactString, Error, Transform, TransformContext, TransformResult};
 
@@ -52,6 +55,7 @@ pub enum Expr {
 
     Str(CompactString),
     I64(i64),
+    BigInt(Arc<crate::BigInt>),
     F64(f64),
     Bool(bool),
     Null,
@@ -100,6 +104,14 @@ impl Expr {
 
     pub fn i64_<T: Into<i64>>(value: T) -> Self {
         Self::I64(value.into())
+    }
+
+    pub fn bigint_(value: impl Into<crate::BigInt>) -> Self {
+        let value = value.into();
+        match value.to_i64() {
+            Some(value) => Self::I64(value),
+            None => Self::BigInt(Arc::new(value)),
+        }
     }
 
     pub fn f64_<T: Into<f64>>(value: T) -> Self {
@@ -282,6 +294,7 @@ impl Expr {
 
             Expr::Str(value) => Expr::Str(value),
             Expr::I64(value) => Expr::I64(value),
+            Expr::BigInt(value) => Expr::BigInt(value),
             Expr::F64(value) => Expr::F64(value),
             Expr::Bool(value) => Expr::Bool(value),
             Expr::Null => Expr::Null,
@@ -436,7 +449,7 @@ impl Expr {
 
         match self {
             // Leaf nodes - no optimization needed.
-            Field(_) | Str(_) | I64(_) | F64(_) | Bool(_) | Null => self,
+            Field(_) | Str(_) | I64(_) | BigInt(_) | F64(_) | Bool(_) | Null => self,
 
             // Field access - optimize the object.
             FieldAccess(obj, field) => FieldAccess(arena.optimize_node(obj), field),
@@ -651,6 +664,7 @@ impl Expr {
         match (self, other) {
             (Self::Field(a), Self::Field(b)) | (Self::Str(a), Self::Str(b)) => a == b,
             (Self::I64(a), Self::I64(b)) => a == b,
+            (Self::BigInt(a), Self::BigInt(b)) => a == b,
             (Self::F64(a), Self::F64(b)) => {
                 ordered_float::OrderedFloat(*a) == ordered_float::OrderedFloat(*b)
             }
@@ -734,6 +748,7 @@ impl fmt::Debug for ExprDebug<'_> {
                 .finish(),
             Expr::Str(value) => f.debug_tuple("Str").field(value).finish(),
             Expr::I64(value) => f.debug_tuple("I64").field(value).finish(),
+            Expr::BigInt(value) => f.debug_tuple("BigInt").field(value).finish(),
             Expr::F64(value) => f.debug_tuple("F64").field(value).finish(),
             Expr::Bool(value) => f.debug_tuple("Bool").field(value).finish(),
             Expr::Null => f.write_str("Null"),

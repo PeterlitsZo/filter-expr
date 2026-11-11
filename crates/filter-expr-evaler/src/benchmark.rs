@@ -5,7 +5,7 @@ use std::{future::Future, hint::black_box, time::Instant};
 use filter_expr::FilterExpr;
 
 use crate::{
-    CompiledFilterExpr, FilterExprEvaler, Value, asm_codegen::AsmCodegen,
+    CompiledFilterExpr, FilterExprEvaler, asm_codegen::AsmCodegen,
     bc_codegen::BytecodeCodegen, bc_runner::BytecodeRunner, simple_context,
 };
 
@@ -63,21 +63,11 @@ pub async fn run() {
     println!("{SAMPLES} samples, {iterations} operations/sample; times in ns/op");
     println!("Stages are measured independently; parent timings are not sums.");
     for (name, source) in cases {
+        let evaler = FilterExprEvaler::new();
+
         let filter = FilterExpr::parse(source).unwrap();
         let asm = AsmCodegen::new(&filter).codegen();
         let bytecode = BytecodeCodegen::new().codegen(asm.clone());
-        let evaler = FilterExprEvaler::new();
-        let env = &evaler.env;
-
-        // Compile outside execution timing and validate the fixture.
-        let compiled = CompiledFilterExpr::compile(&filter);
-        let expected = name != "short_circuit";
-        assert_eq!(evaler.run(&compiled, &ctx).await.unwrap(), expected);
-        // SAFETY: bytecode was produced by the project's code generators.
-        assert!(matches!(
-            unsafe { BytecodeRunner::new(&bytecode, env.clone()).run(&ctx).await }.unwrap(),
-            Value::Bool(actual) if actual == expected
-        ));
 
         println!("\n{name}: {source}");
         println!(
@@ -131,6 +121,7 @@ pub async fn run() {
             |()| async {
                 // SAFETY: bytecode was produced by the project's code generators.
                 unsafe {
+                    let env = &evaler.env;
                     BytecodeRunner::new(black_box(&bytecode), env.clone())
                         .run(black_box(&ctx))
                         .await

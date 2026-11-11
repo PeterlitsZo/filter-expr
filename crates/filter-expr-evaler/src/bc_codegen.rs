@@ -49,7 +49,7 @@ impl BytecodeCodegen {
                     self.labels_map.insert(*label_index, ins_offset);
                 }
 
-                Ins::LoadString(..) => ins_offset += Op::LoadString.op_len(),
+                Ins::LoadConst(..) => ins_offset += Op::LoadConst.op_len(),
                 Ins::LoadContext(..) => ins_offset += Op::LoadContext.op_len(),
                 Ins::LoadLocal(..) => ins_offset += Op::LoadLocal.op_len(),
                 Ins::StoreLocal(..) => ins_offset += Op::StoreLocal.op_len(),
@@ -105,7 +105,7 @@ impl BytecodeCodegen {
             context_vars,
             functions,
             methods,
-            str_pool: asm.str_pool,
+            const_pool: asm.const_pool,
         }
     }
 
@@ -139,8 +139,8 @@ impl BytecodeCodegen {
                 self.push_u8(BytecodeOpcode::GetField.into_u8());
                 self.push_u32(index);
             }
-            AsmInstruction::LoadString(index) => {
-                self.push_u8(BytecodeOpcode::LoadString.into_u8());
+            AsmInstruction::LoadConst(index) => {
+                self.push_u8(BytecodeOpcode::LoadConst.into_u8());
                 self.push_u32(index);
             }
             AsmInstruction::LoadContext(index) => {

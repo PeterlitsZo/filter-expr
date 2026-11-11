@@ -1,15 +1,30 @@
 use core::fmt;
-use std::sync::Arc;
+use crate::Value;
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct Asm {
     pub(crate) local_count: u32,
     pub(crate) context_vars: Vec<AsmContextVar>,
     pub(crate) functions: Vec<AsmFunction>,
     pub(crate) methods: Vec<AsmMethod>,
-    pub(crate) str_pool: Vec<Arc<String>>,
+    pub(crate) const_pool: Vec<Value>,
 
     pub(crate) instructions: Vec<AsmInstruction>,
+}
+
+#[cfg(test)]
+impl PartialEq for Asm {
+    fn eq(&self, other: &Self) -> bool {
+        self.local_count == other.local_count
+            && self.context_vars == other.context_vars
+            && self.functions == other.functions
+            && self.methods == other.methods
+            && self.instructions == other.instructions
+            && self.const_pool.len() == other.const_pool.len()
+            && self.const_pool.iter().zip(&other.const_pool).all(|(left, right)| {
+                left.partial_eq(right).unwrap_or(false)
+            })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -59,12 +74,12 @@ pub(crate) enum AsmInstruction {
     StoreLocal(u32),
 
     /// Pop an object and push its field value. The argument is the field name's
-    /// index in the string pool.
+    /// index in the constant pool.
     GetField(u32),
 
-    /// Load a string value from the string pool, and push it onto the stack.
-    /// The argument is the index of the constant in the string pool.
-    LoadString(u32),
+    /// Load a value from the constant pool, and push it onto the stack.
+    /// The argument is the index of the constant in the pool.
+    LoadConst(u32),
     /// Load an i64 value, and push it onto the stack. The argument is the value
     /// to load.
     LoadI64(i64),
@@ -169,7 +184,7 @@ impl fmt::Debug for AsmInstruction {
             AsmInstruction::LoadLocal(index) => write!(f, "LOAD_LOCAL local_index={index}"),
             AsmInstruction::StoreLocal(index) => write!(f, "STORE_LOCAL local_index={index}"),
             AsmInstruction::GetField(index) => write!(f, "GET_FIELD str_index={index}"),
-            AsmInstruction::LoadString(index) => write!(f, "LOAD_STR str_index={index}"),
+            AsmInstruction::LoadConst(index) => write!(f, "LOAD_CONST const_index={index}"),
             AsmInstruction::LoadI64(value) => write!(f, "LOAD_I64 value={value}"),
             AsmInstruction::LoadF64(value) => write!(f, "LOAD_F64 value={value}"),
             AsmInstruction::LoadBool(value) => write!(f, "LOAD_BOOL value={value}"),

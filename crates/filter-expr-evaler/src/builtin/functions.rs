@@ -1,3 +1,5 @@
+use num_traits::Signed;
+
 use crate::{Error, ErrorKind, Function, FunctionContext, Value, ValueType};
 
 /// Implements the built-in `matches(text, pattern) -> bool` function.
@@ -56,14 +58,14 @@ impl Function for FunctionMatches {
 
 /// Implements the built-in `type(value) -> str` function.
 ///
-/// Returns the evaluator's canonical type name: `"str"`, `"i64"`, `"f64"`,
+/// Returns the evaluator's canonical type name: `"str"`, `"int"`, `"float"`,
 /// `"bool"`, `"datetime"`, `"null"`, `"array"`, `"object"`, or `"userdata"`.
 ///
 /// # Examples
 ///
 /// ```text
 /// type("foobar") // => "str"
-/// type(42)       // => "i64"
+/// type(42)       // => "int"
 /// type(null)     // => "null"
 /// ```
 pub(crate) struct FunctionType;
@@ -82,8 +84,8 @@ impl Function for FunctionType {
 
         Ok(Value::str(match ctx.args[0].typ() {
             ValueType::Str => "str",
-            ValueType::I64 => "i64",
-            ValueType::F64 => "f64",
+            ValueType::I64 | ValueType::BigInt => "int",
+            ValueType::F64 => "float",
             ValueType::Bool => "bool",
             ValueType::DateTime => "datetime",
             ValueType::Null => "null",
@@ -110,15 +112,19 @@ impl Function for FunctionAbs {
         }
 
         match ctx.args[0] {
-            Value::I64(value) => value.checked_abs().map(Value::I64).ok_or_else(|| {
-                Error::new(ErrorKind::InvalidValue, "integer absolute value overflow")
-                    .with_metadata("function", "abs")
-            }),
+            Value::I64(value) => {
+                if value < 0 {
+                    Value::I64(value).numeric_sign(true)
+                } else {
+                    Ok(Value::I64(value))
+                }
+            }
+            Value::BigInt(ref value) => Ok(Value::bigint(value.as_ref().abs())),
             Value::F64(value) => Ok(Value::F64(value.abs())),
             _ => Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
                 .with_metadata("function", "abs")
                 .with_metadata("index", 0)
-                .with_metadata("expected", "i64 or f64")
+                .with_metadata("expected", "i64, bigint or f64")
                 .with_metadata("got", ctx.args[0].typ())),
         }
     }
@@ -141,11 +147,12 @@ impl Function for FunctionCeil {
 
         match ctx.args[0] {
             Value::I64(value) => Ok(Value::I64(value)),
+            Value::BigInt(ref value) => Ok(Value::BigInt(value.clone())),
             Value::F64(value) => Ok(Value::F64(value.ceil())),
             _ => Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
                 .with_metadata("function", "ceil")
                 .with_metadata("index", 0)
-                .with_metadata("expected", "i64 or f64")
+                .with_metadata("expected", "i64, bigint or f64")
                 .with_metadata("got", ctx.args[0].typ())),
         }
     }
@@ -168,11 +175,12 @@ impl Function for FunctionFloor {
 
         match ctx.args[0] {
             Value::I64(value) => Ok(Value::I64(value)),
+            Value::BigInt(ref value) => Ok(Value::BigInt(value.clone())),
             Value::F64(value) => Ok(Value::F64(value.floor())),
             _ => Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
                 .with_metadata("function", "floor")
                 .with_metadata("index", 0)
-                .with_metadata("expected", "i64 or f64")
+                .with_metadata("expected", "i64, bigint or f64")
                 .with_metadata("got", ctx.args[0].typ())),
         }
     }
@@ -195,11 +203,12 @@ impl Function for FunctionRound {
 
         match ctx.args[0] {
             Value::I64(value) => Ok(Value::I64(value)),
+            Value::BigInt(ref value) => Ok(Value::BigInt(value.clone())),
             Value::F64(value) => Ok(Value::F64(value.round())),
             _ => Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
                 .with_metadata("function", "round")
                 .with_metadata("index", 0)
-                .with_metadata("expected", "i64 or f64")
+                .with_metadata("expected", "i64, bigint or f64")
                 .with_metadata("got", ctx.args[0].typ())),
         }
     }
@@ -222,23 +231,25 @@ impl Function for FunctionPow {
 
         let x = match ctx.args[0] {
             Value::I64(value) => value as f64,
+            Value::BigInt(ref value) => Value::bigint_to_f64(value)?,
             Value::F64(value) => value,
             _ => {
                 return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
                     .with_metadata("function", "pow")
                     .with_metadata("index", 0)
-                    .with_metadata("expected", "i64 or f64")
+                    .with_metadata("expected", "i64, bigint or f64")
                     .with_metadata("got", ctx.args[0].typ()));
             }
         };
         let exponent = match ctx.args[1] {
             Value::I64(value) => value as f64,
+            Value::BigInt(ref value) => Value::bigint_to_f64(value)?,
             Value::F64(value) => value,
             _ => {
                 return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
                     .with_metadata("function", "pow")
                     .with_metadata("index", 1)
-                    .with_metadata("expected", "i64 or f64")
+                    .with_metadata("expected", "i64, bigint or f64")
                     .with_metadata("got", ctx.args[1].typ()));
             }
         };
@@ -264,12 +275,13 @@ impl Function for FunctionSqrt {
 
         let x = match ctx.args[0] {
             Value::I64(value) => value as f64,
+            Value::BigInt(ref value) => Value::bigint_to_f64(value)?,
             Value::F64(value) => value,
             _ => {
                 return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
                     .with_metadata("function", "sqrt")
                     .with_metadata("index", 0)
-                    .with_metadata("expected", "i64 or f64")
+                    .with_metadata("expected", "i64, bigint or f64")
                     .with_metadata("got", ctx.args[0].typ()));
             }
         };
@@ -295,12 +307,13 @@ impl Function for FunctionExp {
 
         let x = match ctx.args[0] {
             Value::I64(value) => value as f64,
+            Value::BigInt(ref value) => Value::bigint_to_f64(value)?,
             Value::F64(value) => value,
             _ => {
                 return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
                     .with_metadata("function", "exp")
                     .with_metadata("index", 0)
-                    .with_metadata("expected", "i64 or f64")
+                    .with_metadata("expected", "i64, bigint or f64")
                     .with_metadata("got", ctx.args[0].typ()));
             }
         };
@@ -326,12 +339,13 @@ impl Function for FunctionLn {
 
         let x = match ctx.args[0] {
             Value::I64(value) => value as f64,
+            Value::BigInt(ref value) => Value::bigint_to_f64(value)?,
             Value::F64(value) => value,
             _ => {
                 return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
                     .with_metadata("function", "ln")
                     .with_metadata("index", 0)
-                    .with_metadata("expected", "i64 or f64")
+                    .with_metadata("expected", "i64, bigint or f64")
                     .with_metadata("got", ctx.args[0].typ()));
             }
         };
@@ -357,23 +371,25 @@ impl Function for FunctionLog {
 
         let x = match ctx.args[0] {
             Value::I64(value) => value as f64,
+            Value::BigInt(ref value) => Value::bigint_to_f64(value)?,
             Value::F64(value) => value,
             _ => {
                 return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
                     .with_metadata("function", "log")
                     .with_metadata("index", 0)
-                    .with_metadata("expected", "i64 or f64")
+                    .with_metadata("expected", "i64, bigint or f64")
                     .with_metadata("got", ctx.args[0].typ()));
             }
         };
         let base = match ctx.args[1] {
             Value::I64(value) => value as f64,
+            Value::BigInt(ref value) => Value::bigint_to_f64(value)?,
             Value::F64(value) => value,
             _ => {
                 return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
                     .with_metadata("function", "log")
                     .with_metadata("index", 1)
-                    .with_metadata("expected", "i64 or f64")
+                    .with_metadata("expected", "i64, bigint or f64")
                     .with_metadata("got", ctx.args[1].typ()));
             }
         };
@@ -399,12 +415,13 @@ impl Function for FunctionLog2 {
 
         let x = match ctx.args[0] {
             Value::I64(value) => value as f64,
+            Value::BigInt(ref value) => Value::bigint_to_f64(value)?,
             Value::F64(value) => value,
             _ => {
                 return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
                     .with_metadata("function", "log2")
                     .with_metadata("index", 0)
-                    .with_metadata("expected", "i64 or f64")
+                    .with_metadata("expected", "i64, bigint or f64")
                     .with_metadata("got", ctx.args[0].typ()));
             }
         };
@@ -430,12 +447,13 @@ impl Function for FunctionLog10 {
 
         let x = match ctx.args[0] {
             Value::I64(value) => value as f64,
+            Value::BigInt(ref value) => Value::bigint_to_f64(value)?,
             Value::F64(value) => value,
             _ => {
                 return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
                     .with_metadata("function", "log10")
                     .with_metadata("index", 0)
-                    .with_metadata("expected", "i64 or f64")
+                    .with_metadata("expected", "i64, bigint or f64")
                     .with_metadata("got", ctx.args[0].typ()));
             }
         };

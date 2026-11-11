@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use crate::Value;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct BytecodeContextVar {
@@ -25,8 +25,8 @@ pub(crate) struct Bytecode {
     /// The information of the methods.
     pub(crate) methods: Vec<BytecodeMethod>,
 
-    /// The string pool.
-    pub(crate) str_pool: Vec<Arc<String>>,
+    /// Constants loaded by index, including strings and large integers.
+    pub(crate) const_pool: Vec<Value>,
 
     /// The code of the bytecode.
     pub(crate) code: Vec<u8>,
@@ -39,7 +39,7 @@ pub(crate) enum BytecodeOpcode {
     StoreLocal,
     GetField,
 
-    LoadString,
+    LoadConst,
     LoadI64,
     LoadF64,
     LoadBool,
@@ -87,7 +87,7 @@ impl BytecodeOpcode {
             BytecodeOpcode::LoadLocal => LOAD_LOCAL,
             BytecodeOpcode::StoreLocal => STORE_LOCAL,
             BytecodeOpcode::GetField => GET_FIELD,
-            BytecodeOpcode::LoadString => LOAD_STRING,
+            BytecodeOpcode::LoadConst => LOAD_CONST,
             BytecodeOpcode::LoadI64 => LOAD_I64,
             BytecodeOpcode::LoadF64 => LOAD_F64,
             BytecodeOpcode::LoadBool => LOAD_BOOL,
@@ -128,7 +128,7 @@ impl BytecodeOpcode {
             LOAD_LOCAL => Some(BytecodeOpcode::LoadLocal),
             STORE_LOCAL => Some(BytecodeOpcode::StoreLocal),
             GET_FIELD => Some(BytecodeOpcode::GetField),
-            LOAD_STRING => Some(BytecodeOpcode::LoadString),
+            LOAD_CONST => Some(BytecodeOpcode::LoadConst),
             LOAD_I64 => Some(BytecodeOpcode::LoadI64),
             LOAD_F64 => Some(BytecodeOpcode::LoadF64),
             LOAD_BOOL => Some(BytecodeOpcode::LoadBool),
@@ -170,7 +170,7 @@ impl BytecodeOpcode {
             BytecodeOpcode::StoreLocal => 5,
             BytecodeOpcode::GetField => 5,
 
-            BytecodeOpcode::LoadString => 5,
+            BytecodeOpcode::LoadConst => 5,
             BytecodeOpcode::LoadI64 => 9,
             BytecodeOpcode::LoadF64 => 9,
             BytecodeOpcode::LoadBool => 2,
@@ -228,7 +228,7 @@ define_opcodes! {
     STORE_LOCAL,
     GET_FIELD,
 
-    LOAD_STRING,
+    LOAD_CONST,
     LOAD_I64,
     LOAD_F64,
     LOAD_BOOL,

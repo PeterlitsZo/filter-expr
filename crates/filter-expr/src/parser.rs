@@ -328,6 +328,7 @@ impl<'a> Parser<'a> {
             Ok(match token {
                 Token::Str(s) => Expr::str_(s),
                 Token::I64(i) => Expr::i64_(i),
+                Token::BigInt(i) => Expr::bigint_(i),
                 Token::F64(f) => Expr::f64_(f),
                 Token::Bool(b) => Expr::bool_(b),
                 Token::Null => Expr::null_(),

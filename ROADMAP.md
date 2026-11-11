@@ -64,9 +64,9 @@
       operations.
 - [x] Support `&&`, `||` and `!` operators for the logical operations.
       Support `and`, `or` and `not` as the aliases of `&&`, `||` and `!`.
-- [ ] Use tool `lefthook` for pre-commit hooks.
+- [x] Use tool `lefthook` for pre-commit hooks.
 - [ ] Add fuzzing tests and more tests.
-- [ ] Support custom method.
+- [x] Support custom method.
 
 ## 2026-10
 

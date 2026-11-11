@@ -2,6 +2,9 @@ use std::{
     any::Any, cmp::Ordering, collections::BTreeMap, fmt::{Debug, Display}, sync::Arc,
 };
 
+use num_bigint::BigInt;
+use num_traits::{FromPrimitive, ToPrimitive, Zero};
+
 use crate::{Error, ErrorKind, Result};
 
 #[derive(Clone, Copy)]
@@ -19,6 +22,8 @@ pub enum Value {
     Str(Arc<String>),
     /// The integer value.
     I64(i64),
+    /// An integer outside the small-integer representation.
+    BigInt(Arc<BigInt>),
     /// The float value.
     F64(f64),
     /// The boolean value.
@@ -52,6 +57,27 @@ impl From<&str> for Value {
 impl From<i64> for Value {
     fn from(val: i64) -> Self {
         Value::I64(val)
+    }
+}
+
+impl From<u64> for Value {
+    fn from(value: u64) -> Self {
+        match i64::try_from(value) {
+            Ok(value) => Self::I64(value),
+            Err(_) => Self::bigint(value),
+        }
+    }
+}
+
+impl From<i32> for Value {
+    fn from(value: i32) -> Self {
+        Self::I64(i64::from(value))
+    }
+}
+
+impl From<BigInt> for Value {
+    fn from(value: BigInt) -> Self {
+        Self::bigint(value)
     }
 }
 
@@ -94,6 +120,14 @@ impl Value {
         Value::I64(i)
     }
 
+    pub fn bigint(value: impl Into<BigInt>) -> Self {
+        let value = value.into();
+        match value.to_i64() {
+            Some(value) => Self::I64(value),
+            None => Self::BigInt(Arc::new(value)),
+        }
+    }
+
     pub fn f64(f: f64) -> Self {
         Value::F64(f)
     }
@@ -124,6 +158,7 @@ impl Value {
         match self {
             Value::Str(_) => ValueType::Str,
             Value::I64(_) => ValueType::I64,
+            Value::BigInt(_) => ValueType::BigInt,
             Value::F64(_) => ValueType::F64,
             Value::Bool(_) => ValueType::Bool,
             Value::DateTime(_) => ValueType::DateTime,
@@ -140,6 +175,13 @@ impl Value {
         match (self, other) {
             (Value::Str(a), Value::Str(b)) => Ok(a == b),
             (Value::I64(a), Value::I64(b)) => Ok(a == b),
+            (Value::BigInt(a), Value::BigInt(b)) => Ok(a == b),
+            (Value::BigInt(a), Value::I64(b)) | (Value::I64(b), Value::BigInt(a)) => {
+                Ok(a.as_ref() == &BigInt::from(*b))
+            }
+            (Value::BigInt(a), Value::F64(b)) | (Value::F64(b), Value::BigInt(a)) => {
+                Ok(Self::compare_bigint_float(a, *b) == Some(Ordering::Equal))
+            }
             (Value::F64(a), Value::F64(b)) => Ok(a == b),
             (Value::Bool(a), Value::Bool(b)) => Ok(a == b),
             (Value::DateTime(a), Value::DateTime(b)) => Ok(a == b),
@@ -190,6 +232,13 @@ impl Value {
         match (self, other) {
             (Value::Str(a), Value::Str(b)) => Ok(a.partial_cmp(b)),
             (Value::I64(a), Value::I64(b)) => Ok(a.partial_cmp(b)),
+            (Value::BigInt(a), Value::BigInt(b)) => Ok(a.partial_cmp(b)),
+            (Value::BigInt(a), Value::I64(b)) => Ok(Some(a.as_ref().cmp(&BigInt::from(*b)))),
+            (Value::I64(a), Value::BigInt(b)) => Ok(Some(BigInt::from(*a).cmp(b))),
+            (Value::BigInt(a), Value::F64(b)) => Ok(Self::compare_bigint_float(a, *b)),
+            (Value::F64(a), Value::BigInt(b)) => {
+                Ok(Self::compare_bigint_float(b, *a).map(Ordering::reverse))
+            }
             (Value::F64(a), Value::F64(b)) => Ok(a.partial_cmp(b)),
             (Value::Bool(a), Value::Bool(b)) => Ok(a.partial_cmp(b)),
             (Value::DateTime(a), Value::DateTime(b)) => Ok(a.partial_cmp(b)),
@@ -233,17 +282,58 @@ impl Value {
 
 
 impl Value {
+    fn compare_bigint_float(integer: &BigInt, float: f64) -> Option<Ordering> {
+        if float.is_nan() {
+            return None;
+        }
+        if float.is_infinite() {
+            return Some(if float.is_sign_positive() {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            });
+        }
+        let truncated = BigInt::from_f64(float).unwrap();
+        Some(match integer.cmp(&truncated) {
+            Ordering::Equal if float.fract() > 0.0 => Ordering::Less,
+            Ordering::Equal if float.fract() < 0.0 => Ordering::Greater,
+            ordering => ordering,
+        })
+    }
+
+    pub(crate) fn bigint_to_f64(value: &BigInt) -> Result<f64> {
+        value.to_f64().filter(|value| value.is_finite()).ok_or_else(|| {
+            Error::new(ErrorKind::InvalidValue, "integer is out of range for f64")
+        })
+    }
+
     pub(crate) fn numeric_sign(&self, negative: bool) -> Result<Self> {
         match self {
-            Self::I64(value) if negative => value
-                .checked_neg()
-                .map(Self::I64)
-                .ok_or_else(|| Error::new(ErrorKind::InvalidValue, "integer overflow")),
+            Self::I64(value) if negative => Ok(match value.checked_neg() {
+                Some(value) => Self::I64(value),
+                None => Self::bigint(-BigInt::from(*value)),
+            }),
+            Self::BigInt(value) if negative => Ok(Self::bigint(-value.as_ref())),
             Self::F64(value) if negative => Ok(Self::F64(-value)),
-            Self::I64(_) | Self::F64(_) => Ok(self.clone()),
+            Self::I64(_) | Self::BigInt(_) | Self::F64(_) => Ok(self.clone()),
             _ => Err(Error::new(ErrorKind::TypeMismatch, "expected number")
                 .with_metadata("got", self.typ())),
         }
+    }
+
+    fn bigint_arithmetic(left: &BigInt, right: &BigInt, op: ArithmeticOp) -> Result<Self> {
+        use ArithmeticOp::*;
+
+        if matches!(op, Div | Rem) && right.is_zero() {
+            return Err(Error::new(ErrorKind::InvalidValue, "division by zero"));
+        }
+        Ok(Self::bigint(match op {
+            Add => left + right,
+            Sub => left - right,
+            Mul => left * right,
+            Div => left / right,
+            Rem => left % right,
+        }))
     }
 
     pub(crate) fn arithmetic(&self, other: &Self, op: ArithmeticOp) -> Result<Self> {
@@ -267,12 +357,28 @@ impl Value {
                 Div => left.checked_div(*right),
                 Rem => left.checked_rem(*right),
             };
-            return result
-                .map(Self::I64)
-                .ok_or_else(|| Error::new(ErrorKind::InvalidValue, "integer overflow"));
+            return match result {
+                Some(value) => Ok(Self::I64(value)),
+                None => Self::bigint_arithmetic(&BigInt::from(*left), &BigInt::from(*right), op),
+            };
+        }
+
+        match (self, other) {
+            (Self::BigInt(left), Self::BigInt(right)) => {
+                return Self::bigint_arithmetic(left, right, op);
+            }
+            (Self::BigInt(left), Self::I64(right)) => {
+                return Self::bigint_arithmetic(left, &BigInt::from(*right), op);
+            }
+            (Self::I64(left), Self::BigInt(right)) => {
+                return Self::bigint_arithmetic(&BigInt::from(*left), right, op);
+            }
+            _ => {}
         }
 
         let (left, right) = match (self, other) {
+            (Self::BigInt(left), Self::F64(right)) => (Self::bigint_to_f64(left)?, *right),
+            (Self::F64(left), Self::BigInt(right)) => (*left, Self::bigint_to_f64(right)?),
             (Self::I64(left), Self::F64(right)) => (*left as f64, *right),
             (Self::F64(left), Self::I64(right)) => (*left, *right as f64),
             (Self::F64(left), Self::F64(right)) => (*left, *right),
@@ -327,6 +433,7 @@ impl Value {
 pub enum ValueType {
     Str,
     I64,
+    BigInt,
     F64,
     Bool,
     DateTime,
