@@ -37,7 +37,7 @@
 
 ## 2026-11
 
-- [ ] Support version comment.
+- [x] Support version comment.
 - [x] Add benchmark tests and ensure the performance is not too bad.
 - [x] Support the math functions:
 

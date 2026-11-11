@@ -253,13 +253,13 @@ impl Expr {
 
         match this {
             TransformResult::Continue(expr) => {
-                return Box::pin(Self::transform_children(arena, transformer, expr, ctx)).await;
+                Box::pin(Self::transform_children(arena, transformer, expr, ctx)).await
             }
             TransformResult::Stop(expr) => {
-                return Ok(expr);
+                Ok(expr)
             }
             TransformResult::Err(err) => {
-                return Err(Error::Transform(err));
+                Err(Error::Transform(err))
             }
         }
     }

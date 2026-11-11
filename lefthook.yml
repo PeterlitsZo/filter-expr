@@ -1,0 +1,7 @@
+pre-commit:
+  piped: true
+  jobs:
+    - name: clippy
+      run: cargo clippy --workspace --all-targets --all-features --locked
+    - name: test
+      run: cargo test --workspace --all-features --locked

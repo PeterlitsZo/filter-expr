@@ -18,12 +18,12 @@ impl Error {
     where
         T: Into<String>,
     {
-        return Self {
+        Self {
             kind,
             msg: msg.into(),
             metadata: HashMap::new(),
             source: None,
-        };
+        }
     }
 
     pub fn with_source<T>(mut self, source: T) -> Self

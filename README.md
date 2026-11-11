@@ -42,6 +42,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 Reuse or clone `compiled` across contexts and evaluators. Each evaluator supplies
 its own functions, methods, and regex cache.
 
+## Development
+
+Install [Lefthook](https://lefthook.dev/), then run the following command from
+the repository root before starting development:
+
+```sh
+lefthook install
+```
+
+This enables pre-commit hooks.
+
 ## Benchmarks
 
 Run the stage benchmarks with an optimized build:
