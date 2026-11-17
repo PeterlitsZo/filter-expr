@@ -2,8 +2,8 @@
 
 クレート：
 
-- `filter-expr`.
-- `filter-expr-evaler`.
+- [`filter-expr`](./filter-expr.md).
+- [`filter-expr-evaler`](./filter-expr-evaler.md).
 
 `filter-expr` クレートはフィルター式の解析を行い、`FilterExpr` を式の抽象構文木（AST）として利用できます。
 評価方法は定義していません。独自に実装するか、`filter-expr-evaler` クレートを利用できます。

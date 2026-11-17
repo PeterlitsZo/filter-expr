@@ -1,4 +1,4 @@
-# filter-expr
+# Crate filter-expr
 
 A library for parsing the filter expression as an AST.
 
@@ -147,3 +147,4 @@ is_foo || is_lucky
 <array> = '[' [<expr> (',' <expr>)* ','?] ']'
 <object> = '{' [<str> ':' <expr> (',' <str> ':' <expr>)* ','?] '}'
 ```
+

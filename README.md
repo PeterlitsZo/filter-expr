@@ -1,14 +1,14 @@
-English | [简体中文](./docs/index.zh_CN.md) | [繁體中文](./docs/index.zh_TW.md)
-| [日本語](./docs/index.ja_JP.md) | [한국어](./docs/index.ko_KR.md)
-| [Español](./docs/index.es_ES.md) | [Français](./docs/index.fr_FR.md)
-| [Deutsch](./docs/index.de_DE.md) | [Português](./docs/index.pt_BR.md)
+English | [简体中文](./docs/zh_CN/index.md) | [繁體中文](./docs/zh_TW/index.md)
+| [日本語](./docs/ja_JP/index.md) | [한국어](./docs/ko_KR/index.md)
+| [Español](./docs/es_ES/index.md) | [Français](./docs/ft_FR/index.md)
+| [Deutsch](./docs/de_DE/index.md) | [Português](./docs/pt_BR/index.md)
 
 # filter-expr
 
 Crates:
 
-- `filter-expr`.
-- `filter-expr-evaler`.
+- [`filter-expr`](./docs/en_US/filter-expr.md).
+- [`filter-expr-evaler`](./docs/en_US/filter-expr-evaler.md).
 
 The `filter-expr` crate defines how to parse the filter expression, and then you
 can use the `FilterExpr` as the AST of the filter expression. It do not define

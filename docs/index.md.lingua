@@ -11,8 +11,8 @@
   :pt_BR "Crates:"
   _ "Crates:")
 
-- `filter-expr`.
-- `filter-expr-evaler`.
+- [`filter-expr`](\(match basepath null "./" _ basepath)filter-expr.md).
+- [`filter-expr-evaler`](\(match basepath null "./" _ basepath)filter-expr-evaler.md).
 
 \(match lang
   :zh_CN """

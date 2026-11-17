@@ -1,4 +1,4 @@
-# filter-expr-evaler
+# Crate filter-expr-evaler
 
 A library for evaluating filter expressions.
 
@@ -60,3 +60,4 @@ assert_eq!(result, true);
   once.
 - **`strip_suffix(suffix: str) -> str or null`**. Removes a matching suffix
   once.
+

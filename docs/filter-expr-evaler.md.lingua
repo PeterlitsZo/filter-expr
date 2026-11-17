@@ -1,0 +1,331 @@
+# Crate filter-expr-evaler
+
+\(match lang
+  :zh_CN "用于求值过滤表达式的库。"
+  :zh_TW "用於求值篩選運算式的函式庫。"
+  :ja_JP "フィルター式を評価するライブラリです。"
+  :ko_KR "필터 표현식을 평가하는 라이브러리입니다."
+  :es_ES "Una biblioteca para evaluar expresiones de filtrado."
+  :fr_FR "Une bibliothèque pour évaluer les expressions de filtrage."
+  :de_DE "Eine Bibliothek zur Auswertung von Filterausdrücken."
+  :pt_BR "Uma biblioteca para avaliar expressões de filtro."
+  _ "A library for evaluating filter expressions.")
+
+```rust
+use filter_expr::FilterExpr;
+use filter_expr_evaler::{CompiledFilterExpr, FilterExprEvaler, simple_context};
+
+// Parse the filter expression.
+let filter_expr = FilterExpr::parse("name = 'John' AND age > 18").unwrap();
+
+// Build the evaler.
+let filter_expr_evaler = FilterExprEvaler::new();
+
+// Compile once and reuse the handle for evaluation.
+let compiled = CompiledFilterExpr::compile(&filter_expr);
+let ctx = simple_context! {
+    "name": "John",
+    "age": 19,
+};
+let result = filter_expr_evaler.run(&compiled, &ctx).await.unwrap();
+assert_eq!(result, true);
+```
+
+\(match lang
+  :zh_CN "## 内置函数"
+  :zh_TW "## 內建函式"
+  :ja_JP "## 組み込み関数"
+  :ko_KR "## 내장 함수"
+  :es_ES "## Funciones integradas"
+  :fr_FR "## Fonctions intégrées"
+  :de_DE "## Integrierte Funktionen"
+  :pt_BR "## Funções integradas"
+  _ "## Builtin Functions")
+
+\(match lang
+  :zh_CN "- **`DateTime::now() -> datetime`**. 返回本次求值的时间快照。"
+  :zh_TW "- **`DateTime::now() -> datetime`**. 回傳本次求值的時間快照。"
+  :ja_JP "- **`DateTime::now() -> datetime`**. 今回の評価における時刻のスナップショットを返します。"
+  :ko_KR "- **`DateTime::now() -> datetime`**. 이번 평가의 시간 스냅샷을 반환합니다."
+  :es_ES "- **`DateTime::now() -> datetime`**. Devuelve la instantánea temporal de esta evaluación."
+  :fr_FR "- **`DateTime::now() -> datetime`**. Renvoie l’instantané temporel de cette évaluation."
+  :de_DE "- **`DateTime::now() -> datetime`**. Gibt den Zeit-Snapshot dieser Auswertung zurück."
+  :pt_BR "- **`DateTime::now() -> datetime`**. Retorna o instante de tempo capturado para esta avaliação."
+  _ "- **`DateTime::now() -> datetime`**. Returns this evaluation’s time snapshot.")
+\(match lang
+  :zh_CN "- **`matches(text: str, pattern: str) -> bool`**. 检查正则表达式是否匹配文本中的任意位置。例如，`matches('foobar', '^foo')` 返回 `true`。"
+  :zh_TW "- **`matches(text: str, pattern: str) -> bool`**. 檢查正規表示式是否符合文字中的任意位置。例如，`matches('foobar', '^foo')` 回傳 `true`。"
+  :ja_JP "- **`matches(text: str, pattern: str) -> bool`**. 正規表現がテキスト内のいずれかの位置にマッチするか確認します。例えば、`matches('foobar', '^foo')` は `true` を返します。"
+  :ko_KR "- **`matches(text: str, pattern: str) -> bool`**. 정규식이 텍스트의 어느 위치에서든 일치하는지 확인합니다. 예를 들어 `matches('foobar', '^foo')`는 `true`를 반환합니다."
+  :es_ES "- **`matches(text: str, pattern: str) -> bool`**. Comprueba si una expresión regular coincide en alguna parte del texto. Por ejemplo, `matches('foobar', '^foo')` devuelve `true`."
+  :fr_FR "- **`matches(text: str, pattern: str) -> bool`**. Vérifie si une expression régulière correspond à une partie du texte. Par exemple, `matches('foobar', '^foo')` renvoie `true`."
+  :de_DE "- **`matches(text: str, pattern: str) -> bool`**. Prüft, ob ein regulärer Ausdruck an irgendeiner Stelle im Text übereinstimmt. Zum Beispiel gibt `matches('foobar', '^foo')` den Wert `true` zurück."
+  :pt_BR "- **`matches(text: str, pattern: str) -> bool`**. Verifica se uma expressão regular corresponde a alguma parte do texto. Por exemplo, `matches('foobar', '^foo')` retorna `true`."
+  _ """
+    | - **`matches(text: str, pattern: str) -> bool`**. Checks whether a regular
+    |   expression matches anywhere in the text. For example,
+    |   `matches('foobar', '^foo')` returns `true`.
+  """)
+\(match lang
+  :zh_CN "- **`type(value) -> str`**. 返回值的类型名称。例如，`type(42)` 返回 `'i64'`。"
+  :zh_TW "- **`type(value) -> str`**. 回傳值的型別名稱。例如，`type(42)` 回傳 `'i64'`。"
+  :ja_JP "- **`type(value) -> str`**. 値の型名を返します。例えば、`type(42)` は `'i64'` を返します。"
+  :ko_KR "- **`type(value) -> str`**. 값의 타입 이름을 반환합니다. 예를 들어 `type(42)`는 `'i64'`를 반환합니다."
+  :es_ES "- **`type(value) -> str`**. Devuelve el nombre del tipo de un valor. Por ejemplo, `type(42)` devuelve `'i64'`."
+  :fr_FR "- **`type(value) -> str`**. Renvoie le nom du type d’une valeur. Par exemple, `type(42)` renvoie `'i64'`."
+  :de_DE "- **`type(value) -> str`**. Gibt den Typnamen eines Werts zurück. Zum Beispiel gibt `type(42)` den Wert `'i64'` zurück."
+  :pt_BR "- **`type(value) -> str`**. Retorna o nome do tipo de um valor. Por exemplo, `type(42)` retorna `'i64'`."
+  _ """
+    | - **`type(value) -> str`**. Returns the type name of a value. For example,
+    |   `type(42)` returns `'i64'`.
+  """)
+\(match lang
+  :zh_CN "- **`abs(x)`**. 绝对值。"
+  :zh_TW "- **`abs(x)`**. 絕對值。"
+  :ja_JP "- **`abs(x)`**. 絶対値。"
+  :ko_KR "- **`abs(x)`**. 절댓값."
+  :es_ES "- **`abs(x)`**. Valor absoluto."
+  :fr_FR "- **`abs(x)`**. Valeur absolue."
+  :de_DE "- **`abs(x)`**. Absolutwert."
+  :pt_BR "- **`abs(x)`**. Valor absoluto."
+  _ "- **`abs(x)`**. Absolute value.")
+\(match lang
+  :zh_CN "- **`ceil(x)`**. 向上取整到最近的整数。"
+  :zh_TW "- **`ceil(x)`**. 向上取整至最近的整數。"
+  :ja_JP "- **`ceil(x)`**. 最も近い整数に切り上げます。"
+  :ko_KR "- **`ceil(x)`**. 가장 가까운 정수로 올림합니다."
+  :es_ES "- **`ceil(x)`**. Redondea hacia arriba al entero más cercano."
+  :fr_FR "- **`ceil(x)`**. Arrondit à l’entier supérieur le plus proche."
+  :de_DE "- **`ceil(x)`**. Rundet auf die nächste ganze Zahl auf."
+  :pt_BR "- **`ceil(x)`**. Arredonda para cima até o inteiro mais próximo."
+  _ "- **`ceil(x)`**. Rounds up to the nearest integer.")
+\(match lang
+  :zh_CN "- **`floor(x)`**. 向下取整到最近的整数。"
+  :zh_TW "- **`floor(x)`**. 向下取整至最近的整數。"
+  :ja_JP "- **`floor(x)`**. 最も近い整数に切り捨てます。"
+  :ko_KR "- **`floor(x)`**. 가장 가까운 정수로 내림합니다."
+  :es_ES "- **`floor(x)`**. Redondea hacia abajo al entero más cercano."
+  :fr_FR "- **`floor(x)`**. Arrondit à l’entier inférieur le plus proche."
+  :de_DE "- **`floor(x)`**. Rundet auf die nächste ganze Zahl ab."
+  :pt_BR "- **`floor(x)`**. Arredonda para baixo até o inteiro mais próximo."
+  _ "- **`floor(x)`**. Rounds down to the nearest integer.")
+\(match lang
+  :zh_CN "- **`round(x)`**. 舍入到最近的整数，恰好居中时向远离零的方向舍入。"
+  :zh_TW "- **`round(x)`**. 捨入至最近的整數，恰好居中時朝遠離零的方向捨入。"
+  :ja_JP "- **`round(x)`**. 最も近い整数に丸めます。中間値はゼロから遠ざかる方向に丸めます。"
+  :ko_KR "- **`round(x)`**. 가장 가까운 정수로 반올림하며, 정확히 중간인 값은 0에서 멀어지는 방향으로 반올림합니다."
+  :es_ES "- **`round(x)`**. Redondea al entero más cercano; en caso de empate, se aleja de cero."
+  :fr_FR "- **`round(x)`**. Arrondit à l’entier le plus proche ; à égale distance, arrondit en s’éloignant de zéro."
+  :de_DE "- **`round(x)`**. Rundet auf die nächste ganze Zahl; bei gleichem Abstand wird von null weg gerundet."
+  :pt_BR "- **`round(x)`**. Arredonda para o inteiro mais próximo; em caso de empate, afasta-se de zero."
+  _ "- **`round(x)`**. Rounds to the nearest integer, with ties away from zero.")
+\(match lang
+  :zh_CN "- **`pow(x, exponent)`**. 计算 `x` 的指定次幂。"
+  :zh_TW "- **`pow(x, exponent)`**. 計算 `x` 的指定次方。"
+  :ja_JP "- **`pow(x, exponent)`**. `x` を指定された指数で累乗します。"
+  :ko_KR "- **`pow(x, exponent)`**. `x`를 지정된 지수만큼 거듭제곱합니다."
+  :es_ES "- **`pow(x, exponent)`**. Eleva `x` a la potencia indicada."
+  :fr_FR "- **`pow(x, exponent)`**. Élève `x` à la puissance indiquée."
+  :de_DE "- **`pow(x, exponent)`**. Potenziert `x` mit dem angegebenen Exponenten."
+  :pt_BR "- **`pow(x, exponent)`**. Eleva `x` à potência indicada."
+  _ "- **`pow(x, exponent)`**. Raises `x` to the given power.")
+\(match lang
+  :zh_CN "- **`sqrt(x)`**. 平方根。"
+  :zh_TW "- **`sqrt(x)`**. 平方根。"
+  :ja_JP "- **`sqrt(x)`**. 平方根。"
+  :ko_KR "- **`sqrt(x)`**. 제곱근."
+  :es_ES "- **`sqrt(x)`**. Raíz cuadrada."
+  :fr_FR "- **`sqrt(x)`**. Racine carrée."
+  :de_DE "- **`sqrt(x)`**. Quadratwurzel."
+  :pt_BR "- **`sqrt(x)`**. Raiz quadrada."
+  _ "- **`sqrt(x)`**. Square root.")
+\(match lang
+  :zh_CN "- **`exp(x)`**. 计算自然常数 e 的 `x` 次幂。"
+  :zh_TW "- **`exp(x)`**. 計算自然常數 e 的 `x` 次方。"
+  :ja_JP "- **`exp(x)`**. ネイピア数 e の `x` 乗を計算します。"
+  :ko_KR "- **`exp(x)`**. 자연상수 e의 `x`제곱을 계산합니다."
+  :es_ES "- **`exp(x)`**. Eleva el número de Euler e a la potencia `x`."
+  :fr_FR "- **`exp(x)`**. Élève le nombre d’Euler e à la puissance `x`."
+  :de_DE "- **`exp(x)`**. Berechnet die Eulersche Zahl e hoch `x`."
+  :pt_BR "- **`exp(x)`**. Eleva o número de Euler e à potência `x`."
+  _ "- **`exp(x)`**. Raises Euler's number e to the power `x`.")
+\(match lang
+  :zh_CN "- **`ln(x)`**. 自然对数。"
+  :zh_TW "- **`ln(x)`**. 自然對數。"
+  :ja_JP "- **`ln(x)`**. 自然対数。"
+  :ko_KR "- **`ln(x)`**. 자연로그."
+  :es_ES "- **`ln(x)`**. Logaritmo natural."
+  :fr_FR "- **`ln(x)`**. Logarithme naturel."
+  :de_DE "- **`ln(x)`**. Natürlicher Logarithmus."
+  :pt_BR "- **`ln(x)`**. Logaritmo natural."
+  _ "- **`ln(x)`**. Natural logarithm.")
+\(match lang
+  :zh_CN "- **`log(x, base)`**. 以指定底数计算对数。"
+  :zh_TW "- **`log(x, base)`**. 以指定底數計算對數。"
+  :ja_JP "- **`log(x, base)`**. 指定された底の対数。"
+  :ko_KR "- **`log(x, base)`**. 지정된 밑의 로그."
+  :es_ES "- **`log(x, base)`**. Logaritmo en la base indicada."
+  :fr_FR "- **`log(x, base)`**. Logarithme dans la base indiquée."
+  :de_DE "- **`log(x, base)`**. Logarithmus zur angegebenen Basis."
+  :pt_BR "- **`log(x, base)`**. Logaritmo na base indicada."
+  _ "- **`log(x, base)`**. Logarithm in the given base.")
+\(match lang
+  :zh_CN "- **`log2(x)`**. 以 2 为底的对数。"
+  :zh_TW "- **`log2(x)`**. 以 2 為底的對數。"
+  :ja_JP "- **`log2(x)`**. 底が 2 の対数。"
+  :ko_KR "- **`log2(x)`**. 밑이 2인 로그."
+  :es_ES "- **`log2(x)`**. Logaritmo en base 2."
+  :fr_FR "- **`log2(x)`**. Logarithme en base 2."
+  :de_DE "- **`log2(x)`**. Logarithmus zur Basis 2."
+  :pt_BR "- **`log2(x)`**. Logaritmo na base 2."
+  _ "- **`log2(x)`**. Base-2 logarithm.")
+\(match lang
+  :zh_CN "- **`log10(x)`**. 以 10 为底的对数。"
+  :zh_TW "- **`log10(x)`**. 以 10 為底的對數。"
+  :ja_JP "- **`log10(x)`**. 底が 10 の対数。"
+  :ko_KR "- **`log10(x)`**. 밑이 10인 로그."
+  :es_ES "- **`log10(x)`**. Logaritmo en base 10."
+  :fr_FR "- **`log10(x)`**. Logarithme en base 10."
+  :de_DE "- **`log10(x)`**. Logarithmus zur Basis 10."
+  :pt_BR "- **`log10(x)`**. Logaritmo na base 10."
+  _ "- **`log10(x)`**. Base-10 logarithm.")
+
+\(match lang
+  :zh_CN "## 内置方法"
+  :zh_TW "## 內建方法"
+  :ja_JP "## 組み込みメソッド"
+  :ko_KR "## 내장 메서드"
+  :es_ES "## Métodos integrados"
+  :fr_FR "## Méthodes intégrées"
+  :de_DE "## Integrierte Methoden"
+  :pt_BR "## Métodos integrados"
+  _ "## Builtin Methods")
+
+### str
+
+\(match lang
+  :zh_CN "- **`to_uppercase() -> str`**. 转换为 Unicode 大写。"
+  :zh_TW "- **`to_uppercase() -> str`**. 轉換為 Unicode 大寫。"
+  :ja_JP "- **`to_uppercase() -> str`**. Unicode の大文字に変換します。"
+  :ko_KR "- **`to_uppercase() -> str`**. Unicode 대문자로 변환합니다."
+  :es_ES "- **`to_uppercase() -> str`**. Convierte a mayúsculas Unicode."
+  :fr_FR "- **`to_uppercase() -> str`**. Convertit en majuscules Unicode."
+  :de_DE "- **`to_uppercase() -> str`**. Wandelt in Unicode-Großbuchstaben um."
+  :pt_BR "- **`to_uppercase() -> str`**. Converte para maiúsculas Unicode."
+  _ "- **`to_uppercase() -> str`**. Converts to Unicode uppercase.")
+\(match lang
+  :zh_CN "- **`to_lowercase() -> str`**. 转换为 Unicode 小写。"
+  :zh_TW "- **`to_lowercase() -> str`**. 轉換為 Unicode 小寫。"
+  :ja_JP "- **`to_lowercase() -> str`**. Unicode の小文字に変換します。"
+  :ko_KR "- **`to_lowercase() -> str`**. Unicode 소문자로 변환합니다."
+  :es_ES "- **`to_lowercase() -> str`**. Convierte a minúsculas Unicode."
+  :fr_FR "- **`to_lowercase() -> str`**. Convertit en minuscules Unicode."
+  :de_DE "- **`to_lowercase() -> str`**. Wandelt in Unicode-Kleinbuchstaben um."
+  :pt_BR "- **`to_lowercase() -> str`**. Converte para minúsculas Unicode."
+  _ "- **`to_lowercase() -> str`**. Converts to Unicode lowercase.")
+\(match lang
+  :zh_CN "- **`len() -> i64`**. 返回 UTF-8 编码的字节长度。"
+  :zh_TW "- **`len() -> i64`**. 回傳 UTF-8 編碼的位元組長度。"
+  :ja_JP "- **`len() -> i64`**. UTF-8 のバイト数を返します。"
+  :ko_KR "- **`len() -> i64`**. UTF-8 바이트 길이를 반환합니다."
+  :es_ES "- **`len() -> i64`**. Devuelve la longitud en bytes UTF-8."
+  :fr_FR "- **`len() -> i64`**. Renvoie la longueur en octets UTF-8."
+  :de_DE "- **`len() -> i64`**. Gibt die Länge in UTF-8-Bytes zurück."
+  :pt_BR "- **`len() -> i64`**. Retorna o comprimento em bytes UTF-8."
+  _ "- **`len() -> i64`**. Returns the length in UTF-8 bytes.")
+\(match lang
+  :zh_CN "- **`is_empty() -> bool`**. 检查字符串是否为空。"
+  :zh_TW "- **`is_empty() -> bool`**. 檢查字串是否為空。"
+  :ja_JP "- **`is_empty() -> bool`**. 文字列が空かどうかを確認します。"
+  :ko_KR "- **`is_empty() -> bool`**. 문자열이 비어 있는지 확인합니다."
+  :es_ES "- **`is_empty() -> bool`**. Comprueba si la cadena está vacía."
+  :fr_FR "- **`is_empty() -> bool`**. Vérifie si la chaîne est vide."
+  :de_DE "- **`is_empty() -> bool`**. Prüft, ob die Zeichenkette leer ist."
+  :pt_BR "- **`is_empty() -> bool`**. Verifica se a string está vazia."
+  _ "- **`is_empty() -> bool`**. Checks whether the string is empty.")
+\(match lang
+  :zh_CN "- **`contains(needle: str) -> bool`**. 检查是否包含子串。"
+  :zh_TW "- **`contains(needle: str) -> bool`**. 檢查是否包含子字串。"
+  :ja_JP "- **`contains(needle: str) -> bool`**. 部分文字列が含まれるか確認します。"
+  :ko_KR "- **`contains(needle: str) -> bool`**. 부분 문자열이 포함되어 있는지 확인합니다."
+  :es_ES "- **`contains(needle: str) -> bool`**. Comprueba si contiene una subcadena."
+  :fr_FR "- **`contains(needle: str) -> bool`**. Vérifie la présence d’une sous-chaîne."
+  :de_DE "- **`contains(needle: str) -> bool`**. Prüft, ob eine Teilzeichenkette enthalten ist."
+  :pt_BR "- **`contains(needle: str) -> bool`**. Verifica se contém uma substring."
+  _ "- **`contains(needle: str) -> bool`**. Checks for a substring.")
+\(match lang
+  :zh_CN "- **`starts_with(prefix: str) -> bool`**. 检查是否以指定前缀开头。"
+  :zh_TW "- **`starts_with(prefix: str) -> bool`**. 檢查是否以指定前綴開頭。"
+  :ja_JP "- **`starts_with(prefix: str) -> bool`**. 指定された接頭辞で始まるか確認します。"
+  :ko_KR "- **`starts_with(prefix: str) -> bool`**. 지정된 접두사로 시작하는지 확인합니다."
+  :es_ES "- **`starts_with(prefix: str) -> bool`**. Comprueba si empieza con el prefijo indicado."
+  :fr_FR "- **`starts_with(prefix: str) -> bool`**. Vérifie si la chaîne commence par le préfixe indiqué."
+  :de_DE "- **`starts_with(prefix: str) -> bool`**. Prüft, ob die Zeichenkette mit dem angegebenen Präfix beginnt."
+  :pt_BR "- **`starts_with(prefix: str) -> bool`**. Verifica se começa com o prefixo indicado."
+  _ "- **`starts_with(prefix: str) -> bool`**. Checks for a matching prefix.")
+\(match lang
+  :zh_CN "- **`ends_with(suffix: str) -> bool`**. 检查是否以指定后缀结尾。"
+  :zh_TW "- **`ends_with(suffix: str) -> bool`**. 檢查是否以指定後綴結尾。"
+  :ja_JP "- **`ends_with(suffix: str) -> bool`**. 指定された接尾辞で終わるか確認します。"
+  :ko_KR "- **`ends_with(suffix: str) -> bool`**. 지정된 접미사로 끝나는지 확인합니다."
+  :es_ES "- **`ends_with(suffix: str) -> bool`**. Comprueba si termina con el sufijo indicado."
+  :fr_FR "- **`ends_with(suffix: str) -> bool`**. Vérifie si la chaîne se termine par le suffixe indiqué."
+  :de_DE "- **`ends_with(suffix: str) -> bool`**. Prüft, ob die Zeichenkette mit dem angegebenen Suffix endet."
+  :pt_BR "- **`ends_with(suffix: str) -> bool`**. Verifica se termina com o sufixo indicado."
+  _ "- **`ends_with(suffix: str) -> bool`**. Checks for a matching suffix.")
+\(match lang
+  :zh_CN "- **`trim() -> str`**. 移除开头和结尾的 Unicode 空白字符。"
+  :zh_TW "- **`trim() -> str`**. 移除開頭與結尾的 Unicode 空白字元。"
+  :ja_JP "- **`trim() -> str`**. 先頭と末尾の Unicode 空白文字を除去します。"
+  :ko_KR "- **`trim() -> str`**. 앞뒤의 Unicode 공백 문자를 제거합니다."
+  :es_ES "- **`trim() -> str`**. Elimina los espacios en blanco Unicode al principio y al final."
+  :fr_FR "- **`trim() -> str`**. Supprime les espaces blancs Unicode au début et à la fin."
+  :de_DE "- **`trim() -> str`**. Entfernt führende und abschließende Unicode-Leerraumzeichen."
+  :pt_BR "- **`trim() -> str`**. Remove os caracteres de espaço em branco Unicode do início e do fim."
+  _ "- **`trim() -> str`**. Removes leading and trailing Unicode whitespace.")
+\(match lang
+  :zh_CN "- **`trim_start() -> str`**. 移除开头的 Unicode 空白字符。"
+  :zh_TW "- **`trim_start() -> str`**. 移除開頭的 Unicode 空白字元。"
+  :ja_JP "- **`trim_start() -> str`**. 先頭の Unicode 空白文字を除去します。"
+  :ko_KR "- **`trim_start() -> str`**. 앞쪽의 Unicode 공백 문자를 제거합니다."
+  :es_ES "- **`trim_start() -> str`**. Elimina los espacios en blanco Unicode al principio."
+  :fr_FR "- **`trim_start() -> str`**. Supprime les espaces blancs Unicode au début."
+  :de_DE "- **`trim_start() -> str`**. Entfernt führende Unicode-Leerraumzeichen."
+  :pt_BR "- **`trim_start() -> str`**. Remove os caracteres de espaço em branco Unicode do início."
+  _ "- **`trim_start() -> str`**. Removes leading Unicode whitespace.")
+\(match lang
+  :zh_CN "- **`trim_end() -> str`**. 移除结尾的 Unicode 空白字符。"
+  :zh_TW "- **`trim_end() -> str`**. 移除結尾的 Unicode 空白字元。"
+  :ja_JP "- **`trim_end() -> str`**. 末尾の Unicode 空白文字を除去します。"
+  :ko_KR "- **`trim_end() -> str`**. 뒤쪽의 Unicode 공백 문자를 제거합니다."
+  :es_ES "- **`trim_end() -> str`**. Elimina los espacios en blanco Unicode al final."
+  :fr_FR "- **`trim_end() -> str`**. Supprime les espaces blancs Unicode à la fin."
+  :de_DE "- **`trim_end() -> str`**. Entfernt abschließende Unicode-Leerraumzeichen."
+  :pt_BR "- **`trim_end() -> str`**. Remove os caracteres de espaço em branco Unicode do fim."
+  _ "- **`trim_end() -> str`**. Removes trailing Unicode whitespace.")
+\(match lang
+  :zh_CN "- **`strip_prefix(prefix: str) -> str or null`**. 移除一次匹配的前缀。"
+  :zh_TW "- **`strip_prefix(prefix: str) -> str or null`**. 移除一次符合的前綴。"
+  :ja_JP "- **`strip_prefix(prefix: str) -> str or null`**. 一致する接頭辞を一度だけ除去します。"
+  :ko_KR "- **`strip_prefix(prefix: str) -> str or null`**. 일치하는 접두사를 한 번 제거합니다."
+  :es_ES "- **`strip_prefix(prefix: str) -> str or null`**. Elimina una vez el prefijo coincidente."
+  :fr_FR "- **`strip_prefix(prefix: str) -> str or null`**. Supprime une seule fois le préfixe correspondant."
+  :de_DE "- **`strip_prefix(prefix: str) -> str or null`**. Entfernt das passende Präfix einmal."
+  :pt_BR "- **`strip_prefix(prefix: str) -> str or null`**. Remove uma vez o prefixo correspondente."
+  _ """
+    | - **`strip_prefix(prefix: str) -> str or null`**. Removes a matching prefix
+    |   once.
+  """)
+\(match lang
+  :zh_CN "- **`strip_suffix(suffix: str) -> str or null`**. 移除一次匹配的后缀。"
+  :zh_TW "- **`strip_suffix(suffix: str) -> str or null`**. 移除一次符合的後綴。"
+  :ja_JP "- **`strip_suffix(suffix: str) -> str or null`**. 一致する接尾辞を一度だけ除去します。"
+  :ko_KR "- **`strip_suffix(suffix: str) -> str or null`**. 일치하는 접미사를 한 번 제거합니다."
+  :es_ES "- **`strip_suffix(suffix: str) -> str or null`**. Elimina una vez el sufijo coincidente."
+  :fr_FR "- **`strip_suffix(suffix: str) -> str or null`**. Supprime une seule fois le suffixe correspondant."
+  :de_DE "- **`strip_suffix(suffix: str) -> str or null`**. Entfernt das passende Suffix einmal."
+  :pt_BR "- **`strip_suffix(suffix: str) -> str or null`**. Remove uma vez o sufixo correspondente."
+  _ """
+    | - **`strip_suffix(suffix: str) -> str or null`**. Removes a matching suffix
+    |   once.
+  """)

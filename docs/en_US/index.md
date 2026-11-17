@@ -2,8 +2,8 @@
 
 Crates:
 
-- `filter-expr`.
-- `filter-expr-evaler`.
+- [`filter-expr`](./filter-expr.md).
+- [`filter-expr-evaler`](./filter-expr-evaler.md).
 
 The `filter-expr` crate defines how to parse the filter expression, and then you
 can use the `FilterExpr` as the AST of the filter expression. It do not define

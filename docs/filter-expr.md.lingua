@@ -1,0 +1,299 @@
+# Crate filter-expr
+
+\(match lang
+  :zh_CN "用于将过滤表达式解析为抽象语法树（AST）的库。"
+  :zh_TW "用於將篩選運算式解析為抽象語法樹（AST）的函式庫。"
+  :ja_JP "フィルター式を抽象構文木（AST）に解析するライブラリです。"
+  :ko_KR "필터 표현식을 추상 구문 트리(AST)로 파싱하는 라이브러리입니다."
+  :es_ES "Una biblioteca para analizar expresiones de filtrado y generar un árbol de sintaxis abstracta (AST)."
+  :fr_FR "Une bibliothèque pour analyser les expressions de filtrage et produire un arbre syntaxique abstrait (AST)."
+  :de_DE "Eine Bibliothek zum Parsen von Filterausdrücken in einen abstrakten Syntaxbaum (AST)."
+  :pt_BR "Uma biblioteca para analisar expressões de filtro e gerar uma árvore sintática abstrata (AST)."
+  _ "A library for parsing the filter expression as an AST.")
+
+```rust
+use filter_expr::FilterExpr;
+
+let f = FilterExpr::parse("name = 'John' AND age > 18").unwrap();
+
+assert_eq!(f.expr(), Some(Expr::and_([
+    Expr::eq_(Expr::field_("name"), Expr::str_("John")),
+    Expr::gt_(Expr::field_("age"), Expr::i64_(18)),
+])));
+```
+
+\(match lang
+  :zh_CN "你可以自行实现求值，也可以使用 `filter-expr-evaler` crate。"
+  :zh_TW "你可以自行實作求值，也可以使用 `filter-expr-evaler` crate。"
+  :ja_JP "評価処理を独自に実装することも、`filter-expr-evaler` クレートを利用することもできます。"
+  :ko_KR "직접 평가를 구현하거나 `filter-expr-evaler` crate를 사용할 수 있습니다."
+  :es_ES "Puedes implementar la evaluación por tu cuenta o usar el crate `filter-expr-evaler`."
+  :fr_FR "Vous pouvez implémenter l’évaluation vous-même ou utiliser le crate `filter-expr-evaler`."
+  :de_DE "Du kannst die Auswertung selbst implementieren oder das Crate `filter-expr-evaler` verwenden."
+  :pt_BR "Você pode implementar a avaliação ou usar o crate `filter-expr-evaler`."
+  _ "You can evaluate it by yourself or use the `filter-expr-evaler` crate.")
+
+\(match lang
+  :zh_CN "## 示例"
+  :zh_TW "## 範例"
+  :ja_JP "## 使用例"
+  :ko_KR "## 예제"
+  :es_ES "## Ejemplos"
+  :fr_FR "## Exemples"
+  :de_DE "## Beispiele"
+  :pt_BR "## Exemplos"
+  _ "## Examples")
+
+\(match lang
+  :zh_CN "可以使用 `=`, `==`, `!=`, `>`, `>=`, `<`, `<=` 比较值："
+  :zh_TW "可以使用 `=`, `==`, `!=`, `>`, `>=`, `<`, `<=` 比較值："
+  :ja_JP "`=`, `==`, `!=`, `>`, `>=`, `<`, `<=` で値を比較できます。"
+  :ko_KR "`=`, `==`, `!=`, `>`, `>=`, `<`, `<=`로 값을 비교할 수 있습니다."
+  :es_ES "Puedes comparar valores con `=`, `==`, `!=`, `>`, `>=`, `<` y `<=`:"
+  :fr_FR "Vous pouvez comparer des valeurs avec `=`, `==`, `!=`, `>`, `>=`, `<` et `<=` :"
+  :de_DE "Du kannst Werte mit `=`, `==`, `!=`, `>`, `>=`, `<` und `<=` vergleichen:"
+  :pt_BR "Você pode comparar valores com `=`, `==`, `!=`, `>`, `>=`, `<` e `<=`:"
+  _ "You can compare values with `=`, `==`, `!=`, `>`, `>=`, `<`, and `<=`:")
+
+```text
+age >= 18 AND rating > 4.5
+```
+
+\(match lang
+  :zh_CN "可以使用算术运算符 `+ - * / %` 以及一元 `+` / `-`："
+  :zh_TW "可以使用算術運算子 `+ - * / %` 以及一元 `+` / `-`："
+  :ja_JP "算術演算子 `+ - * / %` と単項演算子 `+` / `-` を使用できます。"
+  :ko_KR "산술 연산자 `+ - * / %`와 단항 연산자 `+` / `-`를 사용할 수 있습니다."
+  :es_ES "Puedes usar los operadores aritméticos `+ - * / %` y los unarios `+` / `-`:"
+  :fr_FR "Vous pouvez utiliser les opérateurs arithmétiques `+ - * / %` et les opérateurs unaires `+` / `-` :"
+  :de_DE "Du kannst die arithmetischen Operatoren `+ - * / %` sowie die unären Operatoren `+` / `-` verwenden:"
+  :pt_BR "Você pode usar os operadores aritméticos `+ - * / %` e os unários `+` / `-`:"
+  _ "You can use arithmetic operators `+ - * / %` and unary `+` / `-`:")
+
+```text
+price * quantity - discount >= 100
+/* OR */
+(count + 1) % 2 = 0
+```
+
+\(match lang
+  :zh_CN "可以使用 `AND` / `and` / `&&`、`OR` / `or` / `||`、`NOT` / `not` / `!` 以及括号组合条件："
+  :zh_TW "可以使用 `AND` / `and` / `&&`、`OR` / `or` / `||`、`NOT` / `not` / `!` 以及括號組合條件："
+  :ja_JP "`AND` / `and` / `&&`、`OR` / `or` / `||`、`NOT` / `not` / `!` と括弧で条件を組み合わせられます。"
+  :ko_KR "`AND` / `and` / `&&`, `OR` / `or` / `||`, `NOT` / `not` / `!` 및 괄호로 조건을 조합할 수 있습니다."
+  :es_ES "Puedes combinar condiciones con `AND` / `and` / `&&`, `OR` / `or` / `||`, `NOT` / `not` / `!` y paréntesis:"
+  :fr_FR "Vous pouvez combiner des conditions avec `AND` / `and` / `&&`, `OR` / `or` / `||`, `NOT` / `not` / `!` et des parenthèses :"
+  :de_DE "Du kannst Bedingungen mit `AND` / `and` / `&&`, `OR` / `or` / `||`, `NOT` / `not` / `!` und Klammern kombinieren:"
+  :pt_BR "Você pode combinar condições com `AND` / `and` / `&&`, `OR` / `or` / `||`, `NOT` / `not` / `!` e parênteses:"
+  _ """
+    | You can combine conditions with `AND` / `and` / `&&`, `OR` / `or` / `||`,
+    | and `NOT` / `not` / `!`, plus parentheses:
+  """)
+
+```text
+active AND (admin OR NOT banned)
+/* OR */
+active and (admin or not banned)
+/* OR */
+active && (admin || !banned)
+```
+
+\(match lang
+  :zh_CN "可以使用 `IN` / `in` 判断值是否属于数组，或使用 `NOT IN` / `not in` 排除数组中的值："
+  :zh_TW "可以使用 `IN` / `in` 判斷值是否屬於陣列，或使用 `NOT IN` / `not in` 排除陣列中的值："
+  :ja_JP "`IN` / `in` で値が配列に含まれるか確認し、`NOT IN` / `not in` で配列内の値を除外できます。"
+  :ko_KR "`IN` / `in`으로 값이 배열에 포함되는지 확인하거나 `NOT IN` / `not in`으로 배열의 값을 제외할 수 있습니다."
+  :es_ES "Puedes comprobar si un valor pertenece a un array con `IN` / `in`, o excluir valores con `NOT IN` / `not in`:"
+  :fr_FR "Vous pouvez vérifier si une valeur appartient à un tableau avec `IN` / `in`, ou exclure des valeurs avec `NOT IN` / `not in` :"
+  :de_DE "Du kannst mit `IN` / `in` prüfen, ob ein Wert in einem Array enthalten ist, oder mit `NOT IN` / `not in` Werte ausschließen:"
+  :pt_BR "Você pode verificar se um valor pertence a um array com `IN` / `in` ou excluir valores com `NOT IN` / `not in`:"
+  _ """
+    | You can check whether a value belongs to an array with `IN` / `in`, or exclude
+    | values with `NOT IN` / `not in`:
+  """)
+
+```text
+status IN [200, 201, 204]
+/* OR */
+status in [200, 201, 204]
+/* OR */
+status not in [400, 404, 500]
+```
+
+\(match lang
+  :zh_CN "字符串可使用单引号或双引号，并用反斜杠转义引号："
+  :zh_TW "字串可使用單引號或雙引號，並用反斜線跳脫引號："
+  :ja_JP "文字列はシングルクォートまたはダブルクォートで囲み、引用符はバックスラッシュでエスケープできます。"
+  :ko_KR "문자열을 작은따옴표나 큰따옴표로 감싸고 역슬래시로 따옴표를 이스케이프할 수 있습니다."
+  :es_ES "Puedes delimitar cadenas con comillas simples o dobles y escapar las comillas con una barra invertida:"
+  :fr_FR "Vous pouvez délimiter les chaînes avec des guillemets simples ou doubles et échapper les guillemets avec une barre oblique inverse :"
+  :de_DE "Du kannst Zeichenketten in einfache oder doppelte Anführungszeichen setzen und Anführungszeichen mit einem Backslash maskieren:"
+  :pt_BR "Você pode delimitar strings com aspas simples ou duplas e escapar as aspas com uma barra invertida:"
+  _ """
+    | You can quote strings with single or double quotes and escape quotes with a
+    | backslash:
+  """)
+
+```text
+first_name = "John" AND last_name = 'O\'Brien'
+```
+
+\(match lang
+  :zh_CN "可以使用布尔值和 `null` 字面量："
+  :zh_TW "可以使用布林值和 `null` 字面值："
+  :ja_JP "真偽値と `null` のリテラルを使用できます。"
+  :ko_KR "불리언 및 `null` 리터럴을 사용할 수 있습니다."
+  :es_ES "Puedes usar literales booleanos y `null`:"
+  :fr_FR "Vous pouvez utiliser des littéraux booléens et `null` :"
+  :de_DE "Du kannst boolesche Literale und `null` verwenden:"
+  :pt_BR "Você pode usar literais booleanos e `null`:"
+  _ "You can use boolean and `null` literals:")
+
+```text
+active = true AND deleted_at = null
+```
+
+\(match lang
+  :zh_CN "可以调用求值器提供的函数，并链式调用方法："
+  :zh_TW "可以呼叫求值器提供的函式，並串接方法呼叫："
+  :ja_JP "評価器が提供する関数を呼び出したり、メソッドを連鎖させたりできます。"
+  :ko_KR "평가기가 제공하는 함수를 호출하고 메서드를 연속으로 호출할 수 있습니다."
+  :es_ES "Puedes llamar a funciones y encadenar métodos proporcionados por el evaluador:"
+  :fr_FR "Vous pouvez appeler les fonctions et enchaîner les méthodes fournies par votre évaluateur :"
+  :de_DE "Du kannst Funktionen aufrufen und Methodenaufrufe verketten, die dein Evaluator bereitstellt:"
+  :pt_BR "Você pode chamar funções e encadear métodos fornecidos pelo avaliador:"
+  _ "You can call functions and chain methods provided by your evaluator:")
+
+```text
+matches(name.trim().to_lowercase(), '^john')
+```
+
+\(match lang
+  :zh_CN "可以使用点号访问嵌套字段："
+  :zh_TW "可以使用點號存取巢狀欄位："
+  :ja_JP "ドット記法でネストしたフィールドへのアクセスを記述できます。"
+  :ko_KR "점 표기법으로 중첩된 필드에 접근할 수 있습니다."
+  :es_ES "Puedes acceder a campos anidados con la notación de punto:"
+  :fr_FR "Vous pouvez accéder aux champs imbriqués avec la notation pointée :"
+  :de_DE "Du kannst mit der Punktnotation auf verschachtelte Felder zugreifen:"
+  :pt_BR "Você pode acessar campos aninhados com a notação de ponto:"
+  _ "You can parse nested field access with dot notation:")
+
+```text
+user.address.city = 'London'
+```
+
+\(match lang
+  :zh_CN "可以使用 `let name := value then body` 绑定中间结果："
+  :zh_TW "可以使用 `let name := value then body` 繫結中間結果："
+  :ja_JP "`let name := value then body` で中間結果を束縛できます。"
+  :ko_KR "`let name := value then body`로 중간 결과를 바인딩할 수 있습니다."
+  :es_ES "Puedes vincular resultados intermedios con `let name := value then body`:"
+  :fr_FR "Vous pouvez lier des résultats intermédiaires avec `let name := value then body` :"
+  :de_DE "Du kannst Zwischenergebnisse mit `let name := value then body` binden:"
+  :pt_BR "Você pode vincular resultados intermediários com `let name := value then body`:"
+  _ "You can bind intermediate results with `let name := value then body`:")
+
+```text
+let is_foo := a = "foo" then
+let is_lucky := n in [1, 2, 3] then
+is_foo || is_lucky
+```
+
+\(match lang
+  :zh_CN "## 语法参考"
+  :zh_TW "## 語法參考"
+  :ja_JP "## 構文リファレンス"
+  :ko_KR "## 문법 참조"
+  :es_ES "## Referencia de sintaxis"
+  :fr_FR "## Référence de syntaxe"
+  :de_DE "## Syntaxreferenz"
+  :pt_BR "## Referência de sintaxe"
+  _ "## Syntax Reference")
+
+\(match lang
+  :zh_CN "### 过滤器"
+  :zh_TW "### 篩選器"
+  :ja_JP "### フィルター"
+  :ko_KR "### 필터"
+  :es_ES "### Filtro"
+  :fr_FR "### Filtre"
+  :de_DE "### Filter"
+  :pt_BR "### Filtro"
+  _ "### Filter")
+
+```
+<filter> = <expr> | <empty>
+
+<empty> =
+```
+
+\(match lang
+  :zh_CN "### 表达式"
+  :zh_TW "### 運算式"
+  :ja_JP "### 式"
+  :ko_KR "### 표현식"
+  :es_ES "### Expresión"
+  :fr_FR "### Expression"
+  :de_DE "### Ausdruck"
+  :pt_BR "### Expressão"
+  _ "### Expression")
+
+```
+<expr> = <let-expr> | <logical-expr>
+<let-expr> = 'let' <ident> ':=' <logical-expr> 'then' <expr>
+<logical-expr> = <or_test> (<or> <or_test>)*
+
+<or_test> = <and_test> (<and> <and_test>)*
+<and_test> = <not> <and_test> | <comparison>
+
+<or> = 'OR' | 'or' | '||'
+<and> = 'AND' | 'and' | '&&'
+<not> = 'NOT' | 'not' | '!'
+```
+
+\(match lang
+  :zh_CN "### 比较"
+  :zh_TW "### 比較"
+  :ja_JP "### 比較"
+  :ko_KR "### 비교"
+  :es_ES "### Comparación"
+  :fr_FR "### Comparaison"
+  :de_DE "### Vergleich"
+  :pt_BR "### Comparação"
+  _ "### Comparison")
+
+```
+<comparison> = <additive> <operator> <comparison>
+             | <additive>
+
+<additive> = <multiplicative> (('+' | '-') <multiplicative>)*
+<multiplicative> = <unary> (('*' | '/' | '%') <unary>)*
+<unary> = ('+' | '-') <unary> | <primary>
+
+<primary> = <func-call>
+          | <method-call>
+          | <field-access>
+          | <value>
+
+<operator> = '=' | '==' | '>' | '<' | '>=' | '<=' | '!=' | <in> | ('NOT' | 'not') <in>
+<in> = 'IN' | 'in'
+
+<namespace-prefix> = (<ident> '::')+
+<func-call> = <namespace-prefix>? <ident> '(' [<expr> (',' <expr>)* ','?] ')'
+<method-call> = <value> '.' <ident> '(' [<expr> (',' <expr>)* ','?] ')'
+<field-access> = <value> '.' <ident>
+
+<value> = <str>
+        | <i64>
+        | <f64>
+        | <bool>
+        | <null>
+        | <ident>
+        | <array>
+        | <object>
+        | '(' <expr> ')'
+
+<array> = '[' [<expr> (',' <expr>)* ','?] ']'
+<object> = '{' [<str> ':' <expr> (',' <str> ':' <expr>)* ','?] '}'
+```
