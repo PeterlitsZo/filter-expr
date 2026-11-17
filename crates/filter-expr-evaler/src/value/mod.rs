@@ -1,5 +1,9 @@
+mod userdata;
+
+pub use userdata::Userdata;
+
 use std::{
-    any::Any, cmp::Ordering, collections::BTreeMap, fmt::{Debug, Display}, sync::Arc,
+    cmp::Ordering, collections::BTreeMap, fmt::Display, sync::Arc,
 };
 
 use num_bigint::BigInt;
@@ -409,10 +413,10 @@ impl Value {
 }
 
 impl Value {
-    pub(crate) fn get_field(&self, field: &str) -> Result<Value> {
+    pub(crate) async fn get_field(&self, field: &str) -> Result<Value> {
         let value = match self {
             Value::Object(object) => object.get(field).cloned(),
-            Value::Userdata(userdata) => userdata.get_field(field)?,
+            Value::Userdata(userdata) => userdata.get_field(field).await?,
             _ => {
                 return Err(Error::new(
                     ErrorKind::TypeMismatch,
@@ -448,33 +452,6 @@ pub enum ValueType {
 impl Display for ValueType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
-    }
-}
-
-/// A custom value. Comparisons and field reads follow [`crate::Function`]'s
-/// purity contract.
-pub trait Userdata: Debug + Send + Sync {
-    /// Return the value as `Any` for implementer-side downcasting.
-    fn as_any(&self) -> &dyn Any;
-
-    /// Compare for equality with another value.
-    ///
-    /// Return `Ok(true)` for equal values, `Ok(false)` for unequal values,
-    /// or `Err` when comparison fails.
-    fn partial_eq(&self, other: &Value) -> Result<bool>;
-
-    /// Compare the ordering of this value relative to another value.
-    ///
-    /// Return `Ok(Some(ordering))` for an ordering, `Ok(None)` for unordered
-    /// values, or `Err` when comparison fails.
-    fn partial_ord(&self, other: &Value) -> Result<Option<Ordering>>;
-
-    /// Read a field.
-    ///
-    /// Return `Ok(None)` for a missing field, `Ok(Some(Value::Null))` for an
-    /// explicit null, or `Err` when reading fails.
-    fn get_field(&self, _field: &str) -> Result<Option<Value>> {
-        Ok(None)
     }
 }
 

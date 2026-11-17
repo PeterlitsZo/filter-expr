@@ -102,7 +102,7 @@ impl<'a> BytecodeRunner<'a> {
                     let Value::Str(field) = &self.bytecode.const_pool[index as usize] else {
                         unreachable!("field name constant must be a string");
                     };
-                    self.stack.push(object.get_field(field)?);
+                    self.stack.push(object.get_field(field).await?);
                 }
 
                 bc::GET_ITEM => {

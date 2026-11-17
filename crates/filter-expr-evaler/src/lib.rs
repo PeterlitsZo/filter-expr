@@ -590,6 +590,45 @@ mod tests {
         .await;
     }
 
+    #[tokio::test]
+    async fn test_async_userdata_fields() {
+        let evaler = FilterExprEvaler::new();
+        for input in [
+            "magic.name = 'foo' AND magic.optional = null",
+            "enabled OR magic.failed = null",
+        ] {
+            parse_and_do_test_cases(
+                &evaler,
+                input,
+                &[(
+                    simple_context! {
+                        "magic": Value::Userdata(Arc::new(MagicUserdata::Foo)),
+                        "enabled": true,
+                    },
+                    true,
+                )],
+            )
+            .await;
+        }
+    }
+
+    #[tokio::test]
+    async fn test_async_userdata_field_errors() {
+        let evaler = FilterExprEvaler::new();
+        let ctx = simple_context! {
+            "magic": Value::Userdata(Arc::new(MagicUserdata::Foo)),
+        };
+        for (input, expected) in [
+            ("magic.missing = null", "no such field"),
+            ("magic.failed = null", "field query failed"),
+        ] {
+            let filter = FilterExpr::parse(input).unwrap();
+            let compiled = CompiledFilterExpr::compile(&filter);
+            let error = evaler.run(&compiled, &ctx).await.unwrap_err();
+            assert!(error.to_string().contains(expected), "{input}: {error}");
+        }
+    }
+
     async fn parse_and_do_test_cases(
         evaler: &FilterExprEvaler,
         input: &str,
@@ -616,7 +655,21 @@ mod tests {
         Bar,
     }
 
+    #[async_trait::async_trait]
     impl Userdata for MagicUserdata {
+        async fn get_field(&self, field: &str) -> Result<Option<Value>> {
+            tokio::task::yield_now().await;
+            match field {
+                "name" => Ok(Some(Value::str(match self {
+                    Self::Foo => "foo",
+                    Self::Bar => "bar",
+                }))),
+                "optional" => Ok(Some(Value::Null)),
+                "failed" => Err(Error::new(ErrorKind::FailedToGet, "field query failed")),
+                _ => Ok(None),
+            }
+        }
+
         fn as_any(&self) -> &dyn std::any::Any {
             self
         }
