@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+*Empty*
+
+## v0.8.0
+
 - Support array indexing with `array[index]` expressions.
 - [BREAKING] Make `Userdata::get_field` async to support asynchronous field loading.
 
