@@ -1,0 +1,248 @@
+# filter-expr
+
+\(match lang
+  :zh_CN "Crate："
+  :zh_TW "Crate："
+  :ja_JP "クレート："
+  :ko_KR "Crate:"
+  :es_ES "Crates:"
+  :fr_FR "Crates :"
+  :de_DE "Crates:"
+  :pt_BR "Crates:"
+  _ "Crates:")
+
+- `filter-expr`.
+- `filter-expr-evaler`.
+
+\(match lang
+  :zh_CN """
+    | `filter-expr` crate 负责解析过滤表达式，解析后可将 `FilterExpr` 用作表达式的抽象语法树（AST）。
+    | 它不定义如何求值；你可以自行实现，也可以使用 `filter-expr-evaler` crate。
+  """
+  :zh_TW """
+    | `filter-expr` crate 負責解析篩選運算式，解析後可將 `FilterExpr` 用作運算式的抽象語法樹（AST）。
+    | 它不定義如何求值；你可以自行實作，也可以使用 `filter-expr-evaler` crate。
+  """
+  :ja_JP """
+    | `filter-expr` クレートはフィルター式の解析を行い、`FilterExpr` を式の抽象構文木（AST）として利用できます。
+    | 評価方法は定義していません。独自に実装するか、`filter-expr-evaler` クレートを利用できます。
+  """
+  :ko_KR """
+    | `filter-expr` crate는 필터 표현식을 파싱하며, 파싱한 `FilterExpr`를 표현식의 추상 구문 트리(AST)로 사용할 수 있습니다.
+    | 평가 방법은 정의하지 않습니다. 직접 구현하거나 `filter-expr-evaler` crate를 사용할 수 있습니다.
+  """
+  :es_ES """
+    | El crate `filter-expr` define cómo analizar una expresión de filtrado. Después puedes usar
+    | `FilterExpr` como su árbol de sintaxis abstracta (AST). No define cómo evaluarla;
+    | puedes implementarlo por tu cuenta o usar el crate `filter-expr-evaler`.
+  """
+  :fr_FR """
+    | Le crate `filter-expr` définit comment analyser une expression de filtrage. Vous pouvez ensuite
+    | utiliser `FilterExpr` comme arbre syntaxique abstrait (AST) de l’expression. Il ne définit pas
+    | son évaluation ; vous pouvez l’implémenter vous-même ou utiliser le crate `filter-expr-evaler`.
+  """
+  :de_DE """
+    | Das Crate `filter-expr` definiert, wie Filterausdrücke geparst werden. Anschließend kannst du
+    | `FilterExpr` als abstrakten Syntaxbaum (AST) des Ausdrucks verwenden. Die Auswertung ist nicht
+    | festgelegt; du kannst sie selbst implementieren oder das Crate `filter-expr-evaler` verwenden.
+  """
+  :pt_BR """
+    | O crate `filter-expr` define como analisar uma expressão de filtro. Depois, você pode usar
+    | `FilterExpr` como a árvore sintática abstrata (AST) da expressão. Ele não define como avaliá-la;
+    | você pode implementar a avaliação ou usar o crate `filter-expr-evaler`.
+  """
+  _ """
+    | The `filter-expr` crate defines how to parse the filter expression, and then you
+    | can use the `FilterExpr` as the AST of the filter expression. It do not define
+    | how to evaluate it -- you can do it by yourself or use the `filter-expr-evaler`
+    | crate.
+  """)
+
+\(match lang
+  :zh_CN "本项目受 CEL 和 AIP-160 中过滤语法的启发，但使用了不同的语法。"
+  :zh_TW "本專案受 CEL 和 AIP-160 中篩選語法的啟發，但使用了不同的語法。"
+  :ja_JP "このプロジェクトは CEL と AIP-160 のフィルター構文に着想を得ていますが、構文は異なります。"
+  :ko_KR "이 프로젝트는 CEL과 AIP-160의 필터 문법에서 영감을 받았지만, 문법은 다릅니다."
+  :es_ES """
+    | Este proyecto se inspira en CEL y en la sintaxis de filtrado de AIP-160,
+    | pero utiliza una sintaxis diferente.
+  """
+  :fr_FR """
+    | Ce projet s’inspire de CEL et de la syntaxe de filtrage d’AIP-160,
+    | mais utilise une syntaxe différente.
+  """
+  :de_DE """
+    | Dieses Projekt ist von CEL und der Filtersyntax in AIP-160 inspiriert,
+    | verwendet aber eine andere Syntax.
+  """
+  :pt_BR """
+    | Este projeto é inspirado em CEL e na sintaxe de filtro do AIP-160,
+    | mas usa uma sintaxe diferente.
+  """
+  _ """
+    | This project is inspired by CEL and the filter syntax in AIP-160 -- but has
+    | different syntax.
+  """)
+
+\(match lang
+  :zh_CN "## 快速开始"
+  :zh_TW "## 快速開始"
+  :ja_JP "## クイックスタート"
+  :ko_KR "## 빠른 시작"
+  :es_ES "## Inicio rápido"
+  :fr_FR "## Démarrage rapide"
+  :de_DE "## Schnellstart"
+  :pt_BR "## Início rápido"
+  _ "## Quick Start")
+
+```rust
+use filter_expr::FilterExpr;
+use filter_expr_evaler::{CompiledFilterExpr, FilterExprEvaler, simple_context};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Parse the filter expression.
+    let filter = FilterExpr::parse("name = 'John' AND age > 18")?;
+
+    // Provide values for the variables in the expression.
+    let ctx = simple_context! {
+        "name": "John",
+        "age": 19,
+    };
+
+    // Compile once, then reuse the handle across contexts.
+    let evaler = FilterExprEvaler::new();
+    let compiled = CompiledFilterExpr::compile(&filter);
+    assert!(evaler.run(&compiled, &ctx).await?);
+
+    Ok(())
+}
+```
+
+\(match lang
+  :zh_CN """
+    | 可在不同上下文和求值器之间复用或克隆 `compiled`。
+    | 每个求值器提供自己的函数、方法和正则表达式缓存。
+  """
+  :zh_TW """
+    | 可在不同上下文與求值器之間重複使用或複製 `compiled`。
+    | 每個求值器提供自己的函式、方法與正規表示式快取。
+  """
+  :ja_JP """
+    | `compiled` は異なるコンテキストや評価器で再利用・複製できます。
+    | 各評価器は独自の関数、メソッド、正規表現キャッシュを持ちます。
+  """
+  :ko_KR """
+    | 여러 컨텍스트와 평가기에서 `compiled`를 재사용하거나 복제할 수 있습니다.
+    | 각 평가기는 자체 함수, 메서드, 정규식 캐시를 제공합니다.
+  """
+  :es_ES """
+    | Reutiliza o clona `compiled` con distintos contextos y evaluadores. Cada evaluador proporciona
+    | sus propias funciones, métodos y caché de expresiones regulares.
+  """
+  :fr_FR """
+    | Réutilisez ou clonez `compiled` avec différents contextes et évaluateurs. Chaque évaluateur fournit
+    | ses propres fonctions, méthodes et cache d’expressions régulières.
+  """
+  :de_DE """
+    | Verwende oder klone `compiled` für verschiedene Kontexte und Evaluatoren. Jeder Evaluator stellt
+    | eigene Funktionen, Methoden und einen eigenen Regex-Cache bereit.
+  """
+  :pt_BR """
+    | Reutilize ou clone `compiled` com diferentes contextos e avaliadores. Cada avaliador fornece
+    | suas próprias funções, métodos e cache de expressões regulares.
+  """
+  _ """
+    | Reuse or clone `compiled` across contexts and evaluators. Each evaluator supplies
+    | its own functions, methods, and regex cache.
+  """)
+
+\(match lang
+  :zh_CN "## 开发"
+  :zh_TW "## 開發"
+  :ja_JP "## 開発"
+  :ko_KR "## 개발"
+  :es_ES "## Desarrollo"
+  :fr_FR "## Développement"
+  :de_DE "## Entwicklung"
+  :pt_BR "## Desenvolvimento"
+  _ "## Development")
+
+\(match lang
+  :zh_CN """
+    | 安装 [Lefthook](https://lefthook.dev/)，然后在开始开发前，
+    | 从仓库根目录运行以下命令：
+  """
+  :zh_TW """
+    | 安裝 [Lefthook](https://lefthook.dev/)，然後在開始開發前，
+    | 於儲存庫根目錄執行以下指令：
+  """
+  :ja_JP """
+    | [Lefthook](https://lefthook.dev/) をインストールし、開発を始める前に
+    | リポジトリのルートディレクトリで次のコマンドを実行してください。
+  """
+  :ko_KR """
+    | [Lefthook](https://lefthook.dev/)을 설치한 뒤, 개발을 시작하기 전에
+    | 저장소 루트에서 다음 명령을 실행하세요.
+  """
+  :es_ES """
+    | Instala [Lefthook](https://lefthook.dev/) y, antes de empezar a desarrollar,
+    | ejecuta el siguiente comando desde la raíz del repositorio:
+  """
+  :fr_FR """
+    | Installez [Lefthook](https://lefthook.dev/), puis exécutez la commande suivante
+    | à la racine du dépôt avant de commencer le développement :
+  """
+  :de_DE """
+    | Installiere [Lefthook](https://lefthook.dev/) und führe vor Beginn der Entwicklung
+    | den folgenden Befehl im Stammverzeichnis des Repositorys aus:
+  """
+  :pt_BR """
+    | Instale o [Lefthook](https://lefthook.dev/) e, antes de começar o desenvolvimento,
+    | execute o seguinte comando na raiz do repositório:
+  """
+  _ """
+    | Install [Lefthook](https://lefthook.dev/), then run the following command from
+    | the repository root before starting development:
+  """)
+
+```sh
+lefthook install
+```
+
+\(match lang
+  :zh_CN "这会启用 pre-commit 钩子。"
+  :zh_TW "這會啟用 pre-commit 掛鉤。"
+  :ja_JP "これにより pre-commit フックが有効になります。"
+  :ko_KR "이 명령은 pre-commit 훅을 활성화합니다."
+  :es_ES "Esto habilita los hooks de pre-commit."
+  :fr_FR "Cela active les hooks de pre-commit."
+  :de_DE "Dadurch werden die Pre-Commit-Hooks aktiviert."
+  :pt_BR "Isso habilita os hooks de pre-commit."
+  _ "This enables pre-commit hooks.")
+
+\(match lang
+  :zh_CN "## 基准测试"
+  :zh_TW "## 效能基準測試"
+  :ja_JP "## ベンチマーク"
+  :ko_KR "## 벤치마크"
+  :es_ES "## Pruebas de rendimiento"
+  :fr_FR "## Tests de performance"
+  :de_DE "## Benchmarks"
+  :pt_BR "## Benchmarks"
+  _ "## Benchmarks")
+
+\(match lang
+  :zh_CN "使用优化构建运行各阶段的基准测试："
+  :zh_TW "使用最佳化建置執行各階段的效能基準測試："
+  :ja_JP "最適化ビルドで各ステージのベンチマークを実行します。"
+  :ko_KR "최적화된 빌드로 각 단계의 벤치마크를 실행하세요."
+  :es_ES "Ejecuta las pruebas de rendimiento por etapas con una compilación optimizada:"
+  :fr_FR "Exécutez les tests de performance par étape avec une compilation optimisée :"
+  :de_DE "Führe die Benchmarks der einzelnen Phasen mit einem optimierten Build aus:"
+  :pt_BR "Execute os benchmarks por etapa com uma compilação otimizada:"
+  _ "Run the stage benchmarks with an optimized build:")
+
+```sh
+cargo bench -p filter-expr-evaler --features bench-internals --bench stages
+```
