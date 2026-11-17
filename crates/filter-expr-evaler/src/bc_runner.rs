@@ -105,6 +105,30 @@ impl<'a> BytecodeRunner<'a> {
                     self.stack.push(object.get_field(field)?);
                 }
 
+                bc::GET_ITEM => {
+                    let index = unsafe { self.pop_stack_top_unchecked() };
+                    let object = unsafe { self.pop_stack_top_unchecked() };
+                    let Value::Array(array) = object else {
+                        return Err(Error::new(ErrorKind::TypeMismatch, "object is not an array")
+                            .with_metadata("expected", "array")
+                            .with_metadata("got", object.typ()));
+                    };
+                    let Value::I64(index) = index else {
+                        return Err(Error::new(ErrorKind::TypeMismatch, "array index is not an i64")
+                            .with_metadata("expected", "i64")
+                            .with_metadata("got", index.typ()));
+                    };
+                    let element = usize::try_from(index)
+                        .ok()
+                        .and_then(|index| array.get(index))
+                        .ok_or_else(|| {
+                            Error::new(ErrorKind::InvalidValue, "array index out of bounds")
+                                .with_metadata("index", index)
+                                .with_metadata("length", array.len())
+                        })?;
+                    self.stack.push(element.clone());
+                }
+
                 bc::LOAD_CONST => {
                     let index = unsafe { self.read_u32() };
                     let value = self.bytecode.const_pool[index as usize].clone();

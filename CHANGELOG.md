@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-*Empty*
+- Support array indexing with `array[index]` expressions.
 
 ## v0.7.0
 

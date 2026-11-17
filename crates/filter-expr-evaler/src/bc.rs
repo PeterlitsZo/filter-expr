@@ -38,6 +38,7 @@ pub(crate) enum BytecodeOpcode {
     LoadLocal,
     StoreLocal,
     GetField,
+    GetItem,
 
     LoadConst,
     LoadI64,
@@ -87,6 +88,7 @@ impl BytecodeOpcode {
             BytecodeOpcode::LoadLocal => LOAD_LOCAL,
             BytecodeOpcode::StoreLocal => STORE_LOCAL,
             BytecodeOpcode::GetField => GET_FIELD,
+            BytecodeOpcode::GetItem => GET_ITEM,
             BytecodeOpcode::LoadConst => LOAD_CONST,
             BytecodeOpcode::LoadI64 => LOAD_I64,
             BytecodeOpcode::LoadF64 => LOAD_F64,
@@ -128,6 +130,7 @@ impl BytecodeOpcode {
             LOAD_LOCAL => Some(BytecodeOpcode::LoadLocal),
             STORE_LOCAL => Some(BytecodeOpcode::StoreLocal),
             GET_FIELD => Some(BytecodeOpcode::GetField),
+            GET_ITEM => Some(BytecodeOpcode::GetItem),
             LOAD_CONST => Some(BytecodeOpcode::LoadConst),
             LOAD_I64 => Some(BytecodeOpcode::LoadI64),
             LOAD_F64 => Some(BytecodeOpcode::LoadF64),
@@ -169,6 +172,7 @@ impl BytecodeOpcode {
             BytecodeOpcode::LoadLocal => 5,
             BytecodeOpcode::StoreLocal => 5,
             BytecodeOpcode::GetField => 5,
+            BytecodeOpcode::GetItem => 1,
 
             BytecodeOpcode::LoadConst => 5,
             BytecodeOpcode::LoadI64 => 9,
@@ -267,4 +271,5 @@ define_opcodes! {
     NOT,
 
     RETURN,
+    GET_ITEM,
 }

@@ -76,6 +76,7 @@ pub(crate) enum AsmInstruction {
     /// Pop an object and push its field value. The argument is the field name's
     /// index in the constant pool.
     GetField(u32),
+    GetItem,
 
     /// Load a value from the constant pool, and push it onto the stack.
     /// The argument is the index of the constant in the pool.
@@ -232,6 +233,7 @@ impl fmt::Debug for AsmInstruction {
             AsmInstruction::Ne => write!(f, "NE"),
             AsmInstruction::In => write!(f, "IN"),
             AsmInstruction::Not => write!(f, "NOT"),
+            AsmInstruction::GetItem => write!(f, "GET_ITEM"),
             AsmInstruction::Return => write!(f, "RETURN"),
         }
     }

@@ -52,6 +52,7 @@ impl ExprArena {
 pub enum Expr {
     Field(CompactString),
     FieldAccess(ExprId, CompactString),
+    GetItem(ExprId, ExprId),
 
     Str(CompactString),
     I64(i64),
@@ -96,6 +97,10 @@ impl Expr {
 
     pub fn field_access_(obj: ExprId, field: impl Into<CompactString>) -> Self {
         Self::FieldAccess(obj, field.into())
+    }
+
+    pub fn getitem_(obj: ExprId, index: ExprId) -> Self {
+        Self::GetItem(obj, index)
     }
 
     pub fn str_<T: Into<CompactString>>(value: T) -> Self {
@@ -292,6 +297,12 @@ impl Expr {
                 Expr::FieldAccess(obj, field)
             }
 
+            Expr::GetItem(obj, index) => {
+                let obj = arena.transform_node(obj, transformer, ctx.clone()).await?;
+                let index = arena.transform_node(index, transformer, ctx).await?;
+                Expr::GetItem(obj, index)
+            }
+
             Expr::Str(value) => Expr::Str(value),
             Expr::I64(value) => Expr::I64(value),
             Expr::BigInt(value) => Expr::BigInt(value),
@@ -453,6 +464,7 @@ impl Expr {
 
             // Field access - optimize the object.
             FieldAccess(obj, field) => FieldAccess(arena.optimize_node(obj), field),
+            GetItem(obj, index) => GetItem(arena.optimize_node(obj), arena.optimize_node(index)),
 
             // Array - optimize all elements.
             Array(elements) => Array(elements.into_iter().map(|e| e.optimize(arena)).collect()),
@@ -688,7 +700,8 @@ impl Expr {
             (Self::MethodCall(a, obj_a, args_a), Self::MethodCall(b, obj_b, args_b)) => {
                 a == b && nodes_eq(*obj_a, *obj_b) && lists_eq(args_a, args_b)
             }
-            (Self::Add(al, ar), Self::Add(bl, br))
+            (Self::GetItem(al, ar), Self::GetItem(bl, br))
+            | (Self::Add(al, ar), Self::Add(bl, br))
             | (Self::Sub(al, ar), Self::Sub(bl, br))
             | (Self::Mul(al, ar), Self::Mul(bl, br))
             | (Self::Div(al, ar), Self::Div(bl, br))
@@ -745,6 +758,11 @@ impl fmt::Debug for ExprDebug<'_> {
                 .debug_tuple("FieldAccess")
                 .field(&ExprDebug(self.1.get(*obj).unwrap(), self.1))
                 .field(field)
+                .finish(),
+            Expr::GetItem(obj, index) => f
+                .debug_tuple("GetItem")
+                .field(&ExprDebug(self.1.get(*obj).unwrap(), self.1))
+                .field(&ExprDebug(self.1.get(*index).unwrap(), self.1))
                 .finish(),
             Expr::Str(value) => f.debug_tuple("Str").field(value).finish(),
             Expr::I64(value) => f.debug_tuple("I64").field(value).finish(),

@@ -54,6 +54,7 @@ impl BytecodeCodegen {
                 Ins::LoadLocal(..) => ins_offset += Op::LoadLocal.op_len(),
                 Ins::StoreLocal(..) => ins_offset += Op::StoreLocal.op_len(),
                 Ins::GetField(..) => ins_offset += Op::GetField.op_len(),
+                Ins::GetItem => ins_offset += Op::GetItem.op_len(),
 
                 Ins::LoadI64(..) => ins_offset += Op::LoadI64.op_len(),
                 Ins::LoadF64(..) => ins_offset += Op::LoadF64.op_len(),
@@ -269,6 +270,9 @@ impl BytecodeCodegen {
                 self.push_u8(BytecodeOpcode::Not.into_u8());
             }
 
+            AsmInstruction::GetItem => {
+                self.push_u8(BytecodeOpcode::GetItem.into_u8());
+            }
             AsmInstruction::Return => {
                 self.push_u8(BytecodeOpcode::Return.into_u8());
             }

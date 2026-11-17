@@ -76,6 +76,11 @@ impl<'a> AsmCodegen<'a> {
         match expr {
             Expr::Field(field) => self.codegen_field(field),
             Expr::FieldAccess(obj, field) => self.codegen_field_access(self.node(*obj), field),
+            Expr::GetItem(obj, index) => {
+                self.codegen_expr(self.node(*obj));
+                self.codegen_expr(self.node(*index));
+                self.instructions.push(AsmInstruction::GetItem);
+            }
             Expr::Str(value) => self.codegen_str(value),
             Expr::I64(value) => self.codegen_i64(*value),
             Expr::BigInt(value) => {

@@ -284,18 +284,18 @@ impl<'a> Parser<'a> {
             if self.peek() == Some(&Token::LParen) {
                 // It's a function call
                 let value = self.parse_func_call(name)?;
-                return self.parse_method_call_chain_or_field_access(value);
+                return self.parse_postfix(value);
             } else {
                 // It's a field name (value)
                 // We need to check if it's followed by a method call
                 let value = Expr::field_(name);
-                return self.parse_method_call_chain_or_field_access(value);
+                return self.parse_postfix(value);
             }
         }
 
         // Parse as value (which may include method calls)
         let value = self.parse_value()?;
-        self.parse_method_call_chain_or_field_access(value)
+        self.parse_postfix(value)
     }
 
     /// ```text
@@ -387,9 +387,21 @@ impl<'a> Parser<'a> {
         Ok(Expr::FuncCall(func_name, args))
     }
 
-    fn parse_method_call_chain_or_field_access(&mut self, mut value: Expr) -> Result<Expr, Error> {
-        // Handle method calls: <value> '.' <ident> '(' ... ')'
-        while self.peek() == Some(&Token::Dot) {
+    fn parse_postfix(&mut self, mut value: Expr) -> Result<Expr, Error> {
+        loop {
+            if self.peek() == Some(&Token::LBracket) {
+                self.advance()?;
+                let index = self.parse_expr()?;
+                if self.peek() != Some(&Token::RBracket) {
+                    return Err(Error::Parse("expected ']'".to_string()));
+                }
+                self.advance()?;
+                value = Expr::getitem_(self.arena.alloc(value), self.arena.alloc(index));
+                continue;
+            }
+            if self.peek() != Some(&Token::Dot) {
+                break;
+            }
             self.advance()?; // consume '.'
 
             let method_or_field_name = match self.next()? {
