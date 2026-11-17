@@ -5,3 +5,5 @@ pre-commit:
       run: cargo clippy --workspace --all-targets --all-features --locked
     - name: test
       run: cargo test --workspace --all-features --locked
+    - name: build-docs
+      run: bash build-docs.sh

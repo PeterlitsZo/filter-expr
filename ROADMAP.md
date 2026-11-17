@@ -7,7 +7,7 @@
       elements.
 - [ ] Support `some_userdata.foo.bar`.
 - [x] Support the `DateTime` type and `DateTime::now` function.
-- [ ] Support the `DateTime::from_rfc3339` function to create a `DateTime` value
+- [x] Support the `DateTime::from_rfc3339` function to create a `DateTime` value
       by given RFC 3339 string. Like
       `DateTime::from_rfc3339("2025-01-01T00:00:00Z")`.
 - [ ] Support compare two `DateTime` values.
@@ -55,7 +55,7 @@
 
 - [x] Support the field-access syntax. Like `foo.bar.baz`.
 - [x] Support the `Object` type -- just like the JSON object.
-- [ ] Support get the item of the `Array` and `Object` by index or key. Like
+- [x] Support get the item of the `Array` and `Object` by index or key. Like
       `array[0] = "John"` or `object.name = "John"`.
 - [x] Support `==` as the alias of `=` for the equality comparison.
 - [x] Support escape the special characters in the string. Like `\'` to escape
@@ -65,7 +65,7 @@
 - [x] Support `&&`, `||` and `!` operators for the logical operations.
       Support `and`, `or` and `not` as the aliases of `&&`, `||` and `!`.
 - [x] Use tool `lefthook` for pre-commit hooks.
-- [ ] Add fuzzing tests and more tests.
+- [ ] ~~Add fuzzing tests and more tests.~~
 - [x] Support custom method.
 
 ## 2026-10

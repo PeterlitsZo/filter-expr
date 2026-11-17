@@ -2,9 +2,13 @@
 
 ## Behavior
 
-- Follow the existing code style, including data structures, naming and formatting; avoid unrelated reformatting.
+- Follow the existing code style, including data structures, naming and
+  formatting; avoid unrelated reformatting.
 - DO NOT add unit tests until the user asks you to do so.
 - DO NOT change document until the user asks you to do so.
+  - If you change the code, and you do think it's good idea that update
+    `docs/filter-expr-evaler.md.lingua` or `docs/filter-expr.md.lingua`, then
+    ask your user if it is OK to update.
 
 ## When You Need to Commit
 

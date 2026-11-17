@@ -25,6 +25,9 @@ assert_eq!(result, true);
 ## Builtin Functions
 
 - **`DateTime::now() -> datetime`**. Returns this evaluation’s time snapshot.
+- **`DateTime::from_rfc3339(text: str) -> datetime`**. Parses an RFC 3339 string with `Z` or a UTC offset into a datetime, supporting fractional seconds.
+  Returns an error if parsing fails. Uses the Jiff parser and also accepts some of its extended formats.
+  Example: `DateTime::from_rfc3339('2026-11-17T12:30:00+08:00')`.
 - **`matches(text: str, pattern: str) -> bool`**. Checks whether a regular
   expression matches anywhere in the text. For example,
   `matches('foobar', '^foo')` returns `true`.

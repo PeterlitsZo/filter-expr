@@ -25,6 +25,9 @@ assert_eq!(result, true);
 ## Integrierte Funktionen
 
 - **`DateTime::now() -> datetime`**. Gibt den Zeit-Snapshot dieser Auswertung zurück.
+- **`DateTime::from_rfc3339(text: str) -> datetime`**. Parst eine RFC-3339-Zeichenkette mit `Z` oder UTC-Offset als Datum und Uhrzeit; Sekundenbruchteile werden unterstützt.
+  Gibt bei einem Parsing-Fehler einen Fehler zurück. Verwendet den Jiff-Parser und akzeptiert auch einige seiner erweiterten Formate.
+  Beispiel: `DateTime::from_rfc3339('2026-11-17T12:30:00+08:00')`.
 - **`matches(text: str, pattern: str) -> bool`**. Prüft, ob ein regulärer Ausdruck an irgendeiner Stelle im Text übereinstimmt. Zum Beispiel gibt `matches('foobar', '^foo')` den Wert `true` zurück.
 - **`type(value) -> str`**. Gibt den Typnamen eines Werts zurück. Zum Beispiel gibt `type(42)` den Wert `'i64'` zurück.
 - **`abs(x)`**. Absolutwert.

@@ -171,6 +171,7 @@ impl FilterExprEvalerEnv {
 
         insert_function!("DateTime::now", FunctionDateTimeNow);
         insert_function!("DateTime::from_unix_ts", FunctionDateTimeFromUnixTs);
+        insert_function!("DateTime::from_rfc3339", FunctionDateTimeFromRfc3339);
 
         insert_function!("matches", FunctionMatches);
 

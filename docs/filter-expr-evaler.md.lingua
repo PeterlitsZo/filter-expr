@@ -66,6 +66,52 @@ assert_eq!(result, true);
   :pt_BR "- **`DateTime::now() -> datetime`**. Retorna o instante de tempo capturado para esta avaliação."
   _ "- **`DateTime::now() -> datetime`**. Returns this evaluation’s time snapshot.")
 \(match lang
+  :zh_CN """
+    | - **`DateTime::from_rfc3339(text: str) -> datetime`**. 将带 `Z` 或 UTC 偏移的 RFC 3339 字符串解析为日期时间，支持小数秒。
+    |   解析失败时返回错误。使用 Jiff 解析器，也接受其支持的部分扩展格式。
+    |   例如: `DateTime::from_rfc3339('2026-11-17T12:30:00+08:00')`.
+  """
+  :zh_TW """
+    | - **`DateTime::from_rfc3339(text: str) -> datetime`**. 將帶 `Z` 或 UTC 偏移的 RFC 3339 字串解析為日期時間，支援小數秒。
+    |   解析失敗時回傳錯誤。使用 Jiff 解析器，也接受其支援的部分擴充格式。
+    |   例如: `DateTime::from_rfc3339('2026-11-17T12:30:00+08:00')`.
+  """
+  :ja_JP """
+    | - **`DateTime::from_rfc3339(text: str) -> datetime`**. `Z` または UTC オフセット付きの RFC 3339 文字列を日時に解析します。小数秒に対応しています。
+    |   解析に失敗するとエラーを返します。Jiff パーサーを使用し、一部の拡張形式も受け付けます。
+    |   例: `DateTime::from_rfc3339('2026-11-17T12:30:00+08:00')`.
+  """
+  :ko_KR """
+    | - **`DateTime::from_rfc3339(text: str) -> datetime`**. `Z` 또는 UTC 오프셋이 있는 RFC 3339 문자열을 날짜와 시간으로 파싱하며, 소수 초를 지원합니다.
+    |   파싱에 실패하면 오류를 반환합니다. Jiff 파서를 사용하므로 일부 확장 형식도 허용합니다.
+    |   예: `DateTime::from_rfc3339('2026-11-17T12:30:00+08:00')`.
+  """
+  :es_ES """
+    | - **`DateTime::from_rfc3339(text: str) -> datetime`**. Analiza una cadena RFC 3339 con `Z` o un desplazamiento UTC y devuelve una fecha y hora; admite fracciones de segundo.
+    |   Devuelve un error si el análisis falla. Usa el analizador de Jiff y también acepta algunos de sus formatos extendidos.
+    |   Ejemplo: `DateTime::from_rfc3339('2026-11-17T12:30:00+08:00')`.
+  """
+  :fr_FR """
+    | - **`DateTime::from_rfc3339(text: str) -> datetime`**. Analyse une chaîne RFC 3339 avec `Z` ou un décalage UTC et renvoie une date et une heure ; les fractions de seconde sont prises en charge.
+    |   Renvoie une erreur si l’analyse échoue. Utilise l’analyseur de Jiff et accepte également certains de ses formats étendus.
+    |   Exemple: `DateTime::from_rfc3339('2026-11-17T12:30:00+08:00')`.
+  """
+  :de_DE """
+    | - **`DateTime::from_rfc3339(text: str) -> datetime`**. Parst eine RFC-3339-Zeichenkette mit `Z` oder UTC-Offset als Datum und Uhrzeit; Sekundenbruchteile werden unterstützt.
+    |   Gibt bei einem Parsing-Fehler einen Fehler zurück. Verwendet den Jiff-Parser und akzeptiert auch einige seiner erweiterten Formate.
+    |   Beispiel: `DateTime::from_rfc3339('2026-11-17T12:30:00+08:00')`.
+  """
+  :pt_BR """
+    | - **`DateTime::from_rfc3339(text: str) -> datetime`**. Analisa uma string RFC 3339 com `Z` ou um deslocamento UTC e retorna uma data e hora; aceita frações de segundo.
+    |   Retorna um erro se a análise falhar. Usa o parser do Jiff e também aceita alguns de seus formatos estendidos.
+    |   Exemplo: `DateTime::from_rfc3339('2026-11-17T12:30:00+08:00')`.
+  """
+  _ """
+    | - **`DateTime::from_rfc3339(text: str) -> datetime`**. Parses an RFC 3339 string with `Z` or a UTC offset into a datetime, supporting fractional seconds.
+    |   Returns an error if parsing fails. Uses the Jiff parser and also accepts some of its extended formats.
+    |   Example: `DateTime::from_rfc3339('2026-11-17T12:30:00+08:00')`.
+  """)
+\(match lang
   :zh_CN "- **`matches(text: str, pattern: str) -> bool`**. 检查正则表达式是否匹配文本中的任意位置。例如，`matches('foobar', '^foo')` 返回 `true`。"
   :zh_TW "- **`matches(text: str, pattern: str) -> bool`**. 檢查正規表示式是否符合文字中的任意位置。例如，`matches('foobar', '^foo')` 回傳 `true`。"
   :ja_JP "- **`matches(text: str, pattern: str) -> bool`**. 正規表現がテキスト内のいずれかの位置にマッチするか確認します。例えば、`matches('foobar', '^foo')` は `true` を返します。"

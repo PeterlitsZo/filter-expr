@@ -25,6 +25,9 @@ assert_eq!(result, true);
 ## 内置函数
 
 - **`DateTime::now() -> datetime`**. 返回本次求值的时间快照。
+- **`DateTime::from_rfc3339(text: str) -> datetime`**. 将带 `Z` 或 UTC 偏移的 RFC 3339 字符串解析为日期时间，支持小数秒。
+  解析失败时返回错误。使用 Jiff 解析器，也接受其支持的部分扩展格式。
+  例如: `DateTime::from_rfc3339('2026-11-17T12:30:00+08:00')`.
 - **`matches(text: str, pattern: str) -> bool`**. 检查正则表达式是否匹配文本中的任意位置。例如，`matches('foobar', '^foo')` 返回 `true`。
 - **`type(value) -> str`**. 返回值的类型名称。例如，`type(42)` 返回 `'i64'`。
 - **`abs(x)`**. 绝对值。

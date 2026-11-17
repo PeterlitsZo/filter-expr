@@ -25,6 +25,9 @@ assert_eq!(result, true);
 ## Funciones integradas
 
 - **`DateTime::now() -> datetime`**. Devuelve la instantánea temporal de esta evaluación.
+- **`DateTime::from_rfc3339(text: str) -> datetime`**. Analiza una cadena RFC 3339 con `Z` o un desplazamiento UTC y devuelve una fecha y hora; admite fracciones de segundo.
+  Devuelve un error si el análisis falla. Usa el analizador de Jiff y también acepta algunos de sus formatos extendidos.
+  Ejemplo: `DateTime::from_rfc3339('2026-11-17T12:30:00+08:00')`.
 - **`matches(text: str, pattern: str) -> bool`**. Comprueba si una expresión regular coincide en alguna parte del texto. Por ejemplo, `matches('foobar', '^foo')` devuelve `true`.
 - **`type(value) -> str`**. Devuelve el nombre del tipo de un valor. Por ejemplo, `type(42)` devuelve `'i64'`.
 - **`abs(x)`**. Valor absoluto.

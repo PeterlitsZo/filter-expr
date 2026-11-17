@@ -25,6 +25,9 @@ assert_eq!(result, true);
 ## 組み込み関数
 
 - **`DateTime::now() -> datetime`**. 今回の評価における時刻のスナップショットを返します。
+- **`DateTime::from_rfc3339(text: str) -> datetime`**. `Z` または UTC オフセット付きの RFC 3339 文字列を日時に解析します。小数秒に対応しています。
+  解析に失敗するとエラーを返します。Jiff パーサーを使用し、一部の拡張形式も受け付けます。
+  例: `DateTime::from_rfc3339('2026-11-17T12:30:00+08:00')`.
 - **`matches(text: str, pattern: str) -> bool`**. 正規表現がテキスト内のいずれかの位置にマッチするか確認します。例えば、`matches('foobar', '^foo')` は `true` を返します。
 - **`type(value) -> str`**. 値の型名を返します。例えば、`type(42)` は `'i64'` を返します。
 - **`abs(x)`**. 絶対値。

@@ -512,3 +512,35 @@ impl Function for FunctionDateTimeFromUnixTs {
         Ok(Value::datetime(ts))
     }
 }
+
+pub(crate) struct FunctionDateTimeFromRfc3339;
+
+#[async_trait::async_trait]
+impl Function for FunctionDateTimeFromRfc3339 {
+    async fn call(&self, ctx: FunctionContext<'_, '_>) -> Result<Value, Error> {
+        if ctx.args.len() != 1 {
+            return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument count")
+                .with_metadata("function", "DateTime::from_rfc3339")
+                .with_metadata("expected", 1)
+                .with_metadata("got", ctx.args.len()));
+        }
+        let text = match &ctx.args[0] {
+            Value::Str(value) => value,
+            _ => {
+                return Err(Error::new(ErrorKind::TypeMismatch, "invalid argument type")
+                    .with_metadata("function", "DateTime::from_rfc3339")
+                    .with_metadata("index", 0)
+                    .with_metadata("expected", ValueType::Str)
+                    .with_metadata("got", ctx.args[0].typ()));
+            }
+        };
+        let ts = text.parse::<jiff::Timestamp>().map_err(|err| {
+            Error::new(ErrorKind::InvalidValue, "invalid RFC 3339 timestamp")
+                .with_metadata("function", "DateTime::from_rfc3339")
+                .with_metadata("index", 0)
+                .with_metadata("value", text)
+                .with_source(err)
+        })?;
+        Ok(Value::datetime(ts))
+    }
+}

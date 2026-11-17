@@ -25,6 +25,9 @@ assert_eq!(result, true);
 ## 내장 함수
 
 - **`DateTime::now() -> datetime`**. 이번 평가의 시간 스냅샷을 반환합니다.
+- **`DateTime::from_rfc3339(text: str) -> datetime`**. `Z` 또는 UTC 오프셋이 있는 RFC 3339 문자열을 날짜와 시간으로 파싱하며, 소수 초를 지원합니다.
+  파싱에 실패하면 오류를 반환합니다. Jiff 파서를 사용하므로 일부 확장 형식도 허용합니다.
+  예: `DateTime::from_rfc3339('2026-11-17T12:30:00+08:00')`.
 - **`matches(text: str, pattern: str) -> bool`**. 정규식이 텍스트의 어느 위치에서든 일치하는지 확인합니다. 예를 들어 `matches('foobar', '^foo')`는 `true`를 반환합니다.
 - **`type(value) -> str`**. 값의 타입 이름을 반환합니다. 예를 들어 `type(42)`는 `'i64'`를 반환합니다.
 - **`abs(x)`**. 절댓값.
