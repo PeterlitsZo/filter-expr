@@ -1,3 +1,12 @@
+English | [简体中文](https://github.com/PeterlitsZo/filter-expr/blob/main/docs/zh_CN/filter-expr.md)
+| [繁體中文](https://github.com/PeterlitsZo/filter-expr/blob/main/docs/zh_TW/filter-expr.md)
+| [日本語](https://github.com/PeterlitsZo/filter-expr/blob/main/docs/ja_JP/filter-expr.md)
+| [한국어](https://github.com/PeterlitsZo/filter-expr/blob/main/docs/ko_KR/filter-expr.md)
+| [Español](https://github.com/PeterlitsZo/filter-expr/blob/main/docs/es_ES/filter-expr.md)
+| [Français](https://github.com/PeterlitsZo/filter-expr/blob/main/docs/fr_FR/filter-expr.md)
+| [Deutsch](https://github.com/PeterlitsZo/filter-expr/blob/main/docs/de_DE/filter-expr.md)
+| [Português](https://github.com/PeterlitsZo/filter-expr/blob/main/docs/pt_BR/filter-expr.md)
+
 # Crate filter-expr
 
 A library for parsing the filter expression as an AST.

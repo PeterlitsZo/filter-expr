@@ -2,8 +2,8 @@
 
 Crates:
 
-- [`filter-expr`](./filter-expr.md).
-- [`filter-expr-evaler`](./filter-expr-evaler.md).
+- `filter-expr`: [crates.io](https://crates.io/crates/filter-expr), [README](./filter-expr.md).
+- `filter-expr-evaler`: [crates.io](https://crates.io/crates/filter-expr-evaler), [README](./filter-expr-evaler.md).
 
 El crate `filter-expr` define cómo analizar una expresión de filtrado. Después puedes usar
 `FilterExpr` como su árbol de sintaxis abstracta (AST). No define cómo evaluarla;

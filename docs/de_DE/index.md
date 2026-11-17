@@ -2,8 +2,8 @@
 
 Crates:
 
-- [`filter-expr`](./filter-expr.md).
-- [`filter-expr-evaler`](./filter-expr-evaler.md).
+- `filter-expr`: [crates.io](https://crates.io/crates/filter-expr), [README](./filter-expr.md).
+- `filter-expr-evaler`: [crates.io](https://crates.io/crates/filter-expr-evaler), [README](./filter-expr-evaler.md).
 
 Das Crate `filter-expr` definiert, wie Filterausdrücke geparst werden. Anschließend kannst du
 `FilterExpr` als abstrakten Syntaxbaum (AST) des Ausdrucks verwenden. Die Auswertung ist nicht

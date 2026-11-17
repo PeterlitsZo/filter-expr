@@ -7,8 +7,8 @@ English | [简体中文](./docs/zh_CN/index.md) | [繁體中文](./docs/zh_TW/in
 
 Crates:
 
-- [`filter-expr`](./docs/en_US/filter-expr.md).
-- [`filter-expr-evaler`](./docs/en_US/filter-expr-evaler.md).
+- `filter-expr`: [crates.io](https://crates.io/crates/filter-expr), [README](./docs/en_US/filter-expr.md).
+- `filter-expr-evaler`: [crates.io](https://crates.io/crates/filter-expr-evaler), [README](./docs/en_US/filter-expr-evaler.md).
 
 The `filter-expr` crate defines how to parse the filter expression, and then you
 can use the `FilterExpr` as the AST of the filter expression. It do not define

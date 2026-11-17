@@ -1,18 +1,18 @@
 # filter-expr
 
 \(match lang
-  :zh_CN "Crate："
-  :zh_TW "Crate："
+  :zh_CN "Crates："
+  :zh_TW "Crates："
   :ja_JP "クレート："
-  :ko_KR "Crate:"
+  :ko_KR "Crates:"
   :es_ES "Crates:"
   :fr_FR "Crates :"
   :de_DE "Crates:"
   :pt_BR "Crates:"
   _ "Crates:")
 
-- [`filter-expr`](\(match basepath null "./" _ basepath)filter-expr.md).
-- [`filter-expr-evaler`](\(match basepath null "./" _ basepath)filter-expr-evaler.md).
+- `filter-expr`: [crates.io](https://crates.io/crates/filter-expr), [README](\(match basepath null "./" _ basepath)filter-expr.md).
+- `filter-expr-evaler`: [crates.io](https://crates.io/crates/filter-expr-evaler), [README](\(match basepath null "./" _ basepath)filter-expr-evaler.md).
 
 \(match lang
   :zh_CN """

@@ -1,1 +1,1 @@
-\(include("../../docs/en_US/filter-expr-evaler.md"))
+\(render("../../docs/filter-expr-evaler.md.lingua", lang=:en_US, with_lang_banner=true))
