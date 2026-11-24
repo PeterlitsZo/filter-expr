@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fold constant arithmetic, unary signs, and string concatenation in
+  `Expr::optimize()`.
 - Support `DateTime::from_rfc3339` for parsing datetime strings.
 
 ## v0.8.0

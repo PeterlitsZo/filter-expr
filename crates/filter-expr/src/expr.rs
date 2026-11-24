@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::Arc;
 
-use num_traits::ToPrimitive;
+use num_traits::{ToPrimitive, Zero};
 
 use crate::{CompactString, Error, Transform, TransformContext, TransformResult};
 
@@ -443,6 +443,57 @@ impl Expr {
 }
 
 impl Expr {
+    fn fold_arithmetic(&self, left: &Self, right: &Self) -> Option<Self> {
+        use Expr::*;
+
+        if let (Add(..), Str(left), Str(right)) = (self, left, right) {
+            let mut value = left.clone();
+            value.push_str(right);
+            return Some(Str(value));
+        }
+
+        if matches!(left, F64(_)) || matches!(right, F64(_)) {
+            let to_float = |expr: &Self| match expr {
+                I64(value) => Some(*value as f64),
+                BigInt(value) => value.to_f64().filter(|value| value.is_finite()),
+                F64(value) => Some(*value),
+                _ => None,
+            };
+            let left = to_float(left)?;
+            let right = to_float(right)?;
+            if matches!(self, Div(..) | Rem(..)) && right == 0.0 {
+                return None;
+            }
+            return Some(F64(match self {
+                Add(..) => left + right,
+                Sub(..) => left - right,
+                Mul(..) => left * right,
+                Div(..) => left / right,
+                Rem(..) => left % right,
+                _ => return None,
+            }));
+        }
+
+        let to_integer = |expr: &Self| match expr {
+            I64(value) => Some(crate::BigInt::from(*value)),
+            BigInt(value) => Some(value.as_ref().clone()),
+            _ => None,
+        };
+        let left = to_integer(left)?;
+        let right = to_integer(right)?;
+        if matches!(self, Div(..) | Rem(..)) && right.is_zero() {
+            return None;
+        }
+        Some(Self::bigint_(match self {
+            Add(..) => left + right,
+            Sub(..) => left - right,
+            Mul(..) => left * right,
+            Div(..) => left / right,
+            Rem(..) => left % right,
+            _ => return None,
+        }))
+    }
+
     /// Optimize the expression by applying constant folding and simplification
     /// rules.
     ///
@@ -489,13 +540,40 @@ impl Expr {
                 args.into_iter().map(|a| a.optimize(arena)).collect(),
             ),
 
-            Add(left, right) => Add(arena.optimize_node(left), arena.optimize_node(right)),
-            Sub(left, right) => Sub(arena.optimize_node(left), arena.optimize_node(right)),
-            Mul(left, right) => Mul(arena.optimize_node(left), arena.optimize_node(right)),
-            Div(left, right) => Div(arena.optimize_node(left), arena.optimize_node(right)),
-            Rem(left, right) => Rem(arena.optimize_node(left), arena.optimize_node(right)),
-            Pos(expr) => Pos(arena.optimize_node(expr)),
-            Neg(expr) => Neg(arena.optimize_node(expr)),
+            Add(left, right) | Sub(left, right) | Mul(left, right)
+            | Div(left, right) | Rem(left, right) => {
+                let left = arena.get(left).unwrap().clone().optimize(arena);
+                let right = arena.get(right).unwrap().clone().optimize(arena);
+                if let Some(value) = self.fold_arithmetic(&left, &right) {
+                    return value;
+                }
+                let left = arena.alloc(left);
+                let right = arena.alloc(right);
+                match self {
+                    Add(..) => Add(left, right),
+                    Sub(..) => Sub(left, right),
+                    Mul(..) => Mul(left, right),
+                    Div(..) => Div(left, right),
+                    Rem(..) => Rem(left, right),
+                    _ => unreachable!(),
+                }
+            }
+            Pos(expr) => {
+                let expr = arena.get(expr).unwrap().clone().optimize(arena);
+                match expr {
+                    I64(_) | BigInt(_) | F64(_) => expr,
+                    _ => Pos(arena.alloc(expr)),
+                }
+            }
+            Neg(expr) => {
+                let expr = arena.get(expr).unwrap().clone().optimize(arena);
+                match expr {
+                    I64(value) => Self::bigint_(-crate::BigInt::from(value)),
+                    BigInt(value) => Self::bigint_(-value.as_ref()),
+                    F64(value) => F64(-value),
+                    _ => Neg(arena.alloc(expr)),
+                }
+            }
 
             // Comparison operators - optimize and fold constants.
             Gt(left, right) => {
@@ -904,5 +982,111 @@ mod tests {
         let expr = Expr::Not(alloc!(arena, Expr::Bool(true)));
         let optimized = expr.optimize(&mut arena);
         assert!(matches!(optimized, Expr::Bool(false)));
+
+        let cases = [
+            ("1 + 2 * 3", Expr::I64(7)),
+            ("(1 + 2) * 3", Expr::I64(9)),
+            ("5 - 8", Expr::I64(-3)),
+            ("-7 / 3", Expr::I64(-2)),
+            ("-7 % 3", Expr::I64(-1)),
+            ("7 % -3", Expr::I64(1)),
+            ("+(1 + 2)", Expr::I64(3)),
+            ("-(1 + 2)", Expr::I64(-3)),
+            ("-(-3)", Expr::I64(3)),
+            ("+1.5", Expr::F64(1.5)),
+            ("-1.5", Expr::F64(-1.5)),
+            ("1.5 + 2.5", Expr::F64(4.0)),
+            ("1.5 - 2.5", Expr::F64(-1.0)),
+            ("1.5 * 2.0", Expr::F64(3.0)),
+            ("7.0 / 2.0", Expr::F64(3.5)),
+            ("7.5 % 2.0", Expr::F64(1.5)),
+            ("2 + 0.5", Expr::F64(2.5)),
+            ("0.5 + 2", Expr::F64(2.5)),
+            ("'hello' + ' ' + 'world'", Expr::str_("hello world")),
+            ("9223372036854775807 + 1", Expr::bigint_(1u64 << 63)),
+            ("-9223372036854775808 - 1", Expr::bigint_(-crate::BigInt::from(1u64 << 63) - 1)),
+            ("9223372036854775807 * 2", Expr::bigint_(crate::BigInt::from(i64::MAX) * 2)),
+            ("-(-9223372036854775808)", Expr::bigint_(1u64 << 63)),
+            ("-9223372036854775808 / -1", Expr::bigint_(1u64 << 63)),
+            ("-9223372036854775808 % -1", Expr::I64(0)),
+            ("+9223372036854775808", Expr::bigint_(1u64 << 63)),
+            ("-9223372036854775808", Expr::I64(i64::MIN)),
+            ("9223372036854775808 - 1", Expr::I64(i64::MAX)),
+            ("9223372036854775808 - 9223372036854775808", Expr::I64(0)),
+            ("1 + 9223372036854775808", Expr::bigint_(crate::BigInt::from(1u64 << 63) + 1)),
+            ("9223372036854775808 / 2", Expr::I64(1i64 << 62)),
+            ("9223372036854775808 % 3", Expr::I64(2)),
+            ("9223372036854775808 + 0.0", Expr::F64((1u64 << 63) as f64)),
+            ("0.0 + 9223372036854775808", Expr::F64((1u64 << 63) as f64)),
+            ("1 + 2 = 3", Expr::Bool(true)),
+            ("1 + 2 != 3", Expr::Bool(false)),
+            ("2 * 3 > 5", Expr::Bool(true)),
+            ("2 * 3 < 5", Expr::Bool(false)),
+            ("2 * 3 >= 6", Expr::Bool(true)),
+            ("2 * 3 <= 6", Expr::Bool(true)),
+            ("NOT false", Expr::Bool(true)),
+            ("true AND (1 + 2 = 3)", Expr::Bool(true)),
+            ("false OR (2 * 3 < 5)", Expr::Bool(false)),
+        ];
+        for (source, expected) in cases {
+            let mut parser = crate::parser::Parser::new(source).unwrap();
+            let optimized = parser.parse().unwrap().optimize(&mut parser.arena);
+            assert!(
+                optimized.eq_in(&expected, &parser.arena, &ExprArena::default()),
+                "{source}: got {optimized:?}, expected {expected:?}",
+            );
+        }
+
+        let cases = [
+            ("x + (2 * 3)", "x + 6"),
+            ("(2 * 3) + x", "6 + x"),
+            ("x * 0", "x * 0"),
+            ("x - 0", "x - 0"),
+            ("x / 1", "x / 1"),
+            ("x % 1", "x % 1"),
+            ("+x", "+x"),
+            ("-(-x)", "-(-x)"),
+            ("1 / (2 - 2)", "1 / 0"),
+            ("1 % 0", "1 % 0"),
+            ("1.0 / 0.0", "1.0 / 0.0"),
+            ("1.0 % 0.0", "1.0 % 0.0"),
+            ("9223372036854775808 / 0", "9223372036854775808 / 0"),
+            ("9223372036854775808 % 0", "9223372036854775808 % 0"),
+            ("true + (1 + 2)", "true + 3"),
+            ("1 + 'a'", "1 + 'a'"),
+            ("'a' - 'b'", "'a' - 'b'"),
+            ("+true", "+true"),
+            ("-null", "-null"),
+            ("true AND x", "x"),
+            ("false OR x", "x"),
+            ("NOT NOT x", "x"),
+            ("[1 + 2, -(2 - 5)]", "[3, 3]"),
+            ("f(1 + 2, x)", "f(3, x)"),
+            ("x.f(1 + 2)", "x.f(3)"),
+        ];
+        for (source, expected) in cases {
+            let mut parser = crate::parser::Parser::new(source).unwrap();
+            let optimized = parser.parse().unwrap().optimize(&mut parser.arena);
+            let mut expected_parser = crate::parser::Parser::new(expected).unwrap();
+            let expected = expected_parser.parse().unwrap();
+            assert!(
+                optimized.eq_in(&expected, &parser.arena, &expected_parser.arena),
+                "{source}: got {optimized:?}, expected {expected:?}",
+            );
+        }
+
+        // Structural equality does not distinguish the signs of floating zero.
+        let zero = arena.alloc(Expr::F64(0.0));
+        let optimized = Expr::Neg(zero).optimize(&mut arena);
+        assert!(matches!(optimized, Expr::F64(value) if value == 0.0 && value.is_sign_negative()));
+
+        let one = arena.alloc(Expr::F64(1.0));
+        let zero = arena.alloc(Expr::F64(-0.0));
+        assert!(matches!(Expr::Div(one, zero).optimize(&mut arena), Expr::Div(..)));
+        assert!(matches!(Expr::Rem(one, zero).optimize(&mut arena), Expr::Rem(..)));
+
+        let huge = arena.alloc(Expr::bigint_(crate::BigInt::from(1) << 4096usize));
+        assert!(matches!(Expr::Add(huge, one).optimize(&mut arena), Expr::Add(..)));
+        assert!(matches!(Expr::Add(one, huge).optimize(&mut arena), Expr::Add(..)));
     }
 }
