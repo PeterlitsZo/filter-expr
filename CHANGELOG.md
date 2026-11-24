@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.9.0
+
 - Add `FilterExpr::to_source()` to export parseable expressions.
 - Fold constant arithmetic, unary signs, and string concatenation in
   `Expr::optimize()`.
@@ -10,7 +12,8 @@
 ## v0.8.0
 
 - Support array indexing with `array[index]` expressions.
-- [BREAKING] Make `Userdata::get_field` async to support asynchronous field loading.
+- [BREAKING] Make `Userdata::get_field` async to support asynchronous field
+  loading.
 
 ## v0.7.0
 
