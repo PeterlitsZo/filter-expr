@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add `FilterExpr::to_source()` to export parseable expressions.
 - Fold constant arithmetic, unary signs, and string concatenation in
   `Expr::optimize()`.
 - Support `DateTime::from_rfc3339` for parsing datetime strings.

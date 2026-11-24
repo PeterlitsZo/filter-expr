@@ -5,6 +5,7 @@ pub use num_bigint::BigInt;
 mod error;
 mod expr;
 mod parser;
+mod source;
 mod token;
 mod transform;
 
@@ -15,6 +16,7 @@ use expr::ExprDebug;
 pub use compact_str::CompactString;
 pub use error::Error;
 pub use expr::{Expr, ExprArena, ExprId};
+pub use source::SourceError;
 pub use transform::{Transform, TransformContext, TransformResult};
 
 /// The language semantics used to interpret an expression.
@@ -68,6 +70,17 @@ impl FilterExpr {
     /// Check if the filter expression is empty.
     pub fn is_empty(&self) -> bool {
         self.expr.is_none()
+    }
+
+    /// Export parseable source, preserving evaluation order rather than original formatting.
+    ///
+    /// Returns an error for unrepresentable values or names, invalid arena graphs,
+    /// or expressions deeper than 32 nodes (including unary signs in the output).
+    /// An empty expression produces only the language version marker.
+    pub fn to_source(&self) -> Result<String, SourceError> {
+        match self.language_version {
+            LanguageVersion::V1 => source::to_source(self.expr.as_ref(), &self.arena),
+        }
     }
 
     /// Create a new filter expression with the given expression.

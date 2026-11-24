@@ -34,6 +34,7 @@
 - [ ] Remove the `impl Ord`, `impl PartialOrd` and `impl Hash` for `Expr`
       because it's useless now.
 - [ ] Add comment for all `pub` functions and methods.
+- [ ] Support Nan and Inf.
 
 ## 2026-11
 
